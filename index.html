@@ -1079,7 +1079,7 @@ class Arc extends Entity {
 
 /* =============== 3. CONSTRAINTS =============================== */
 class Constraint {
-  constructor(kind) { this.id = newId('c'); this.kind = kind; this.value = null; }
+  constructor(kind) { this.id = newId('c'); this.kind = kind; this.value = null; this.selected = false; }
   residuals(L) { return []; }
   refs() { return []; }
   toJSON() { return { id:this.id, kind:this.kind, value:this.value, refs:this.refs() }; }
@@ -1627,6 +1627,7 @@ class Project {
   visibleSketches() { return this.sketches.filter(s => s.visible); }
   sketchOf(entityOrPoint) {
     for (const s of this.sketches) {
+      for (const c of s.constraints) if (c === entityOrPoint) return s;
       for (const e of s.entities) {
         if (e === entityOrPoint) return s;
         for (const c of e.children()) if (c === entityOrPoint) return s;
@@ -2002,8 +2003,10 @@ class Renderer {
     }
   }
 
-  _dimColors(grey) {
-    return grey
+  _dimColors(grey, selected = false) {
+    return selected
+      ? { stroke: '#ff8a1e', fill: '#ff8a1e', text: '#bf5b00' }
+      : grey
       ? { stroke: 'rgba(120,128,140,0.85)', fill: 'rgba(120,128,140,0.85)', text: '#7a828c' }
       : { stroke: '#1c2026', fill: '#1c2026', text: '#1c2026' };
   }
@@ -2069,7 +2072,8 @@ class Renderer {
     const pp1 = v.worldToScreen(p1), pp2 = v.worldToScreen(p2);
     const plab = v.worldToScreen(labelMid);
 
-    const cols = this._dimColors(grey);
+    const target = recordAs || c;
+    const cols = this._dimColors(grey, !!target.selected);
     ctx.save();
     ctx.strokeStyle = cols.stroke; ctx.fillStyle = cols.fill; ctx.lineWidth = 1;
 
@@ -2109,7 +2113,7 @@ class Renderer {
       ctx.font = '11px ui-sans-serif, system-ui, -apple-system, "Segoe UI"';
       const w = ctx.measureText(text).width;
       this.lastDimRects.push({
-        constraint: recordAs || c,
+        constraint: target,
         x: plab.x - w/2 - 4, y: plab.y - 9, w: w + 8, h: 18
       });
     }
@@ -2143,7 +2147,7 @@ class Renderer {
     const center = circ.center;
     const r = circ.r;
     const v = this.view, ctx = this.ctx;
-    const cols = this._dimColors(grey);
+    const cols = this._dimColors(grey, !!c.selected);
 
     const angle = (c.labelAngle != null) ? c.labelAngle : Math.PI/6;
     // labelDist controls inside-vs-outside placement based on cursor
@@ -2204,7 +2208,7 @@ class Renderer {
     if (!inter) return;
 
     const v = this.view, ctx = this.ctx;
-    const cols = this._dimColors(grey);
+    const cols = this._dimColors(grey, !!c.selected);
     const arc = angleArcFromPoints(a1, b1, a2, b2);
     const pinter = v.worldToScreen(inter);
     const radPx = Math.max(10, (c.labelDist != null) ? c.labelDist * v.zoom : 32);
@@ -2330,15 +2334,29 @@ class SelectTool extends Tool {
     this.dragging = null;
     this.box = null;
   }
-  hint() { return 'Click to select. Ctrl-click to add/remove. Drag to move. Click a dimension to edit.'; }
+  hint() { return 'Click to select. Ctrl-click to add/remove. Drag to move. Click a selected driving dimension to edit.'; }
   onPointerDown(world, snap, ev) {
     // Dimension labels first — they sit "on top of" any underlying entity
-    // and need their own click vs drag handling.
+    // and need their own select / edit / drag handling.
     const r = this.app.canvas.getBoundingClientRect();
     const sx = ev.clientX - r.left, sy = ev.clientY - r.top;
     const dim = this.app.hitDimAtScreen(sx, sy);
     if (dim) {
-      this.dimAction = { constraint: dim, startWorld: world, moved: false };
+      const wasSelected = !!dim.selected;
+      const isToggle = ev.ctrlKey || ev.metaKey;
+      const isAdd = ev.shiftKey;
+      if (isToggle) {
+        this.app.setSelected(dim, !wasSelected);
+      } else {
+        if (!isAdd && !wasSelected) this.app.clearSelection();
+        this.app.setSelected(dim, true);
+      }
+      this.dimAction = dim.selected
+        ? { constraint: dim, startWorld: world, moved: false,
+            editOnClick: !isToggle && !isAdd && wasSelected && !dim.driven }
+        : null;
+      this.app.refreshUI();
+      this.app.requestRender();
       return;
     }
     const hit = this.app.hitTestActiveSketch(world);
@@ -2430,7 +2448,7 @@ class SelectTool extends Tool {
         this.app.commit();
       } else {
         // No movement — treat as a click and open the inline editor.
-        this.app.editDimValue(this.dimAction.constraint);
+        if (this.dimAction.editOnClick) this.app.editDimValue(this.dimAction.constraint);
       }
       this.dimAction = null;
       return;
@@ -3486,7 +3504,7 @@ class App {
   }
 
   /** Hit-test in screen pixels against the rectangles the renderer recorded
-   *  for every drawn dimension label. Used to detect click-to-edit /
+   *  for every drawn dimension label. Used to detect select / edit /
    *  drag-to-reposition on existing dims. */
   hitDimAtScreen(sx, sy) {
     const rects = this.renderer.lastDimRects || [];
@@ -3562,6 +3580,7 @@ class App {
    *  the value (or Esc to leave it untouched). Reuses the SmartDim input
    *  styling. */
   editDimValue(c) {
+    if (!c || c.driven) return;
     const rect = (this.renderer.lastDimRects || []).find(r => r.constraint === c);
     if (!rect) return;
     const cx = rect.x + rect.w / 2, cy = rect.y + rect.h / 2;
@@ -3596,15 +3615,6 @@ class App {
           if (c.kind === 'angle')                       c.value = normalizeAngleValue(v * Math.PI / 180);
           else if (c.kind === 'radius' && c.isDiameter) c.value = v / 2;
           else                                            c.value = v;
-          // Editing a driven dim's value makes it driving again — let the
-          // solver pick it up unless that re-creates the over-defined state.
-          if (c.driven) {
-            c.driven = false;
-            const probe = this.solver.solve(this.activeSketch(), this.project.sketches);
-            if (probe.state === 'over' || (probe.redundantIds && probe.redundantIds.has(c.id))) {
-              c.driven = true;
-            }
-          }
           this.commit();
         }
       }
@@ -3632,12 +3642,14 @@ class App {
       activeItems.add(e);
       for (const c of e.children()) activeItems.add(c);
     }
+    for (const c of sketch.constraints) activeItems.add(c);
     this.selectionOrder = this.selectionOrder.filter(x => x && x.selected && activeItems.has(x));
     for (const x of this.selectionOrder) add(x);
     for (const e of sketch.entities) {
       if (e.selected) add(e);
       for (const c of e.children()) if (c.selected) add(c);
     }
+    for (const c of sketch.constraints) if (c.selected) add(c);
     return out;
   }
 
@@ -3658,6 +3670,7 @@ class App {
         e.selected = false;
         for (const c of e.children()) c.selected = false;
       }
+      for (const c of s.constraints) c.selected = false;
     }
     this.selectionOrder = [];
     this.refreshUI();
@@ -3672,6 +3685,9 @@ class App {
       for (const c of e.children()) if (c.selected) return true;
       return false;
     });
+    const hasSelectedConstraints = sketch.constraints.some(c => c.selected);
+    if (!toDelete.length && !hasSelectedConstraints) return;
+    sketch.constraints = sketch.constraints.filter(c => !c.selected);
     for (const e of toDelete) sketch.removeEntity(e);
     this.commit();
     this.refreshUI();
@@ -4989,6 +5005,7 @@ class App {
 
     const activeId = this.project.activeSketchId;
     const sketch = this.activeSketch();
+    const hasConstraintSelection = sel.some(e => e instanceof Constraint);
 
     // ---- Selection list ----
     let html = '<div class="sb-subhead">Items</div>';
@@ -4996,7 +5013,7 @@ class App {
       const owner = this.project.sketchOf(e);
       const cross = owner && owner.id !== activeId;
       const glyph = e instanceof Point ? '•' : e instanceof Line ? '╱' : e instanceof Circle ? '○' : e instanceof Arc ? '◜' : '?';
-      const kind  = e.constructor.kind;
+      const kind  = e instanceof Constraint ? (CONSTRAINT_LABELS[e.kind] || e.kind) : e.constructor.kind;
       html += `<div class="sel-item${cross ? ' cross-layer' : ''}">
                  <span class="glyph">${glyph}</span>
                  <span>${kind} ${e.id}</span>
@@ -5005,7 +5022,7 @@ class App {
     }
 
     // ---- Add Relations ----
-    const rels = availableRelations(sel);
+    const rels = hasConstraintSelection ? [] : availableRelations(sel);
     html += '<div class="sb-subhead">Add Relation</div>';
     if (rels.length === 0) {
       html += '<div class="empty">No relations apply to this selection.</div>';
@@ -5018,7 +5035,7 @@ class App {
     }
 
     // ---- Add Dimension ----
-    const dims = availableDimensions(sel);
+    const dims = hasConstraintSelection ? [] : availableDimensions(sel);
     html += '<div class="sb-subhead">Add Dimension</div>';
     if (dims.length === 0) {
       html += '<div class="empty">No dimension applies. Use Smart Dim (D) or pick a different combo.</div>';
@@ -5058,6 +5075,14 @@ class App {
     } else if (e instanceof Line) {
       html += `<div class="prop-row"><label>length</label><span>${dist(e.p1,e.p2).toFixed(4)} ${this.project.units}</span></div>`;
       html += `<div class="prop-row"><label>construction</label><input type="checkbox" data-toggle="construction" ${e.construction?'checked':''}></div>`;
+    } else if (e instanceof Constraint) {
+      const val = e.kind === 'angle'
+        ? (normalizeAngleValue(e.value) * 180 / Math.PI).toFixed(3) + '°'
+        : (e.value != null ? Number(e.value).toFixed(3) : '');
+      if (val) html += `<div class="prop-row"><label>value</label><span>${val}</span></div>`;
+      if (['distance','pointLineDistance','radius','angle'].includes(e.kind)) {
+        html += `<div class="prop-row"><label>driven</label><span>${e.driven ? 'yes' : 'no'}</span></div>`;
+      }
     }
 
     body.innerHTML = html;
