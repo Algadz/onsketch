@@ -4,6 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>SketchCAD</title>
+<script defer src="https://cloud.umami.is/script.js" data-website-id="50dad292-9502-4749-a86e-68f2ed8b2e7a"></script>
 <style>
   /* ============================================================
      SketchCAD — light, professional, utilitarian.
@@ -125,6 +126,8 @@
   }
   .sb-section:last-child { border-bottom: 0; }
   .sb-layers   { flex: 0 1 auto; min-height: 80px; max-height: 35%; }
+  .sb-tool-options { flex: 0 0 auto; }
+  .sb-tool-options .sb-body { flex: 0 0 auto; min-height: auto; overflow: visible; }
   .sb-selection{ flex: 1 1 auto; min-height: 200px; }
   .sb-meta     { flex: 0 0 auto; }
 
@@ -172,7 +175,7 @@
   }
   .layer-row {
     display: grid;
-    grid-template-columns: 22px 22px 1fr 22px;
+    grid-template-columns: 22px 1fr 22px;
     align-items: center;
     gap: 2px;
     padding: 2px 6px;
@@ -513,6 +516,9 @@
       <button class="tbtn tool" data-tool="circle" title="Circle (C)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/></svg>
       </button>
+      <button class="tbtn tool" data-tool="hexagon" title="Hexagon / Polygon (H)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 3.5l7.4 4.25v8.5L12 20.5l-7.4-4.25v-8.5z"/><circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none"/></svg>
+      </button>
       <button class="tbtn tool" data-tool="arc" title="3-Point Arc (A)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 18a10 10 0 0 1 16 0"/><circle cx="4" cy="18" r="1.4" fill="currentColor"/><circle cx="20" cy="18" r="1.4" fill="currentColor"/><circle cx="12" cy="8" r="1.4" fill="currentColor"/></svg>
       </button>
@@ -551,6 +557,14 @@
         </div>
       </div>
       <div id="layers-list"></div>
+    </div>
+
+    <!-- Tool options -->
+    <div class="sb-section sb-tool-options" id="tool-options-section" hidden>
+      <div class="panel-header">
+        <span>Tool Options</span>
+      </div>
+      <div class="sb-body" id="tool-options-body"></div>
     </div>
 
     <!-- Selection / Relations / Properties -->
@@ -739,6 +753,48 @@ function rowSpaceBasis(A, tol = 1e-8) {
 /** A parameter (column index j) is "pinned" — uniquely determined by the
  *  constraint system — iff the standard basis vector e_j lies in the row
  *  space of J. We check this by ||proj_basis(e_j)||² ≈ 1. */
+function nullSpaceBasis(rowBasis, n, tol = 1e-8) {
+  const basis = [];
+  for (let j = 0; j < n; j++) {
+    const v = new Array(n).fill(0);
+    v[j] = 1;
+    for (const b of rowBasis) {
+      let dot = 0;
+      for (let k = 0; k < n; k++) dot += v[k] * b[k];
+      for (let k = 0; k < n; k++) v[k] -= dot * b[k];
+    }
+    for (const b of basis) {
+      let dot = 0;
+      for (let k = 0; k < n; k++) dot += v[k] * b[k];
+      for (let k = 0; k < n; k++) v[k] -= dot * b[k];
+    }
+    let norm = 0;
+    for (let k = 0; k < n; k++) norm += v[k] * v[k];
+    norm = Math.sqrt(norm);
+    if (norm > tol) {
+      for (let k = 0; k < n; k++) v[k] /= norm;
+      basis.push(v);
+    }
+  }
+  return basis;
+}
+
+function solveLeastSquares(A, b, damping = 1e-8) {
+  if (!A.length || !A[0]?.length) return null;
+  const n = A[0].length;
+  const normal = Array.from({ length:n }, () => new Array(n).fill(0));
+  const rhs = new Array(n).fill(0);
+  for (let i = 0; i < A.length; i++) {
+    for (let j = 0; j < n; j++) {
+      const aij = A[i][j];
+      rhs[j] += aij * b[i];
+      for (let k = 0; k < n; k++) normal[j][k] += aij * A[i][k];
+    }
+  }
+  for (let j = 0; j < n; j++) normal[j][j] += damping;
+  return solveLinear(normal, rhs);
+}
+
 function paramPinnedFromBasis(basis, n) {
   const pinned = new Array(n).fill(false);
   for (let j = 0; j < n; j++) {
@@ -755,6 +811,114 @@ function lineIntersection(a, b, c, d) {
   if (Math.abs(denom) < EPS) return null;
   const t = ((a.x-c.x)*(c.y-d.y) - (a.y-c.y)*(c.x-d.x)) / denom;
   return { x: a.x + t*(b.x-a.x), y: a.y + t*(b.y-a.y) };
+}
+
+function normAngle(a) {
+  a %= TAU;
+  return a < 0 ? a + TAU : a;
+}
+
+function ccwDelta(from, to) {
+  return normAngle(to - from);
+}
+
+function angleSeparation(a, b) {
+  const d = ccwDelta(a, b);
+  return d > Math.PI ? TAU - d : d;
+}
+
+function normalizeAngleValue(rad) {
+  if (!Number.isFinite(rad)) return 0;
+  let a = Math.abs(rad) % TAU;
+  if (a > Math.PI) a = TAU - a;
+  return a;
+}
+
+function angleArcFromPoints(a1, b1, a2, b2) {
+  const ang1 = Math.atan2(b1.y - a1.y, b1.x - a1.x);
+  const ang2 = Math.atan2(b2.y - a2.y, b2.x - a2.x);
+  const d12 = ccwDelta(ang1, ang2);
+  if (d12 <= Math.PI) {
+    return { start: ang1, end: ang1 + d12, span: d12, midAngle: normAngle(ang1 + d12 / 2) };
+  }
+  const span = TAU - d12;
+  return { start: ang2, end: ang2 + span, span, midAngle: normAngle(ang2 + span / 2) };
+}
+
+function angleSectorCandidates(l1, l2) {
+  const a1 = Math.atan2(l1.p2.y - l1.p1.y, l1.p2.x - l1.p1.x);
+  const a2 = Math.atan2(l2.p2.y - l2.p1.y, l2.p2.x - l2.p1.x);
+  const rays = [
+    { line: 1, angle: normAngle(a1),           ref: { a:l1.p1.id, b:l1.p2.id } },
+    { line: 1, angle: normAngle(a1 + Math.PI), ref: { a:l1.p2.id, b:l1.p1.id } },
+    { line: 2, angle: normAngle(a2),           ref: { a:l2.p1.id, b:l2.p2.id } },
+    { line: 2, angle: normAngle(a2 + Math.PI), ref: { a:l2.p2.id, b:l2.p1.id } }
+  ].sort((a, b) => a.angle - b.angle);
+
+  const out = [];
+  for (let i = 0; i < rays.length; i++) {
+    const start = rays[i];
+    const end = rays[(i + 1) % rays.length];
+    if (start.line === end.line) continue;
+    const span = ccwDelta(start.angle, end.angle);
+    if (span < 1e-7 || span > Math.PI + 1e-7) continue;
+    out.push({
+      start: start.angle,
+      end: start.angle + span,
+      span,
+      value: normalizeAngleValue(span),
+      midAngle: normAngle(start.angle + span / 2),
+      l1Ref: start.line === 1 ? start.ref : end.ref,
+      l2Ref: start.line === 2 ? start.ref : end.ref
+    });
+  }
+  return out;
+}
+
+function angleSectorForCursor(l1, l2, world) {
+  const inter = lineIntersection(l1.p1, l1.p2, l2.p1, l2.p2);
+  if (!inter) return null;
+  const candidates = angleSectorCandidates(l1, l2);
+  if (!candidates.length) return null;
+  if (!world) return candidates.reduce((best, c) => c.span < best.span ? c : best, candidates[0]);
+
+  if (dist(inter, world) < EPS) {
+    return candidates.reduce((best, c) => c.span < best.span ? c : best, candidates[0]);
+  }
+
+  const bearing = normAngle(Math.atan2(world.y - inter.y, world.x - inter.x));
+  let best = null;
+  for (const c of candidates) {
+    const within = ccwDelta(c.start, bearing) <= c.span + 1e-7;
+    if (!within) continue;
+    const score = angleSeparation(bearing, c.midAngle);
+    if (!best || score < best.score) best = { ...c, score };
+  }
+  if (best) {
+    const { score, ...sector } = best;
+    return sector;
+  }
+
+  const fallback = candidates
+    .map(c => ({ ...c, score: angleSeparation(bearing, c.midAngle) }))
+    .sort((a, b) => a.score - b.score)[0];
+  const { score, ...sector } = fallback;
+  return sector;
+}
+
+function regularPolygonFromCenterEdge(center, edgeMid, sides) {
+  const n = Math.max(3, Math.round(sides || 6));
+  const apothem = dist(center, edgeMid);
+  if (apothem < EPS) return null;
+  const theta = Math.atan2(edgeMid.y - center.y, edgeMid.x - center.x);
+  const radius = apothem / Math.cos(Math.PI / n);
+  const start = theta - Math.PI / n;
+  const pts = [];
+  for (let i = 0; i < n; i++) {
+    const a = start + i * TAU / n;
+    pts.push({ x: center.x + radius * Math.cos(a), y: center.y + radius * Math.sin(a) });
+  }
+  return pts;
 }
 
 /* =============== 2. ENTITIES ================================== */
@@ -928,6 +1092,18 @@ class FixConstraint extends Constraint {
   toJSON() { return { id:this.id, kind:'fix', pointId:this.pointId, x:this.x, y:this.y }; }
 }
 
+class ParamFixConstraint extends Constraint {
+  constructor(entityId, key, value) {
+    super('paramFix');
+    this.entityId = entityId;
+    this.key = key;
+    this.value = value;
+  }
+  refs() { return [this.entityId]; }
+  residuals(L) { return [ L(this.entityId, this.key) - this.value ]; }
+  toJSON() { return { id:this.id, kind:'paramFix', entityId:this.entityId, key:this.key, value:this.value }; }
+}
+
 class CoincidentConstraint extends Constraint {
   constructor(p1Id, p2Id) { super('coincident'); this.p1=p1Id; this.p2=p2Id; }
   refs() { return [this.p1, this.p2]; }
@@ -991,11 +1167,16 @@ class EqualLengthConstraint extends Constraint {
   constructor(l1Pts, l2Pts) { super('equalLength'); this.l1=l1Pts; this.l2=l2Pts; }
   refs() { return [this.l1.a, this.l1.b, this.l2.a, this.l2.b]; }
   residuals(L) {
+    if (this.driven) return [];
     const dx1=L(this.l1.b,'x')-L(this.l1.a,'x'), dy1=L(this.l1.b,'y')-L(this.l1.a,'y');
     const dx2=L(this.l2.b,'x')-L(this.l2.a,'x'), dy2=L(this.l2.b,'y')-L(this.l2.a,'y');
     return [ Math.sqrt(dx1*dx1+dy1*dy1) - Math.sqrt(dx2*dx2+dy2*dy2) ];
   }
-  toJSON() { return { id:this.id, kind:'equalLength', l1:this.l1, l2:this.l2 }; }
+  toJSON() {
+    const o = { id:this.id, kind:'equalLength', l1:this.l1, l2:this.l2 };
+    if (this.driven) o.driven = true;
+    return o;
+  }
 }
 
 class EqualRadiusConstraint extends Constraint {
@@ -1128,12 +1309,10 @@ class RadiusConstraint extends Constraint {
 
 class AngleConstraint extends Constraint {
   /** Absolute angle between two lines, in radians (0 .. π). The sector
-   *  drawn on screen is determined by labelMidAngle (the bearing from
-   *  the intersection toward where the cursor was), so the user can pick
-   *  any of the four sectors formed by the two lines and the displayed
-   *  value matches that sector's interior angle. */
+   *  is encoded by oriented endpoint refs, so the drawn
+   *  wedge and the solver enforce the same acute/obtuse choice. */
   constructor(l1Pts, l2Pts, value) {
-    super('angle'); this.l1=l1Pts; this.l2=l2Pts; this.value=value;
+    super('angle'); this.l1=l1Pts; this.l2=l2Pts; this.value=normalizeAngleValue(value);
     this.labelDist=null; this.labelMidAngle=null; this.driven=false;
   }
   refs() { return [this.l1.a, this.l1.b, this.l2.a, this.l2.b]; }
@@ -1157,6 +1336,29 @@ class AngleConstraint extends Constraint {
     if (this.driven) o.driven = true;
     return o;
   }
+}
+
+class DirectedAngleConstraint extends Constraint {
+  constructor(l1Pts, l2Pts, value) {
+    super('directedAngle');
+    this.l1 = l1Pts;
+    this.l2 = l2Pts;
+    this.value = value;
+  }
+  refs() { return [this.l1.a, this.l1.b, this.l2.a, this.l2.b]; }
+  residuals(L) {
+    const dx1=L(this.l1.b,'x')-L(this.l1.a,'x'), dy1=L(this.l1.b,'y')-L(this.l1.a,'y');
+    const dx2=L(this.l2.b,'x')-L(this.l2.a,'x'), dy2=L(this.l2.b,'y')-L(this.l2.a,'y');
+    const len1 = Math.hypot(dx1, dy1), len2 = Math.hypot(dx2, dy2);
+    if (len1 < EPS || len2 < EPS) return [0];
+    const dot = (dx1*dx2 + dy1*dy2) / (len1 * len2);
+    const cross = (dx1*dy2 - dy1*dx2) / (len1 * len2);
+    let delta = Math.atan2(cross, dot) - this.value;
+    while (delta > Math.PI) delta -= TAU;
+    while (delta < -Math.PI) delta += TAU;
+    return [ delta ];
+  }
+  toJSON() { return { id:this.id, kind:'directedAngle', l1:this.l1, l2:this.l2, value:this.value }; }
 }
 
 class PointOnLineConstraint extends Constraint {
@@ -1190,7 +1392,7 @@ const CONSTRAINT_LABELS = {
   vertical:'Vertical', parallel:'Parallel', perpendicular:'Perpendicular',
   collinear:'Collinear', equalLength:'Equal length', equalRadius:'Equal radius',
   concentric:'Concentric', tangent:'Tangent', midpoint:'Midpoint',
-  distance:'Distance', radius:'Radius', angle:'Angle',
+  distance:'Distance', radius:'Radius', angle:'Angle', directedAngle:'Central angle',
   pointLineDistance:'Pt-Line dist',
   pointOnLine:'On line', pointOnCircle:'On circle'
 };
@@ -1236,14 +1438,18 @@ class Solver {
     };
   }
 
-  solve(activeSketch, allVisibleSketches = [activeSketch]) {
+  solve(activeSketch, allVisibleSketches = [activeSketch], extraConstraints = []) {
     const params = this._collectParams(activeSketch);
     const n = params.length;
-    const constraints = activeSketch.constraints;
+    const constraints = extraConstraints.length
+      ? activeSketch.constraints.concat(extraConstraints)
+      : activeSketch.constraints;
 
-    if (n === 0) return { ok:true, iters:0, residual:0, dof:0, n:0, m:constraints.length, rank:0, redundant:0, state:'fully' };
+    if (n === 0) return { ok:true, iters:0, residual:0, dof:0, n:0, m:constraints.length, rank:0, redundant:0, state:'fully',
+                          entityStatus:new Map(), redundantIds:new Set(), pinned:[] };
     if (constraints.length === 0) {
-      return { ok:true, iters:0, residual:0, dof:n, n, m:0, rank:0, redundant:0, state:'under' };
+      return { ok:true, iters:0, residual:0, dof:n, n, m:0, rank:0, redundant:0, state:'under',
+               entityStatus:new Map(), redundantIds:new Set(), pinned:new Array(n).fill(false) };
     }
 
     const L = this._lookupBuilder(allVisibleSketches);
@@ -1380,7 +1586,6 @@ class Sketch {
     this.id = newId('s');
     this.name = name;
     this.visible = true;
-    this.locked = false;
     this.entities = [];
     this.constraints = [];
   }
@@ -1394,7 +1599,7 @@ class Sketch {
   }
   toJSON() {
     return {
-      id:this.id, name:this.name, visible:this.visible, locked:this.locked,
+      id:this.id, name:this.name, visible:this.visible,
       entities:this.entities.map(e => e.toJSON()),
       constraints:this.constraints.map(c => c.toJSON())
     };
@@ -1442,7 +1647,7 @@ class Project {
     p.units = o.units || 'mm';
     p.sketches = (o.sketches || []).map(sj => {
       const s = new Sketch(sj.name);
-      s.id = sj.id; s.visible = sj.visible !== false; s.locked = !!sj.locked;
+      s.id = sj.id; s.visible = sj.visible !== false;
       // CRITICAL — shared point identity must be preserved across revival.
       // Without this map, a corner that was a single Point shared by two
       // lines comes back as TWO Points carrying the same id. The solver's
@@ -1488,6 +1693,7 @@ class Project {
           case 'pointLineDistance': c = new PointLineDistanceConstraint(cj.pointId, cj.l, cj.value); break;
           case 'radius':        c = new RadiusConstraint(cj.circleId, cj.value); break;
           case 'angle':         c = new AngleConstraint(cj.l1, cj.l2, cj.value); break;
+          case 'directedAngle': c = new DirectedAngleConstraint(cj.l1, cj.l2, cj.value); break;
           case 'pointOnLine':   c = new PointOnLineConstraint(cj.pointId, cj.l); break;
           case 'pointOnCircle': c = new PointOnCircleConstraint(cj.pointId, cj.circleId, cj.centerId); break;
         }
@@ -1497,6 +1703,7 @@ class Project {
           if (cj.labelParallel != null) c.labelParallel = cj.labelParallel;
           if (cj.labelAngle    != null) c.labelAngle    = cj.labelAngle;
           if (cj.labelDist     != null) c.labelDist     = cj.labelDist;
+          if (cj.labelMidAngle != null) c.labelMidAngle = cj.labelMidAngle;
           if (cj.isDiameter)            c.isDiameter    = true;
           if (cj.driven)                c.driven        = true;
           s.constraints.push(c);
@@ -1782,12 +1989,14 @@ class Renderer {
       this._drawRadius(fake, map, false);
     } else if (preview.kind === 'angle') {
       const fake = {
-        l1:{a:'_l1a',b:'_l1b'}, l2:{a:'_l2a',b:'_l2b'},
-        value: preview.value, labelDist: preview.dist
+        l1: preview.l1Ref || { a:preview.l1.p1.id, b:preview.l1.p2.id },
+        l2: preview.l2Ref || { a:preview.l2.p1.id, b:preview.l2.p2.id },
+        value: preview.value, labelDist: preview.dist,
+        labelMidAngle: preview.midAngle
       };
       const map = new Map([
-        ['_l1a', preview.l1.p1], ['_l1b', preview.l1.p2],
-        ['_l2a', preview.l2.p1], ['_l2b', preview.l2.p2]
+        [preview.l1.p1.id, preview.l1.p1], [preview.l1.p2.id, preview.l1.p2],
+        [preview.l2.p1.id, preview.l2.p1], [preview.l2.p2.id, preview.l2.p2]
       ]);
       this._drawAngle(fake, map, false);
     }
@@ -1996,23 +2205,20 @@ class Renderer {
 
     const v = this.view, ctx = this.ctx;
     const cols = this._dimColors(grey);
-    const ang1 = Math.atan2(b1.y - a1.y, b1.x - a1.x);
-    const ang2 = Math.atan2(b2.y - a2.y, b2.x - a2.x);
+    const arc = angleArcFromPoints(a1, b1, a2, b2);
     const pinter = v.worldToScreen(inter);
-    const radPx = (c.labelDist != null) ? c.labelDist * v.zoom : 32;
+    const radPx = Math.max(10, (c.labelDist != null) ? c.labelDist * v.zoom : 32);
 
     ctx.save();
     ctx.strokeStyle = cols.stroke; ctx.fillStyle = cols.fill; ctx.lineWidth = 1;
     // Canvas y is flipped relative to math angles — negate for arc().
-    let s1 = -ang1, s2 = -ang2;
-    while (s2 < s1) s2 += TAU;
-    if (s2 - s1 > Math.PI) { const t = s1; s1 = s2 - TAU; }
     ctx.beginPath();
-    ctx.arc(pinter.x, pinter.y, radPx, s1, s2);
+    ctx.arc(pinter.x, pinter.y, radPx, -arc.start, -arc.end, true);
     ctx.stroke();
 
-    const midAng = (ang1 + ang2) / 2;
-    const txt = ((c.value ?? (ang2 - ang1)) * 180 / Math.PI).toFixed(1) + '°';
+    const midAng = arc.midAngle;
+    const value = normalizeAngleValue(c.value ?? arc.span);
+    const txt = (value * 180 / Math.PI).toFixed(1) + '°';
     const tx = pinter.x + (radPx + 12) * Math.cos(midAng);
     const ty = pinter.y - (radPx + 12) * Math.sin(midAng); // flip y
     this._drawText(ctx, tx, ty, txt, cols.text, 0);
@@ -2029,17 +2235,29 @@ class Renderer {
 /* =============== 7. SNAP ENGINE =============================== */
 class SnapEngine {
   constructor() { this.tolPx = 10; }
-  find(world, view, sketches) {
+  find(world, view, sketches, options = {}) {
     if (!sketches || !sketches.length) return null;
     const tol = this.tolPx / view.zoom;
     let best = null;
     // entity attached to the snap is the *thing* the constraint will
     // reference: the Point itself for endpoints, the Line for midpoints,
     // the Circle/Arc for centers and quadrants, null for origin.
+    const priority = (kind) => {
+      if (kind === 'endpoint') return 5;
+      if (kind === 'center') return 4;
+      if (kind === 'midpoint' || kind === 'quadrant') return 3;
+      if (kind === 'origin') return 2;
+      return 1; // on-line / on-circle are useful, but lose to nearby points.
+    };
     const consider = (pt, kind, entity) => {
       const d = dist(pt, world);
       if (d > tol) return;
-      if (!best || d < best._d) best = { x: pt.x, y: pt.y, kind, entity, _d: d };
+      const p = priority(kind);
+      const candidate = { x: pt.x, y: pt.y, kind, entity, _d: d, _p: p };
+      if (options.ignore && options.ignore(candidate)) return;
+      if (!best || p > best._p || (p === best._p && d < best._d)) {
+        best = candidate;
+      }
     };
     for (const sketch of sketches) {
       for (const e of sketch.entities) {
@@ -2123,13 +2341,14 @@ class SelectTool extends Tool {
       this.dimAction = { constraint: dim, startWorld: world, moved: false };
       return;
     }
-    const hit = this.app.hitTestAcrossLayers(world);
+    const hit = this.app.hitTestActiveSketch(world);
     const isToggle = ev.ctrlKey || ev.metaKey;
     const isAdd    = ev.shiftKey;
     if (hit) {
-      if (isToggle) hit.selected = !hit.selected;
-      else if (isAdd) hit.selected = true;
-      else if (!hit.selected) { this.app.clearSelection(); hit.selected = true; }
+      if (isToggle) this.app.setSelected(hit, !hit.selected);
+      else if (isAdd) this.app.setSelected(hit, true);
+      else if (!hit.selected) { this.app.clearSelection(); this.app.setSelected(hit, true); }
+      else this.app.setSelected(hit, true);
       // collect drag points (only those on the active sketch)
       const activeId = this.app.project.activeSketchId;
       const pts = [];
@@ -2139,13 +2358,13 @@ class SelectTool extends Tool {
         for (const e of s.entities) {
           const walk = (x, inheritSel) => {
             const sel = inheritSel || x.selected;
-            if (x instanceof Point && sel && !seen.has(x)) { seen.add(x); pts.push({ p:x, x:x.x, y:x.y }); }
+            if (x instanceof Point && sel && !x.fixed && !seen.has(x)) { seen.add(x); pts.push({ p:x, x:x.x, y:x.y }); }
             for (const c of x.children()) walk(c, sel);
           };
           walk(e, e.selected);
         }
       }
-      this.dragging = pts.length ? { startWorld: world, pts } : null;
+      this.dragging = pts.length ? this.app.beginLocalizedDrag(world, pts, hit) : null;
       this.app.refreshUI();
       this.app.requestRender();
     } else {
@@ -2172,33 +2391,29 @@ class SelectTool extends Tool {
       // dragged points latch onto the geometry (line, circle, midpoint,
       // origin, …). The snap is remembered for pointerUp, where it can be
       // promoted into a real constraint.
-      let target = world;
-      const draggedSet = new Set(this.dragging.pts.map(r => r.p));
-      if (snap && snap.entity && !draggedSet.has(snap.entity)) {
-        target = { x: snap.x, y: snap.y };
+      let dx = world.x - this.dragging.startWorld.x;
+      let dy = world.y - this.dragging.startWorld.y;
+      if (snap && snap.dragRecord && !this.app.shouldIgnoreDragSnap(this.dragging, snap)) {
+        ({ dx, dy } = this.app._dragDeltaForSnap(this.dragging, snap));
         this.dragging.endSnap = snap;
       } else {
         this.dragging.endSnap = null;
       }
-      const dx = target.x - this.dragging.startWorld.x;
-      const dy = target.y - this.dragging.startWorld.y;
-      for (const r of this.dragging.pts) {
-        if (r.p.fixed) continue;
-        r.p.x = r.x + dx; r.p.y = r.y + dy;
-      }
-      this.app.solveSoft();
+      this.app.solveLocalizedDrag(this.dragging, dx, dy);
       this.app.requestRender();
     } else if (this.box) {
       this.box.x1 = world.x; this.box.y1 = world.y;
       this.app.requestRender();
     } else {
-      // hover across all visible sketches
+      // Hover is edit affordance, so only the active sketch can light up.
       let changed = false;
+      const activeId = this.app.project.activeSketchId;
       for (const s of this.app.project.visibleSketches()) {
+        const editable = s.id === activeId;
         for (const e of s.entities) {
-          let hov = !!e.hit(world, this.app.view);
+          let hov = editable && !!e.hit(world, this.app.view);
           // also hover children if a child is hit
-          for (const c of e.children()) {
+          for (const c of e.children()) if (editable) {
             if (c.hit && c.hit(world, this.app.view)) { hov = true; break; }
           }
           if (e.hover !== hov) { e.hover = hov; changed = true; }
@@ -2225,7 +2440,7 @@ class SelectTool extends Tool {
       const y0 = Math.min(this.box.y0, this.box.y1);
       const x1 = Math.max(this.box.x0, this.box.x1);
       const y1 = Math.max(this.box.y0, this.box.y1);
-      for (const s of this.app.project.visibleSketches()) {
+      for (const s of this.app.activeVisibleSketches()) {
         for (const e of s.entities) {
           const inBox = (p) => p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1;
           let inside = false;
@@ -2233,7 +2448,7 @@ class SelectTool extends Tool {
           else if (e instanceof Circle) inside = inBox(e.center);
           else if (e instanceof Arc)    inside = inBox(e.center);
           else if (e instanceof Point)  inside = inBox(e);
-          if (inside) e.selected = true;
+          if (inside) this.app.setSelected(e, true);
         }
       }
       this.box = null;
@@ -2244,11 +2459,11 @@ class SelectTool extends Tool {
       // point, promote the snap into a permanent constraint (e.g. drop a
       // point onto a line → PointOnLine).
       const sketch = this.app.activeSketch();
-      if (sketch && this.dragging.pts.length === 1 && this.dragging.endSnap) {
-        const pt = this.dragging.pts[0].p;
+      if (sketch && this.dragging.endSnap) {
+        const pt = this.dragging.endSnap.dragPoint || (this.dragging.pts.length === 1 ? this.dragging.pts[0].p : null);
         const sn = this.dragging.endSnap;
         // Skip if we'd be constraining the point to itself.
-        if (sn.entity !== pt) {
+        if (pt && sn.entity !== pt && !this.app.shouldIgnoreDragSnap(this.dragging, sn)) {
           const c = this.app.snapToConstraint(sn, pt);
           if (c) sketch.constraints.push(c);
         }
@@ -2402,6 +2617,77 @@ class CircleTool extends Tool {
   }
 }
 
+class HexagonTool extends Tool {
+  constructor(app) { super(app); this.center = null; this.cursor = null; }
+  hint() { return 'Set sides in Tool Options. Click center, then the midpoint of one edge.'; }
+  activate() { this.center = null; this.cursor = null; this._pendingCenterSnap = null; this.app.refreshToolOptions(); }
+  deactivate() { this.app.refreshToolOptions(); }
+  onPointerDown(world, snap) {
+    const sketch = this.app.activeSketch(); if (!sketch) return;
+    const w = snap ? { x:snap.x, y:snap.y } : world;
+    if (!this.center) {
+      const { point, reused } = this.app.makeOrReusePoint(w, snap, sketch);
+      this.center = point;
+      this._pendingCenterSnap = reused ? null : snap;
+    } else {
+      const pts = regularPolygonFromCenterEdge(this.center, w, this.app.polygonSides);
+      if (pts && pts.length >= 3) {
+        const vertices = pts.map(p => new Point(p.x, p.y));
+        const lines = [];
+        const circle = new Circle(this.center, dist(this.center, vertices[0]));
+        circle.construction = true;
+        for (let i = 0; i < vertices.length; i++) {
+          const l = new Line(vertices[i], vertices[(i + 1) % vertices.length]);
+          if (this.app.constructionMode) l.construction = true;
+          lines.push(l);
+        }
+        sketch.addEntity(circle);
+        for (const l of lines) sketch.addEntity(l);
+        for (const p of vertices) {
+          sketch.constraints.push(new PointOnCircleConstraint(p.id, circle.id, circle.center.id));
+        }
+        for (let i = 1; i < lines.length; i++) {
+          const equal = new EqualLengthConstraint(
+            { a: lines[0].p1.id, b: lines[0].p2.id },
+            { a: lines[i].p1.id, b: lines[i].p2.id }
+          );
+          equal.driven = true;
+          sketch.constraints.push(equal);
+        }
+        const centralAngle = TAU / vertices.length;
+        for (let i = 0; i < vertices.length - 1; i++) {
+          sketch.constraints.push(new DirectedAngleConstraint(
+            { a: this.center.id, b: vertices[i].id },
+            { a: this.center.id, b: vertices[(i + 1) % vertices.length].id },
+            centralAngle
+          ));
+        }
+        if (this._pendingCenterSnap) {
+          const cs = this.app.snapToConstraint(this._pendingCenterSnap, this.center);
+          if (cs) sketch.constraints.push(cs);
+        }
+        this.app.commit();
+      }
+      this.center = null;
+      this.cursor = null;
+      this._pendingCenterSnap = null;
+    }
+    this.app.requestRender();
+  }
+  onPointerMove(world, snap) { this.cursor = snap ? { x:snap.x, y:snap.y } : world; this.app.requestRender(); }
+  onKey(ev) { if (ev.key === 'Escape') { this.center = null; this._pendingCenterSnap = null; this.app.setTool('select'); } }
+  getPreview() {
+    if (!this.center || !this.cursor) return null;
+    const pts = regularPolygonFromCenterEdge(this.center, this.cursor, this.app.polygonSides);
+    if (!pts) return null;
+    return {
+      paths: [[...pts, pts[0]]],
+      circles: [{ center: this.center, r: dist(this.center, pts[0]) }],
+      dashed: this.app.constructionMode
+    };
+  }
+}
+
 class ArcTool extends Tool {
   constructor(app) { super(app); this.pts = []; this.cursor = null; }
   hint() { return 'Click start, end, then a third point on the arc.'; }
@@ -2452,8 +2738,11 @@ class PointTool extends Tool {
   hint() { return 'Click to place a point.'; }
   onPointerDown(world, snap) {
     const sketch = this.app.activeSketch(); if (!sketch) return;
-    // Don't create a duplicate at an endpoint we already have.
-    if (snap && snap.kind === 'endpoint') return;
+    // Don't create a duplicate at an active-sketch endpoint we already have.
+    if (snap && snap.kind === 'endpoint') {
+      const owner = this.app.project.sketchOf(snap.entity);
+      if (owner && owner.id === sketch.id) return;
+    }
     const w = snap ? { x:snap.x, y:snap.y } : world;
     const p = new Point(w.x, w.y);
     sketch.addEntity(p);
@@ -2611,12 +2900,14 @@ class SmartDimensionTool extends Tool {
       }
       if (lines.length === 2) {
         const [a, b] = lines;
-        const ax = a.p2.x - a.p1.x, ay = a.p2.y - a.p1.y;
-        const bx = b.p2.x - b.p1.x, by = b.p2.y - b.p1.y;
-        let theta = Math.atan2(by, bx) - Math.atan2(ay, ax);
-        while (theta > Math.PI) theta -= TAU;
-        while (theta < -Math.PI) theta += TAU;
-        this.preview = { kind:'angle', l1:a, l2:b, value: theta, dist: oldDist };
+        const sector = angleSectorForCursor(a, b, this.cursor);
+        if (!sector) { this.preview = null; return false; }
+        this.preview = {
+          kind:'angle', l1:a, l2:b,
+          value: sector.value, dist: oldDist,
+          midAngle: sector.midAngle,
+          l1Ref: sector.l1Ref, l2Ref: sector.l2Ref
+        };
         return true;
       }
       if (lines.length === 1 && points.length === 1) {
@@ -2685,7 +2976,14 @@ class SmartDimensionTool extends Tool {
       }
     } else if (p.kind === 'angle') {
       const inter = lineIntersection(p.l1.p1, p.l1.p2, p.l2.p1, p.l2.p2);
-      if (inter) p.dist = dist(inter, world);
+      const sector = angleSectorForCursor(p.l1, p.l2, world);
+      if (inter) p.dist = Math.max(dist(inter, world), 12 / this.app.view.zoom);
+      if (sector) {
+        p.value = sector.value;
+        p.midAngle = sector.midAngle;
+        p.l1Ref = sector.l1Ref;
+        p.l2Ref = sector.l2Ref;
+      }
     }
   }
 
@@ -2720,7 +3018,7 @@ class SmartDimensionTool extends Tool {
 
     const p = this.preview;
     let initial;
-    if (p.kind === 'angle')          initial = p.value * 180 / Math.PI;
+    if (p.kind === 'angle')          initial = normalizeAngleValue(p.value) * 180 / Math.PI;
     else                              initial = (p.kind === 'diameter') ? p.value : Math.abs(p.value);
     input.value = Number(initial).toFixed(3);
 
@@ -2791,10 +3089,16 @@ class SmartDimensionTool extends Tool {
     if (p.kind === 'angle') {
       const inter = lineIntersection(p.l1.p1, p.l1.p2, p.l2.p1, p.l2.p2);
       if (!inter) return null;
-      const a1 = Math.atan2(p.l1.p2.y - p.l1.p1.y, p.l1.p2.x - p.l1.p1.x);
-      const a2 = Math.atan2(p.l2.p2.y - p.l2.p1.y, p.l2.p2.x - p.l2.p1.x);
-      const mid = (a1 + a2) / 2;
-      const labelDist = p.dist + 12 / view.zoom;
+      const ref1 = p.l1Ref || { a:p.l1.p1.id, b:p.l1.p2.id };
+      const ref2 = p.l2Ref || { a:p.l2.p1.id, b:p.l2.p2.id };
+      const pts = new Map([
+        [p.l1.p1.id, p.l1.p1], [p.l1.p2.id, p.l1.p2],
+        [p.l2.p1.id, p.l2.p1], [p.l2.p2.id, p.l2.p2]
+      ]);
+      if (!pts.get(ref1.a) || !pts.get(ref1.b) || !pts.get(ref2.a) || !pts.get(ref2.b)) return null;
+      const arc = angleArcFromPoints(pts.get(ref1.a), pts.get(ref1.b), pts.get(ref2.a), pts.get(ref2.b));
+      const mid = arc.midAngle;
+      const labelDist = (p.dist ?? (40 / view.zoom)) + 12 / view.zoom;
       return view.worldToScreen({
         x: inter.x + labelDist * Math.cos(mid),
         y: inter.y + labelDist * Math.sin(mid)
@@ -2827,9 +3131,11 @@ class SmartDimensionTool extends Tool {
       made.isDiameter = true;
     } else if (p.kind === 'angle') {
       made = new AngleConstraint(
-        { a: p.l1.p1.id, b: p.l1.p2.id }, { a: p.l2.p1.id, b: p.l2.p2.id },
-        value * Math.PI / 180);
+        p.l1Ref || { a: p.l1.p1.id, b: p.l1.p2.id },
+        p.l2Ref || { a: p.l2.p1.id, b: p.l2.p2.id },
+        normalizeAngleValue(value * Math.PI / 180));
       made.labelDist = p.dist;
+      made.labelMidAngle = p.midAngle;
     }
     if (made) {
       sketch.constraints.push(made);
@@ -2837,7 +3143,7 @@ class SmartDimensionTool extends Tool {
       // sketch, demote it to a "driven" dimension — informational only,
       // doesn't enforce. SolidWorks asks the user; we just do it silently
       // and render in grey.
-      const probe = this.app.solver.solve(sketch, this.app.project.visibleSketches());
+      const probe = this.app.solver.solve(sketch, this.app.project.sketches);
       if (probe.state === 'over' || (probe.redundantIds && probe.redundantIds.has(made.id))) {
         made.driven = true;
       }
@@ -2856,6 +3162,83 @@ function classifySelection(sel) {
   const circles = sel.filter(e => e instanceof Circle);
   const arcs    = sel.filter(e => e instanceof Arc);
   return { points, lines, circles, arcs, total: sel.length };
+}
+
+function sameLineRefs(line, ref) {
+  if (!line || !ref) return false;
+  return (ref.a === line.p1.id && ref.b === line.p2.id) ||
+         (ref.a === line.p2.id && ref.b === line.p1.id);
+}
+
+function constraintAppliesToSelection(c, sel) {
+  if (c.kind === 'directedAngle') return false;              // internal regular-polygon scaffold
+  if (c.kind === 'equalLength' && c.driven) return false;    // informational polygon equality marker
+
+  const refs = new Set(c.refs());
+  const selectedPoints = new Set(sel.filter(e => e instanceof Point).map(e => e.id));
+  const selectedLines = sel.filter(e => e instanceof Line);
+  const selectedCurves = sel.filter(e => e instanceof Circle || e instanceof Arc);
+  const hasLine = (ref) => selectedLines.some(l => sameLineRefs(l, ref));
+  const selectedLineOwnsBothPoints = (line) =>
+    selectedPoints.has(line.p1.id) && selectedPoints.has(line.p2.id);
+
+  for (const e of sel) {
+    if (e instanceof Point) {
+      if (c.kind === 'fix') return c.pointId === e.id;
+      if (c.kind === 'coincident') return c.p1 === e.id || c.p2 === e.id;
+      if (c.kind === 'distance') return c.p1 === e.id || c.p2 === e.id;
+      if (c.kind === 'pointLineDistance') return c.pointId === e.id;
+      if (c.kind === 'midpoint') return c.pointId === e.id;
+      if (c.kind === 'pointOnLine') return c.pointId === e.id;
+      if (c.kind === 'pointOnCircle') return c.pointId === e.id;
+      if (c.kind === 'concentric') return c.p1 === e.id || c.p2 === e.id;
+      if ((c.kind === 'horizontal' || c.kind === 'vertical') &&
+          selectedPoints.has(c.p1) && selectedPoints.has(c.p2)) return true;
+    } else if (e instanceof Line) {
+      if (refs.has(e.id)) return true;
+      if ((c.kind === 'horizontal' || c.kind === 'vertical')) {
+        if (c.lineId === e.id) return true;
+        continue;
+      }
+      if (c.kind === 'parallel' || c.kind === 'perpendicular' ||
+          c.kind === 'collinear' || c.kind === 'equalLength') {
+        if (sameLineRefs(e, c.l1) || sameLineRefs(e, c.l2)) return true;
+        continue;
+      }
+      if (c.kind === 'angle') {
+        if (sameLineRefs(e, c.l1) || sameLineRefs(e, c.l2)) return true;
+        continue;
+      }
+      if (c.kind === 'pointOnLine' || c.kind === 'pointLineDistance' || c.kind === 'midpoint') {
+        if (sameLineRefs(e, c.l)) return true;
+        continue;
+      }
+      if (c.kind === 'distance' && refs.has(e.p1.id) && refs.has(e.p2.id)) return true;
+      if (c.kind === 'fix' && (c.pointId === e.p1.id || c.pointId === e.p2.id)) return true;
+      if (c.kind === 'coincident' && (refs.has(e.p1.id) || refs.has(e.p2.id))) return true;
+    } else if (e instanceof Circle || e instanceof Arc) {
+      if (refs.has(e.id) || refs.has(e.center.id)) return true;
+    }
+  }
+
+  if ((c.kind === 'parallel' || c.kind === 'perpendicular' ||
+       c.kind === 'collinear' || c.kind === 'equalLength' || c.kind === 'angle') &&
+      (hasLine(c.l1) || hasLine(c.l2))) return true;
+  if ((c.kind === 'pointOnLine' || c.kind === 'pointLineDistance' || c.kind === 'midpoint') &&
+      hasLine(c.l)) return true;
+  if ((c.kind === 'horizontal' || c.kind === 'vertical')) {
+    for (const l of selectedLines) if (c.lineId === l.id || selectedLineOwnsBothPoints(l)) return true;
+  }
+  if (selectedCurves.length) {
+    for (const e of selectedCurves) {
+      if (c.kind === 'radius' && c.circleId === e.id) return true;
+      if (c.kind === 'equalRadius' && (c.c1 === e.id || c.c2 === e.id)) return true;
+      if (c.kind === 'pointOnCircle' && c.circleId === e.id) return true;
+      if (c.kind === 'concentric' && (c.p1 === e.center.id || c.p2 === e.center.id)) return true;
+      if (c.kind === 'tangent' && (c.circleId === e.id || c.c1 === e.id || c.c2 === e.id)) return true;
+    }
+  }
+  return false;
 }
 
 function availableRelations(sel) {
@@ -2964,8 +3347,10 @@ class App {
     this.solver = new Solver();
     this.tool = new SelectTool(this);
     this.toolName = 'select';
+    this.polygonSides = 6;
     this.gridOn = true; this.snapOn = true; this.constructionMode = false;
     this.lastSnap = null; this.lastWorldCursor = { x:0, y:0 };
+    this.selectionOrder = [];
     this.dirty = true;
     this.undoStack = []; this.redoStack = [];
 
@@ -2983,13 +3368,19 @@ class App {
   /* ---- Sketch helpers ---- */
   activeSketch() { return this.project.active(); }
   visibleSketches() { return this.project.visibleSketches(); }
+  activeVisibleSketches() {
+    const s = this.activeSketch();
+    return (s && s.visible) ? [s] : [];
+  }
 
   makeOrReusePoint(world, snap, sketch) {
     // Endpoint snaps return the snapped Point directly so callers share
-    // the existing object; everything else creates a new Point that the
-    // caller is expected to constrain via snapToConstraint().
+    // an existing corner only inside the active sketch. Endpoints from
+    // inactive sketches stay reference geometry, so we create a new active
+    // point and constrain it to the reference instead of sharing the object.
     if (snap && snap.kind === 'endpoint' && snap.entity instanceof Point) {
-      return { point: snap.entity, reused: true };
+      const owner = this.project.sketchOf(snap.entity);
+      if (owner && owner.id === sketch.id) return { point: snap.entity, reused: true };
     }
     const wx = snap ? snap.x : world.x;
     const wy = snap ? snap.y : world.y;
@@ -3003,6 +3394,9 @@ class App {
    *  find the new id). */
   snapToConstraint(snap, point) {
     if (!snap) return null;
+    if (snap.kind === 'endpoint' && snap.entity instanceof Point && snap.entity !== point) {
+      return new CoincidentConstraint(point.id, snap.entity.id);
+    }
     if (snap.kind === 'origin') {
       point.fixed = true;
       return new FixConstraint(point.id, 0, 0);
@@ -3028,14 +3422,22 @@ class App {
   /** Hit test that walks ALL visible sketches. Children (points) win
    *  over their parent entities so endpoint dragging works. */
   hitTestAcrossLayers(world) {
+    return this.hitTestSketches(world, this.project.visibleSketches());
+  }
+
+  hitTestActiveSketch(world) {
+    return this.hitTestSketches(world, this.activeVisibleSketches());
+  }
+
+  hitTestSketches(world, sketches) {
     const v = this.view;
     // Prefer children (points) first, then entities.
-    for (const s of this.project.visibleSketches()) {
+    for (const s of sketches) {
       for (const e of s.entities) {
         for (const c of e.children()) if (c.hit(world, v)) return c;
       }
     }
-    for (const s of this.project.visibleSketches()) {
+    for (const s of sketches) {
       for (const e of s.entities) if (e.hit(world, v)) return e;
     }
     return null;
@@ -3054,10 +3456,33 @@ class App {
    *  hints flash at the cursor. */
   _snapForCurrentTool(world) {
     if (!this.snapOn) return null;
-    const drawing = ['line','rectangle','circle','arc','point'].includes(this.toolName);
+    const drawing = ['line','rectangle','circle','hexagon','arc','point'].includes(this.toolName);
     const dragging = this.toolName === 'select' && this.tool && this.tool.dragging;
     if (!drawing && !dragging) return null;
+    if (dragging) return this._snapForDragging(world);
     return this.snap.find(world, this.view, this.visibleSketches());
+  }
+
+  _snapForDragging(world) {
+    const drag = this.tool?.dragging;
+    if (!drag) return null;
+    const dx = world.x - drag.startWorld.x;
+    const dy = world.y - drag.startWorld.y;
+    const draggedSet = new Set(drag.pts.map(r => r.p));
+    const handles = drag.snapPts || drag.pts;
+    let best = null;
+    for (const r of handles) {
+      const probe = this._dragPreviewPoint(drag, r, dx, dy);
+      const snap = this.snap.find(probe, this.view, this.visibleSketches(), {
+        ignore: (candidate) =>
+          (candidate.entity && draggedSet.has(candidate.entity)) ||
+          this.shouldIgnoreDragSnap(drag, candidate)
+      });
+      if (!snap) continue;
+      const ranked = { ...snap, dragPoint: r.p, dragRecord: r };
+      if (!best || ranked._p > best._p || (ranked._p === best._p && ranked._d < best._d)) best = ranked;
+    }
+    return best;
   }
 
   /** Hit-test in screen pixels against the rectangles the renderer recorded
@@ -3110,7 +3535,15 @@ class App {
       const a2 = this._lookupAny(c.l2.a), b2 = this._lookupAny(c.l2.b);
       if (!a1 || !b1 || !a2 || !b2) return;
       const inter = lineIntersection(a1, b1, a2, b2);
-      if (inter) c.labelDist = dist(inter, world);
+      if (!inter) return;
+      const sector = angleSectorForCursor({ p1:a1, p2:b1 }, { p1:a2, p2:b2 }, world);
+      c.labelDist = Math.max(dist(inter, world), 12 / this.view.zoom);
+      if (sector) {
+        c.value = sector.value;
+        c.labelMidAngle = sector.midAngle;
+        c.l1 = sector.l1Ref;
+        c.l2 = sector.l2Ref;
+      }
     }
   }
 
@@ -3145,7 +3578,7 @@ class App {
       boxShadow: '0 1px 4px rgba(0,0,0,0.15)'
     });
     let initial;
-    if (c.kind === 'angle')                       initial = c.value * 180 / Math.PI;
+    if (c.kind === 'angle')                       initial = normalizeAngleValue(c.value) * 180 / Math.PI;
     else if (c.kind === 'radius' && c.isDiameter) initial = c.value * 2;
     else                                            initial = c.value;
     input.value = Number(initial).toFixed(3);
@@ -3160,14 +3593,14 @@ class App {
       if (commit) {
         const v = parseFloat(raw);
         if (Number.isFinite(v)) {
-          if (c.kind === 'angle')                       c.value = v * Math.PI / 180;
+          if (c.kind === 'angle')                       c.value = normalizeAngleValue(v * Math.PI / 180);
           else if (c.kind === 'radius' && c.isDiameter) c.value = v / 2;
           else                                            c.value = v;
           // Editing a driven dim's value makes it driving again — let the
           // solver pick it up unless that re-creates the over-defined state.
           if (c.driven) {
             c.driven = false;
-            const probe = this.solver.solve(this.activeSketch(), this.project.visibleSketches());
+            const probe = this.solver.solve(this.activeSketch(), this.project.sketches);
             if (probe.state === 'over' || (probe.redundantIds && probe.redundantIds.has(c.id))) {
               c.driven = true;
             }
@@ -3192,13 +3625,31 @@ class App {
     const out = [];
     const seen = new Set();
     const add = (x) => { if (!seen.has(x)) { seen.add(x); out.push(x); } };
-    for (const s of this.project.sketches) {
-      for (const e of s.entities) {
-        if (e.selected) add(e);
-        for (const c of e.children()) if (c.selected) add(c);
-      }
+    const sketch = this.activeSketch();
+    if (!sketch) return out;
+    const activeItems = new Set();
+    for (const e of sketch.entities) {
+      activeItems.add(e);
+      for (const c of e.children()) activeItems.add(c);
+    }
+    this.selectionOrder = this.selectionOrder.filter(x => x && x.selected && activeItems.has(x));
+    for (const x of this.selectionOrder) add(x);
+    for (const e of sketch.entities) {
+      if (e.selected) add(e);
+      for (const c of e.children()) if (c.selected) add(c);
     }
     return out;
+  }
+
+  setSelected(entity, selected) {
+    if (!entity) return;
+    entity.selected = !!selected;
+    const i = this.selectionOrder.indexOf(entity);
+    if (selected) {
+      if (i < 0) this.selectionOrder.push(entity);
+    } else if (i >= 0) {
+      this.selectionOrder.splice(i, 1);
+    }
   }
 
   clearSelection() {
@@ -3208,6 +3659,7 @@ class App {
         for (const c of e.children()) c.selected = false;
       }
     }
+    this.selectionOrder = [];
     this.refreshUI();
     this.requestRender();
   }
@@ -3225,6 +3677,764 @@ class App {
     this.refreshUI();
   }
 
+  _captureSketchParams(sketch) {
+    const rows = [];
+    const seen = new Set();
+    const walk = (e) => {
+      if (seen.has(e)) return;
+      seen.add(e);
+      for (const c of e.children()) walk(c);
+      for (const key of e.paramKeys()) rows.push({ ent:e, id:e.id, key, value:e[key] });
+    };
+    for (const e of sketch.entities) walk(e);
+    return rows;
+  }
+
+  _restoreSketchParams(rows) {
+    for (const r of rows) r.ent[r.key] = r.value;
+  }
+
+  _paramIndexMap(rows) {
+    const map = new Map();
+    for (let i = 0; i < rows.length; i++) map.set(rows[i].id + ':' + rows[i].key, i);
+    return map;
+  }
+
+  _captureParamValues(rows) {
+    return rows.map(r => r.ent[r.key]);
+  }
+
+  _applyParamValues(rows, values) {
+    for (let i = 0; i < rows.length; i++) rows[i].ent[rows[i].key] = values[i];
+  }
+
+  _buildConstraintGraph(sketch) {
+    const graph = new Map();
+    const add = (id) => {
+      if (!id) return;
+      if (!graph.has(id)) graph.set(id, new Set());
+    };
+    const link = (a, b) => {
+      if (!a || !b || a === b) return;
+      add(a); add(b);
+      graph.get(a).add(b);
+      graph.get(b).add(a);
+    };
+    for (const e of sketch.entities) {
+      add(e.id);
+      for (const c of e.children()) {
+        add(c.id);
+        link(e.id, c.id);
+      }
+    }
+    for (const c of sketch.constraints) {
+      const refs = c.refs().filter(Boolean);
+      for (const id of refs) add(id);
+      for (let i = 0; i < refs.length; i++) {
+        for (let j = i + 1; j < refs.length; j++) link(refs[i], refs[j]);
+      }
+    }
+    return graph;
+  }
+
+  _buildSolvingGraph(sketch) {
+    const graph = new Map();
+    const add = (id) => {
+      if (!id) return;
+      if (!graph.has(id)) graph.set(id, new Set());
+    };
+    const link = (a, b) => {
+      if (!a || !b || a === b) return;
+      add(a); add(b);
+      graph.get(a).add(b);
+      graph.get(b).add(a);
+    };
+    for (const e of sketch.entities) {
+      add(e.id);
+      for (const c of e.children()) add(c.id);
+    }
+    for (const c of sketch.constraints) {
+      if (c.driven) continue;
+      const refs = c.refs().filter(Boolean);
+      for (const id of refs) add(id);
+      for (let i = 0; i < refs.length; i++) {
+        for (let j = i + 1; j < refs.length; j++) link(refs[i], refs[j]);
+      }
+    }
+    return graph;
+  }
+
+  _graphDistances(graph, startIds) {
+    const distMap = new Map();
+    const q = [];
+    for (const id of startIds) {
+      distMap.set(id, 0);
+      q.push(id);
+      if (!graph.has(id)) graph.set(id, new Set());
+    }
+    for (let qi = 0; qi < q.length; qi++) {
+      const id = q[qi];
+      const d = distMap.get(id);
+      for (const nb of (graph.get(id) || [])) {
+        if (distMap.has(nb)) continue;
+        distMap.set(nb, d + 1);
+        q.push(nb);
+      }
+    }
+    return distMap;
+  }
+
+  _componentFrom(graph, startId) {
+    const component = new Set();
+    const q = [startId];
+    component.add(startId);
+    for (let qi = 0; qi < q.length; qi++) {
+      const id = q[qi];
+      for (const nb of (graph.get(id) || [])) {
+        if (component.has(nb)) continue;
+        component.add(nb);
+        q.push(nb);
+      }
+    }
+    return component;
+  }
+
+  _activeIdsAndPoints(sketch) {
+    const ids = new Set();
+    const points = new Map();
+    const walk = (e) => {
+      ids.add(e.id);
+      if (e instanceof Point) points.set(e.id, e);
+      for (const c of e.children()) walk(c);
+    };
+    for (const e of sketch.entities) walk(e);
+    return { ids, points };
+  }
+
+  _componentIsAnchored(sketch, component, activeIds, pointById) {
+    for (const id of component) {
+      if (!activeIds.has(id)) return true;
+      const p = pointById.get(id);
+      if (p && p.fixed) return true;
+    }
+    for (const c of sketch.constraints) {
+      if (c.kind === 'fix' && component.has(c.pointId)) return true;
+    }
+    return false;
+  }
+
+  _componentAnchorPoint(sketch, component, activeIds, pointById) {
+    const anchors = new Map();
+    const addPoint = (p) => { if (p) anchors.set(p.id, p); };
+    for (const id of component) {
+      if (!activeIds.has(id)) {
+        const e = this._lookupAny(id);
+        if (e instanceof Point) addPoint(e);
+        else return null;
+      }
+      const p = pointById.get(id);
+      if (p && p.fixed) addPoint(p);
+    }
+    for (const c of sketch.constraints) {
+      if (c.kind === 'fix' && component.has(c.pointId)) addPoint(pointById.get(c.pointId) || this._lookupAny(c.pointId));
+    }
+    return anchors.size === 1 ? [...anchors.values()][0] : null;
+  }
+
+  _constraintResidualNorm(constraints) {
+    const L = (id, key) => {
+      const e = this._lookupAny(id);
+      return e ? e[key] : 0;
+    };
+    let sum = 0;
+    for (const c of constraints) {
+      for (const r of c.residuals(L)) sum += r * r;
+    }
+    return Math.sqrt(sum);
+  }
+
+  _constraintSystem(rows, constraints) {
+    const activeConstraints = constraints.filter(c => !c.driven);
+    const L = (id, key) => {
+      const e = this._lookupAny(id);
+      return e ? e[key] : 0;
+    };
+    const computeF = () => {
+      const f = [];
+      for (const c of activeConstraints) for (const r of c.residuals(L)) f.push(r);
+      return f;
+    };
+    const f = computeF();
+    const m = f.length, n = rows.length;
+    const J = Array.from({ length:m }, () => new Array(n).fill(0));
+    for (let j = 0; j < n; j++) {
+      const r = rows[j];
+      const x0 = r.ent[r.key];
+      const step = Math.max(1e-6, Math.abs(x0) * 1e-7);
+      r.ent[r.key] = x0 + step;
+      const fp = computeF();
+      r.ent[r.key] = x0;
+      const inv = 1 / step;
+      for (let i = 0; i < m; i++) J[i][j] = (fp[i] - f[i]) * inv;
+    }
+    const residual = Math.sqrt(f.reduce((s, v) => s + v*v, 0));
+    return { f, J, residual };
+  }
+
+  _applyParamStep(rows, step) {
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      let v = r.ent[r.key] + step[i];
+      if (r.key === 'r') v = Math.max(EPS, v);
+      r.ent[r.key] = v;
+    }
+  }
+
+  _projectConstraintResidual(rows, constraints, passes = 2) {
+    for (let pass = 0; pass < passes; pass++) {
+      const sys = this._constraintSystem(rows, constraints);
+      if (sys.residual < 1e-7 || !sys.J.length) return sys;
+      const step = solveLeastSquares(sys.J, sys.f.map(v => -v), 1e-6);
+      if (!step) return sys;
+      const before = this._captureParamValues(rows);
+      this._applyParamStep(rows, step);
+      const next = this._constraintSystem(rows, constraints);
+      if (next.residual <= sys.residual) continue;
+      this._applyParamValues(rows, before);
+      return sys;
+    }
+    return this._constraintSystem(rows, constraints);
+  }
+
+  _makeDragIntent(startWorld, pts, hit, rows) {
+    const index = this._paramIndexMap(rows);
+    const targets = [];
+    const pointCoeff = (p, key, coeff = 1) => {
+      const idx = index.get(p.id + ':' + key);
+      return idx == null ? null : { idx, coeff };
+    };
+    const addTarget = (coeffs, start, axis, weight) => {
+      const clean = coeffs.filter(Boolean);
+      if (clean.length) targets.push({ coeffs:clean, start, axis, weight });
+    };
+    const addPointTargets = (p, weight) => {
+      addTarget([pointCoeff(p, 'x')], p.x, 'x', weight);
+      addTarget([pointCoeff(p, 'y')], p.y, 'y', weight);
+    };
+    const addLineHandleTargets = (line, weight) => {
+      const dx = line.p2.x - line.p1.x, dy = line.p2.y - line.p1.y;
+      const len2 = dx*dx + dy*dy;
+      const t = len2 > EPS
+        ? clamp(((startWorld.x - line.p1.x)*dx + (startWorld.y - line.p1.y)*dy) / len2, 0, 1)
+        : 0.5;
+      const a = 1 - t, b = t;
+      addTarget([pointCoeff(line.p1, 'x', a), pointCoeff(line.p2, 'x', b)], a*line.p1.x + b*line.p2.x, 'x', weight);
+      addTarget([pointCoeff(line.p1, 'y', a), pointCoeff(line.p2, 'y', b)], a*line.p1.y + b*line.p2.y, 'y', weight);
+    };
+
+    if (hit instanceof Point) {
+      addPointTargets(hit, 400);
+    } else if (hit instanceof Line) {
+      addLineHandleTargets(hit, 400);
+    } else if (pts.length === 1) {
+      addPointTargets(pts[0].p, 400);
+    } else if (pts.length === 2) {
+      const p1 = pts[0].p, p2 = pts[1].p;
+      addLineHandleTargets({ p1, p2 }, 400);
+    } else if (pts.length > 2) {
+      const n = pts.length;
+      const cx = pts.reduce((s, r) => s + r.x, 0) / n;
+      const cy = pts.reduce((s, r) => s + r.y, 0) / n;
+      addTarget(pts.map(r => pointCoeff(r.p, 'x', 1 / n)), cx, 'x', 400);
+      addTarget(pts.map(r => pointCoeff(r.p, 'y', 1 / n)), cy, 'y', 400);
+      for (const r of pts) addPointTargets(r.p, 0.5);
+    }
+    return targets.length ? { targets } : null;
+  }
+
+  _intentTargetValue(target, dx, dy) {
+    return target.start + (target.axis === 'x' ? dx : dy);
+  }
+
+  _intentCurrentValue(target, rows) {
+    let v = 0;
+    for (const c of target.coeffs) v += c.coeff * rows[c.idx].ent[rows[c.idx].key];
+    return v;
+  }
+
+  _dragParamRegularization(drag, row) {
+    const d = drag.distances?.get(row.id);
+    if (d === 0) return 0.01;
+    if (d === 1) return 0.03;
+    if (d === 2) return 0.08;
+    if (Number.isFinite(d)) return 0.15 + d * 0.05;
+    return 2.0;
+  }
+
+  _intentLeastSquares(drag, nullBasis, dx, dy) {
+    const rows = drag.state;
+    const A = [], b = [];
+    for (const target of drag.intent.targets) {
+      const row = nullBasis.map(v => target.coeffs.reduce((s, c) => s + c.coeff * v[c.idx], 0));
+      const norm = Math.sqrt(row.reduce((s, v) => s + v*v, 0));
+      if (norm < 1e-10) continue;
+      const w = Math.sqrt(target.weight);
+      A.push(row.map(v => v * w));
+      b.push((this._intentTargetValue(target, dx, dy) - this._intentCurrentValue(target, rows)) * w);
+    }
+    for (let i = 0; i < rows.length; i++) {
+      const w0 = this._dragParamRegularization(drag, rows[i]);
+      if (w0 <= 0) continue;
+      const w = Math.sqrt(w0);
+      A.push(nullBasis.map(v => v[i] * w));
+      b.push((rows[i].value - rows[i].ent[rows[i].key]) * w);
+    }
+    return { A, b };
+  }
+
+  _dragIntentError(drag, dx, dy) {
+    let sum = 0, n = 0;
+    for (const target of drag.intent.targets) {
+      const e = this._intentTargetValue(target, dx, dy) - this._intentCurrentValue(target, drag.state);
+      sum += e * e;
+      n++;
+    }
+    return n ? Math.sqrt(sum / n) : 0;
+  }
+
+  _beginDofDrag(sketch, state, startWorld, pts, hit, distances) {
+    const constraints = sketch.constraints.filter(c => !c.driven);
+    const sys = this._constraintSystem(state, constraints);
+    if (sys.residual > 1e-4) return null;
+    const intent = this._makeDragIntent(startWorld, pts, hit, state);
+    if (!intent) return null;
+    const rowBasis = rowSpaceBasis(sys.J, 1e-7);
+    const nullBasis = nullSpaceBasis(rowBasis, state.length, 1e-7);
+    if (!nullBasis.length) {
+      return {
+        mode:'locked',
+        startWorld,
+        pts,
+        snapPts:pts,
+        state,
+        distances,
+        snapIgnoreIds:new Set(distances.keys())
+      };
+    }
+    let responsive = false;
+    for (const target of intent.targets) {
+      for (const v of nullBasis) {
+        const projected = target.coeffs.reduce((s, c) => s + c.coeff * v[c.idx], 0);
+        if (Math.abs(projected) > 1e-7) { responsive = true; break; }
+      }
+      if (responsive) break;
+    }
+    if (!responsive) return null;
+    return {
+      mode:'dof',
+      startWorld,
+      pts,
+      snapPts:pts,
+      state,
+      constraints,
+      intent,
+      distances,
+      snapIgnoreIds:new Set(distances.keys())
+    };
+  }
+
+  _solveDofDrag(drag, dx, dy) {
+    const sketch = this.activeSketch();
+    this._restoreSketchParams(drag.state);
+    let bestValues = this._captureParamValues(drag.state);
+    let bestError = this._dragIntentError(drag, dx, dy);
+
+    for (let iter = 0; iter < 20; iter++) {
+      const sys = this._constraintSystem(drag.state, drag.constraints);
+      const rowBasis = rowSpaceBasis(sys.J, 1e-7);
+      const nullBasis = nullSpaceBasis(rowBasis, drag.state.length, 1e-7);
+      if (!nullBasis.length) break;
+      const { A, b } = this._intentLeastSquares(drag, nullBasis, dx, dy);
+      if (!A.length) break;
+      const z = solveLeastSquares(A, b, 1e-8);
+      if (!z) break;
+      const step = new Array(drag.state.length).fill(0);
+      for (let k = 0; k < nullBasis.length; k++) {
+        for (let i = 0; i < step.length; i++) step[i] += nullBasis[k][i] * z[k];
+      }
+      const maxStep = step.reduce((m, v) => Math.max(m, Math.abs(v)), 0);
+      if (maxStep < 1e-7) break;
+      this._applyParamStep(drag.state, step);
+      this._projectConstraintResidual(drag.state, drag.constraints, 2);
+      const err = this._dragIntentError(drag, dx, dy);
+      if (err < bestError) {
+        bestError = err;
+        bestValues = this._captureParamValues(drag.state);
+      }
+      if (err < 1e-5) break;
+    }
+
+    this._applyParamValues(drag.state, bestValues);
+    const result = this.solver.solve(sketch, this.project.sketches);
+    if (!result.ok && bestValues) this._applyParamValues(drag.state, bestValues);
+    for (const e of sketch.entities) if (e instanceof Arc) e.syncEnds();
+    return result;
+  }
+
+  _applySimilarityToRows(rows, component, anchor, scale, angle) {
+    const cs = Math.cos(angle), sn = Math.sin(angle);
+    const pointRows = new Map();
+    for (const r of rows) {
+      if (!component.has(r.id)) continue;
+      if (r.ent instanceof Point) {
+        if (!pointRows.has(r.ent)) pointRows.set(r.ent, { x:r.ent.x, y:r.ent.y });
+        pointRows.get(r.ent)[r.key] = r.value;
+      }
+    }
+    for (const [p, rec] of pointRows) {
+      const vx = rec.x - anchor.x, vy = rec.y - anchor.y;
+      p.x = anchor.x + scale * (vx*cs - vy*sn);
+      p.y = anchor.y + scale * (vx*sn + vy*cs);
+    }
+    for (const r of rows) {
+      if (!component.has(r.id) || r.ent instanceof Point) continue;
+      if (r.key === 'r') r.ent[r.key] = Math.max(EPS, r.value * scale);
+      else if (r.key === 'a0' || r.key === 'a1') r.ent[r.key] = r.value + angle;
+      else r.ent[r.key] = r.value;
+    }
+  }
+
+  _componentTransformFreedom(sketch, state, component, anchor) {
+    const relevant = sketch.constraints.filter(c => !c.driven && c.refs().some(id => component.has(id)));
+    const before = this._constraintResidualNorm(relevant);
+    const allowed = (scale, angle) => {
+      this._applySimilarityToRows(state, component, anchor, scale, angle);
+      const after = this._constraintResidualNorm(relevant);
+      this._restoreSketchParams(state);
+      return after <= Math.max(1e-5, before * 1.05 + 1e-6);
+    };
+    return {
+      rotate: allowed(1, 0.01),
+      scale: allowed(1.01, 0)
+    };
+  }
+
+  beginLocalizedDrag(startWorld, pts, hit = null) {
+    const sketch = this.activeSketch();
+    const state = this._captureSketchParams(sketch);
+    const graph = this._buildConstraintGraph(sketch);
+    const startIds = new Set(pts.map(r => r.p.id));
+    const distances = this._graphDistances(graph, startIds);
+
+    const { ids: activeIds, points: pointById } = this._activeIdsAndPoints(sketch);
+    const components = [];
+    const componentKeys = new Set();
+    for (const id of startIds) {
+      const component = this._componentFrom(graph, id);
+      const key = [...component].sort().join('|');
+      if (!componentKeys.has(key)) {
+        componentKeys.add(key);
+        components.push(component);
+      }
+    }
+
+    if (components.length && components.every(c => !this._componentIsAnchored(sketch, c, activeIds, pointById))) {
+      const moveIds = new Set();
+      for (const c of components) for (const id of c) moveIds.add(id);
+      const rigidPts = [];
+      for (const [id, p] of pointById) {
+        if (moveIds.has(id)) rigidPts.push({ p, x:p.x, y:p.y });
+      }
+      if (rigidPts.length) {
+        return {
+          mode:'rigid',
+          startWorld,
+          pts:rigidPts,
+          snapPts:pts,
+          startIds,
+          distances,
+          snapIgnoreIds:moveIds
+        };
+      }
+    }
+
+    const dofDrag = this._beginDofDrag(sketch, state, startWorld, pts, hit, distances);
+    if (dofDrag) return dofDrag;
+
+    const solveGraph = this._buildSolvingGraph(sketch);
+    const solveComponents = [];
+    const solveComponentKeys = new Set();
+    for (const id of startIds) {
+      const component = this._componentFrom(solveGraph, id);
+      const key = [...component].sort().join('|');
+      if (!solveComponentKeys.has(key)) {
+        solveComponentKeys.add(key);
+        solveComponents.push(component);
+      }
+    }
+
+    const anchors = solveComponents.map(c => this._componentAnchorPoint(sketch, c, activeIds, pointById));
+    if (solveComponents.length && anchors.every(a => a) && new Set(anchors.map(a => a.id)).size === 1) {
+      const anchor = anchors[0];
+      const moveIds = new Set();
+      for (const c of solveComponents) for (const id of c) moveIds.add(id);
+      const snapIgnoreIds = new Set(moveIds);
+      for (const c of components) for (const id of c) snapIgnoreIds.add(id);
+      const rotatePts = [];
+      for (const [id, p] of pointById) {
+        if (moveIds.has(id) && p !== anchor) rotatePts.push({ p, x:p.x, y:p.y });
+      }
+      const transformFreedom = this._componentTransformFreedom(sketch, state, moveIds, anchor);
+      const handle = dist(startWorld, anchor) > EPS ? { x:startWorld.x, y:startWorld.y } : pts
+        .filter(r => r.p !== anchor && dist(r.p, anchor) > EPS)
+        .sort((a, b) => dist(a.p, startWorld) - dist(b.p, startWorld))[0] || rotatePts[0];
+      if (rotatePts.length && handle && transformFreedom.rotate) {
+        const transformParams = state.filter(r => moveIds.has(r.id) && !(r.ent instanceof Point));
+        return {
+          mode: transformFreedom.scale ? 'similarity' : 'rotate',
+          startWorld,
+          pts:rotatePts,
+          transformParams,
+          snapPts:pts.filter(r => r.p !== anchor),
+          startIds,
+          distances,
+          anchor:{ p:anchor, x:anchor.x, y:anchor.y },
+          rotateHandle:handle,
+          snapIgnoreIds
+        };
+      }
+    }
+
+    const depthSet = new Set([0]);
+    for (const r of state) {
+      const d = distances.get(r.id);
+      if (Number.isFinite(d)) depthSet.add(d);
+    }
+    const depths = [...depthSet].sort((a, b) => a - b);
+    return { startWorld, pts, snapPts:pts, state, startIds, distances, depths, snapIgnoreIds:new Set(distances.keys()) };
+  }
+
+  _dragMovableIds(drag, depth) {
+    const movable = new Set(drag.startIds);
+    for (const [id, d] of drag.distances) {
+      if (d <= depth) movable.add(id);
+    }
+    return movable;
+  }
+
+  _dragTempConstraints(state, movableIds, targetById) {
+    const extra = [];
+    const fixedPoints = new Map();
+    for (const r of state) {
+      if (movableIds.has(r.id)) continue;
+      if (r.ent instanceof Point) {
+        if (!fixedPoints.has(r.ent)) fixedPoints.set(r.ent, { p:r.ent, x:r.ent.x, y:r.ent.y });
+        fixedPoints.get(r.ent)[r.key] = r.value;
+      } else {
+        extra.push(new ParamFixConstraint(r.id, r.key, r.value));
+      }
+    }
+    for (const fp of fixedPoints.values()) extra.push(new FixConstraint(fp.p.id, fp.x, fp.y));
+    if (targetById) {
+      for (const [id, t] of targetById) extra.push(new FixConstraint(id, t.x, t.y));
+    }
+    return extra;
+  }
+
+  _entityAndChildIds(entity) {
+    const ids = new Set();
+    const walk = (e) => {
+      if (!e || ids.has(e.id)) return;
+      ids.add(e.id);
+      for (const c of e.children()) walk(c);
+    };
+    walk(entity);
+    return ids;
+  }
+
+  _solveWithFirstSelectionMoving(sketch, sel, beforeState, beforeGraph) {
+    if (!sketch || sel.length < 2) return null;
+    const firstIds = this._entityAndChildIds(sel[0]);
+    const movableIds = new Set();
+    for (const id of firstIds) {
+      const component = this._componentFrom(beforeGraph, id);
+      for (const cid of component) movableIds.add(cid);
+    }
+    if (!movableIds.size) return null;
+
+    const extra = this._dragTempConstraints(beforeState, movableIds, null);
+    const result = this.solver.solve(sketch, this.project.sketches, extra);
+    if (result.ok) return result;
+
+    this._restoreSketchParams(beforeState);
+    return result;
+  }
+
+  shouldIgnoreDragSnap(drag, snap) {
+    if (!drag || !snap) return false;
+    if ((drag.mode === 'rotate' || drag.mode === 'similarity' || drag.mode === 'dof') && snap.kind === 'origin') {
+      if (drag.anchor && Math.hypot(drag.anchor.x, drag.anchor.y) < EPS) return true;
+      const fixedAtOrigin = (drag.state || []).some(r => r.ent instanceof Point && Math.hypot(r.ent.x, r.ent.y) < EPS && r.ent.fixed);
+      if (fixedAtOrigin) return true;
+    }
+    if (!snap.entity || !snap.entity.id) return false;
+    return !!(drag.snapIgnoreIds && drag.snapIgnoreIds.has(snap.entity.id));
+  }
+
+  _rotationDeltaFromDrag(drag, dx, dy) {
+    const h = drag.rotateHandle;
+    const a = drag.anchor;
+    if (!h || !a) return 0;
+    const start = Math.atan2(h.y - a.y, h.x - a.x);
+    const target = Math.atan2(h.y + dy - a.y, h.x + dx - a.x);
+    let delta = target - start;
+    while (delta > Math.PI) delta -= TAU;
+    while (delta < -Math.PI) delta += TAU;
+    return delta;
+  }
+
+  _similarityFromDrag(drag, dx, dy) {
+    const h = drag.rotateHandle;
+    const a = drag.anchor;
+    if (!h || !a) return { delta:0, scale:1 };
+    const sx = h.x - a.x, sy = h.y - a.y;
+    const tx = h.x + dx - a.x, ty = h.y + dy - a.y;
+    const startLen = Math.hypot(sx, sy);
+    if (startLen < EPS) return { delta:0, scale:1 };
+    let delta = Math.atan2(ty, tx) - Math.atan2(sy, sx);
+    while (delta > Math.PI) delta -= TAU;
+    while (delta < -Math.PI) delta += TAU;
+    const scale = drag.mode === 'similarity'
+      ? Math.max(0.05, Math.hypot(tx, ty) / startLen)
+      : 1;
+    return { delta, scale };
+  }
+
+  _dragPreviewPoint(drag, r, dx, dy) {
+    if (drag.mode !== 'rotate' && drag.mode !== 'similarity') return { x:r.x + dx, y:r.y + dy };
+    const a = drag.anchor;
+    const { delta, scale } = this._similarityFromDrag(drag, dx, dy);
+    const cs = Math.cos(delta), sn = Math.sin(delta);
+    const vx = r.x - a.x, vy = r.y - a.y;
+    return {
+      x:a.x + scale * (vx*cs - vy*sn),
+      y:a.y + scale * (vx*sn + vy*cs)
+    };
+  }
+
+  _dragDeltaForSnap(drag, snap) {
+    if (drag.mode !== 'rotate' && drag.mode !== 'similarity') {
+      return { dx:snap.x - snap.dragRecord.x, dy:snap.y - snap.dragRecord.y };
+    }
+    const r = snap.dragRecord;
+    const a = drag.anchor;
+    const h = drag.rotateHandle;
+    if (!r || !a || !h) return { dx:0, dy:0 };
+    const rsx = r.x - a.x, rsy = r.y - a.y;
+    const rtx = snap.x - a.x, rty = snap.y - a.y;
+    const rStartLen = Math.hypot(rsx, rsy);
+    if (rStartLen < EPS) return { dx:0, dy:0 };
+    let delta = Math.atan2(rty, rtx) - Math.atan2(rsy, rsx);
+    while (delta > Math.PI) delta -= TAU;
+    while (delta < -Math.PI) delta += TAU;
+    const scale = drag.mode === 'similarity'
+      ? Math.max(0.05, Math.hypot(rtx, rty) / rStartLen)
+      : 1;
+    const cs = Math.cos(delta), sn = Math.sin(delta);
+    const hvx = h.x - a.x, hvy = h.y - a.y;
+    const hx = a.x + scale * (hvx*cs - hvy*sn);
+    const hy = a.y + scale * (hvx*sn + hvy*cs);
+    return { dx:hx - h.x, dy:hy - h.y };
+  }
+
+  solveLocalizedDrag(drag, dx, dy) {
+    const sketch = this.activeSketch();
+    if (!sketch || !drag || !drag.pts.length) return null;
+
+    if (drag.mode === 'dof') {
+      return this._solveDofDrag(drag, dx, dy);
+    }
+
+    if (drag.mode === 'locked') {
+      this._restoreSketchParams(drag.state || []);
+      return { ok:true, iters:0, residual:0, state:this._lastSolve?.state || 'fully' };
+    }
+
+    if (drag.mode === 'rotate' || drag.mode === 'similarity') {
+      const a = drag.anchor;
+      const { delta, scale } = this._similarityFromDrag(drag, dx, dy);
+      const cs = Math.cos(delta), sn = Math.sin(delta);
+      for (const r of drag.pts) {
+        const vx = r.x - a.x, vy = r.y - a.y;
+        r.p.x = a.x + scale * (vx*cs - vy*sn);
+        r.p.y = a.y + scale * (vx*sn + vy*cs);
+      }
+      for (const r of drag.transformParams || []) {
+        if (r.key === 'r') r.ent[r.key] = Math.max(EPS, r.value * scale);
+        else if (r.key === 'a0' || r.key === 'a1') r.ent[r.key] = r.value + delta;
+        else r.ent[r.key] = r.value;
+      }
+      for (const e of sketch.entities) if (e instanceof Arc) e.syncEnds();
+      return { ok:true, iters:0, residual:0, state:this._lastSolve?.state || 'under' };
+    }
+
+    if (drag.mode === 'rigid') {
+      for (const r of drag.pts) {
+        r.p.x = r.x + dx;
+        r.p.y = r.y + dy;
+      }
+      for (const e of sketch.entities) if (e instanceof Arc) e.syncEnds();
+      return { ok:true, iters:0, residual:0, state:this._lastSolve?.state || 'under' };
+    }
+
+    const targets = new Map();
+    for (const r of drag.pts) targets.set(r.p.id, { x:r.x + dx, y:r.y + dy });
+
+    let best = null;
+    const placeDraggedPoints = () => {
+      for (const r of drag.pts) {
+        const t = targets.get(r.p.id);
+        r.p.x = t.x;
+        r.p.y = t.y;
+      }
+    };
+    const finish = (result) => {
+      for (const e of sketch.entities) if (e instanceof Arc) e.syncEnds();
+      // Drag solves use temporary pins to keep unaffected geometry local.
+      // Those pins are not real sketch constraints, so do not use their
+      // fully-defined analysis for canvas colouring while the pointer moves.
+      return result;
+    };
+    const trySolve = (depth, includeTargets) => {
+      this._restoreSketchParams(drag.state);
+      placeDraggedPoints();
+      const movable = this._dragMovableIds(drag, depth);
+      const extra = this._dragTempConstraints(drag.state, movable, includeTargets ? targets : null);
+      const result = this.solver.solve(sketch, this.project.sketches, extra);
+      const values = this._captureParamValues(drag.state);
+      if (!best || result.residual < best.result.residual) best = { result, values };
+      return result;
+    };
+
+    for (const depth of drag.depths) {
+      const result = trySolve(depth, true);
+      if (result.ok) return finish(result);
+    }
+
+    // If the cursor target conflicts with a real fixed/reference relation,
+    // keep the local pins but let the actual sketch constraints win.
+    for (const depth of drag.depths) {
+      const result = trySolve(depth, false);
+      if (result.ok) return finish(result);
+    }
+
+    if (best) {
+      this._applyParamValues(drag.state, best.values);
+      return finish(best.result);
+    }
+    return null;
+  }
+
   /* ---- Solving ---- */
   commit() {
     this.undoStack.push(JSON.stringify(this.project.toJSON()));
@@ -3235,7 +4445,7 @@ class App {
 
   solveSoft() {
     const sketch = this.activeSketch(); if (!sketch) return;
-    const r = this.solver.solve(sketch, this.project.visibleSketches());
+    const r = this.solver.solve(sketch, this.project.sketches);
     for (const e of sketch.entities) if (e instanceof Arc) e.syncEnds();
     this._updateConstraintStatus(r);
     this._lastSolve = r;
@@ -3245,7 +4455,7 @@ class App {
     const sketch = this.activeSketch();
     if (!sketch) { this.requestRender(); return; }
     const t0 = performance.now();
-    const r = this.solver.solve(sketch, this.project.visibleSketches());
+    const r = this.solver.solve(sketch, this.project.sketches);
     const t1 = performance.now();
     for (const e of sketch.entities) if (e instanceof Arc) e.syncEnds();
     this._updateConstraintStatus(r);
@@ -3302,6 +4512,8 @@ class App {
     const { points, lines, circles, arcs } = classifySelection(sel);
 
     const beforeJSON = JSON.stringify(this.project.toJSON());
+    const beforeState = this._captureSketchParams(sketch);
+    const beforeGraph = this._buildConstraintGraph(sketch);
     const tryAdd = (cons) => { if (Array.isArray(cons)) sketch.constraints.push(...cons); else sketch.constraints.push(cons); };
 
     let added = false;
@@ -3445,14 +4657,18 @@ class App {
     }
 
     if (added) {
+      if (kind !== 'fix' && sel.length >= 2) {
+        this._solveWithFirstSelectionMoving(sketch, sel, beforeState, beforeGraph);
+      }
       this.commit();
       // If the new constraint(s) made things impossible to solve, warn.
-      const solver = this.solver.solve(sketch, this.project.visibleSketches());
+      const solver = this.solver.solve(sketch, this.project.sketches);
       if (solver.state === 'over' && solver.residual > 1e-2) {
         const msg = `This relation makes the sketch over-defined (residual ${solver.residual.toExponential(2)}). Keep it anyway?`;
         if (!confirm(msg)) {
           // revert
           this.project = Project.fromJSON(JSON.parse(beforeJSON));
+          this.selectionOrder = [];
           this.solveAndRender();
           this.refreshUI();
         }
@@ -3525,6 +4741,7 @@ class App {
       case 'line':      this.tool = new LineTool(this); break;
       case 'rectangle': this.tool = new RectangleTool(this); break;
       case 'circle':    this.tool = new CircleTool(this); break;
+      case 'hexagon':   this.tool = new HexagonTool(this); break;
       case 'arc':       this.tool = new ArcTool(this); break;
       case 'point':     this.tool = new PointTool(this); break;
       case 'smartdim':  this.tool = new SmartDimensionTool(this); break;
@@ -3534,6 +4751,7 @@ class App {
     document.getElementById('status-tool').textContent = 'Tool: ' + name[0].toUpperCase() + name.slice(1);
     document.getElementById('status-hint').textContent = (this.tool.hint && this.tool.hint()) || '';
     this.canvas.style.cursor = name === 'select' ? 'default' : 'crosshair';
+    this.refreshToolOptions();
     this.requestRender();
   }
 
@@ -3615,6 +4833,7 @@ class App {
       else if (k === 'l') this.setTool('line');
       else if (k === 'r') this.setTool('rectangle');
       else if (k === 'c') this.setTool('circle');
+      else if (k === 'h') this.setTool('hexagon');
       else if (k === 'a') this.setTool('arc');
       else if (k === 'p') this.setTool('point');
       else if (k === 'd') this.setTool('smartdim');
@@ -3679,8 +4898,36 @@ class App {
 
   refreshUI() {
     this._refreshLayers();
+    this.refreshToolOptions();
     this._refreshSelectionPanel();
     document.getElementById('project-name').value = this.project.name;
+  }
+
+  refreshToolOptions() {
+    const section = document.getElementById('tool-options-section');
+    const body = document.getElementById('tool-options-body');
+    if (!section || !body) return;
+    if (this.toolName !== 'hexagon') {
+      section.hidden = true;
+      body.innerHTML = '';
+      return;
+    }
+    section.hidden = false;
+    body.innerHTML = `
+      <div class="prop-row">
+        <label for="polygon-sides">sides</label>
+        <input id="polygon-sides" type="number" min="3" max="64" step="1" value="${this.polygonSides}">
+      </div>
+    `;
+    const input = body.querySelector('#polygon-sides');
+    input.addEventListener('input', () => {
+      const n = Math.round(parseFloat(input.value));
+      if (!Number.isFinite(n)) return;
+      this.polygonSides = clamp(n, 3, 64);
+      input.value = this.polygonSides;
+      this.requestRender();
+      document.getElementById('status-hint').textContent = (this.tool.hint && this.tool.hint()) || '';
+    });
   }
 
   _refreshLayers() {
@@ -3691,13 +4938,11 @@ class App {
       row.className = 'layer-row' + (s.id === this.project.activeSketchId ? ' active' : '');
       row.innerHTML = `
         <button class="icon-btn" title="Toggle visibility">${s.visible ? '👁' : '◌'}</button>
-        <button class="icon-btn" title="Toggle lock">${s.locked ? '🔒' : '🔓'}</button>
         <span class="name" title="${s.name}">${s.name}<span class="badge">${s.entities.length}</span></span>
         <button class="icon-btn" title="Delete">✕</button>
       `;
-      const [vis, lock, name, del] = row.querySelectorAll(':scope > *');
+      const [vis, name, del] = row.querySelectorAll(':scope > *');
       vis.addEventListener('click', (e) => { e.stopPropagation(); s.visible = !s.visible; this.refreshUI(); this.requestRender(); });
-      lock.addEventListener('click', (e) => { e.stopPropagation(); s.locked = !s.locked; this.refreshUI(); });
       del.addEventListener('click', (e) => {
         e.stopPropagation();
         if (this.project.sketches.length <= 1) return alert('A project must have at least one sketch.');
@@ -3786,9 +5031,7 @@ class App {
     }
 
     // ---- Existing Relations on selection ----
-    const selIds = new Set();
-    for (const x of sel) { selIds.add(x.id); for (const c of x.children()) selIds.add(c.id); }
-    const related = (sketch?.constraints || []).filter(c => c.refs().some(r => selIds.has(r)));
+    const related = (sketch?.constraints || []).filter(c => constraintAppliesToSelection(c, sel));
     html += '<div class="sb-subhead">Existing Relations</div>';
     if (related.length === 0) {
       html += '<div class="empty">None on selection.</div>';
@@ -3887,6 +5130,7 @@ class App {
     if (!confirm('Discard current project and start a new one?')) return;
     this.project = new Project(); this.project.addSketch('Sketch 1');
     this.undoStack.length = 0; this.redoStack.length = 0;
+    this.selectionOrder = [];
     this.refreshUI(); this.solveAndRender();
   }
   exportJSON() { this._modal('Export JSON', JSON.stringify(this.project.toJSON(), null, 2), false); }
@@ -3895,6 +5139,7 @@ class App {
       if (!text) return;
       try {
         this.project = Project.fromJSON(JSON.parse(text));
+        this.selectionOrder = [];
         this.commit(); this.refreshUI();
       } catch (e) { alert('Failed to parse: ' + e.message); }
     });
@@ -3943,6 +5188,7 @@ class App {
   _afterStateSwap() {
     if (this.tool && this.tool.activate) this.tool.activate();
     this.lastSnap = null;
+    this.selectionOrder = [];
     this.refreshUI();
     this.solveAndRender();
   }
