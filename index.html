@@ -2212,6 +2212,7 @@ class Renderer {
     const arc = angleArcFromPoints(a1, b1, a2, b2);
     const pinter = v.worldToScreen(inter);
     const radPx = Math.max(10, (c.labelDist != null) ? c.labelDist * v.zoom : 32);
+    const labelDistWorld = radPx / v.zoom;
 
     ctx.save();
     ctx.strokeStyle = cols.stroke; ctx.fillStyle = cols.fill; ctx.lineWidth = 1;
@@ -2219,6 +2220,56 @@ class Renderer {
     ctx.beginPath();
     ctx.arc(pinter.x, pinter.y, radPx, -arc.start, -arc.end, true);
     ctx.stroke();
+
+    // Dashed extension lines linking each measured line segment to the
+    // arc-touch point on its bounding ray. Drawn whenever the segment
+    // doesn't naturally cover that point — e.g. the arc radius is past
+    // the segment's far end, or the segment lies on the opposite side
+    // of the intersection from the picked sector. Three cases per line:
+    //   labelDist in [tLo, tHi]  → no extension (segment covers it)
+    //   labelDist >  tHi         → extension from far endpoint outward
+    //   labelDist <  tLo         → extension from near endpoint inward
+    // The "wrong-sector" case (both projections negative) falls into the
+    // second branch and the resulting dashed line passes through inter.
+    const drawAngleExtension = (pA, pB) => {
+      const dx = pB.x - pA.x, dy = pB.y - pA.y;
+      const dlen = Math.hypot(dx, dy);
+      if (dlen < EPS) return;
+      const dxN = dx / dlen, dyN = dy / dlen;
+      const tA = (pA.x - inter.x) * dxN + (pA.y - inter.y) * dyN;
+      const tB = (pB.x - inter.x) * dxN + (pB.y - inter.y) * dyN;
+      const tLo = Math.min(tA, tB), tHi = Math.max(tA, tB);
+      // Small tolerance so floating-point chatter doesn't make the
+      // extension flicker on/off when labelDist is right at an endpoint.
+      const tol = 0.5 / v.zoom;
+      if (labelDistWorld >= tLo - tol && labelDistWorld <= tHi + tol) return;
+      // The segment endpoint closest to the arc point along the ray.
+      const nearT = Math.abs(tA - labelDistWorld) < Math.abs(tB - labelDistWorld) ? tA : tB;
+      const fromWorld = { x: inter.x + nearT * dxN, y: inter.y + nearT * dyN };
+      const toWorld   = { x: inter.x + labelDistWorld * dxN, y: inter.y + labelDistWorld * dyN };
+      const sFrom = v.worldToScreen(fromWorld), sTo = v.worldToScreen(toWorld);
+      const sdx = sTo.x - sFrom.x, sdy = sTo.y - sFrom.y;
+      const sl  = Math.hypot(sdx, sdy);
+      // Skip very short extensions — they read as noise rather than
+      // intent. 3px is roughly the threshold where the dash pattern
+      // would only show a single tick anyway.
+      if (sl < 3) return;
+      // 4px gap at the segment endpoint, matching the convention used
+      // by distance dim extension lines.
+      const gap = Math.min(4, sl / 3);
+      const ux = sdx / sl, uy = sdy / sl;
+      ctx.save();
+      ctx.strokeStyle = cols.stroke;
+      ctx.lineWidth = 0.8;
+      ctx.setLineDash([5, 3]);
+      ctx.beginPath();
+      ctx.moveTo(sFrom.x + ux * gap, sFrom.y + uy * gap);
+      ctx.lineTo(sTo.x, sTo.y);
+      ctx.stroke();
+      ctx.restore();
+    };
+    drawAngleExtension(a1, b1);
+    drawAngleExtension(a2, b2);
 
     const midAng = arc.midAngle;
     const value = normalizeAngleValue(c.value ?? arc.span);
@@ -2404,20 +2455,25 @@ class SelectTool extends Tool {
       return;
     }
     if (this.dragging) {
-      // If the cursor is over a snap target that is NOT one of the points
-      // we're dragging, pull the cursor delta to the snap location so the
-      // dragged points latch onto the geometry (line, circle, midpoint,
-      // origin, …). The snap is remembered for pointerUp, where it can be
-      // promoted into a real constraint.
+      // Pick a single "primary" handle to latch the cursor delta onto its
+      // snap target — translation can only satisfy one alignment at a
+      // time. The other handles still get a chance to contribute snap
+      // constraints (see collectDragSnaps), they just won't be pulled
+      // exactly onto their targets until release re-solves.
       let dx = world.x - this.dragging.startWorld.x;
       let dy = world.y - this.dragging.startWorld.y;
+      let primary = null;
       if (snap && snap.dragRecord && !this.app.shouldIgnoreDragSnap(this.dragging, snap)) {
         ({ dx, dy } = this.app._dragDeltaForSnap(this.dragging, snap));
-        this.dragging.endSnap = snap;
-      } else {
-        this.dragging.endSnap = null;
+        primary = snap;
       }
       this.app.solveLocalizedDrag(this.dragging, dx, dy);
+      // After the solve, probe each *other* handle at its now-final
+      // position so secondary snaps (e.g. the far end of a dragged line
+      // happening to fall on another line) light up too. This mirrors
+      // creation, where each click contributes its own snap constraint.
+      this.dragging.endSnaps = this.app.collectDragSnaps(this.dragging, primary);
+      this.app.lastDragSnaps = this.dragging.endSnaps;
       this.app.requestRender();
     } else if (this.box) {
       this.box.x1 = world.x; this.box.y1 = world.y;
@@ -2473,20 +2529,26 @@ class SelectTool extends Tool {
       this.app.refreshUI();
     }
     if (this.dragging) {
-      // If the drag ended on a snap target and we were moving exactly one
-      // point, promote the snap into a permanent constraint (e.g. drop a
-      // point onto a line → PointOnLine).
+      // Promote every snap that was active at release into a real
+      // constraint — same semantics as creation, where each independent
+      // snap-on-click produces its own constraint. Dedupe against
+      // existing constraints so dragging a handle back to where it
+      // already came from doesn't pile on redundant ones.
       const sketch = this.app.activeSketch();
-      if (sketch && this.dragging.endSnap) {
-        const pt = this.dragging.endSnap.dragPoint || (this.dragging.pts.length === 1 ? this.dragging.pts[0].p : null);
-        const sn = this.dragging.endSnap;
-        // Skip if we'd be constraining the point to itself.
-        if (pt && sn.entity !== pt && !this.app.shouldIgnoreDragSnap(this.dragging, sn)) {
+      const snaps = this.dragging.endSnaps || [];
+      if (sketch && snaps.length) {
+        for (const sn of snaps) {
+          const pt = sn.dragPoint || (this.dragging.pts.length === 1 ? this.dragging.pts[0].p : null);
+          if (!pt || sn.entity === pt) continue;
+          if (this.app.shouldIgnoreDragSnap(this.dragging, sn)) continue;
           const c = this.app.snapToConstraint(sn, pt);
-          if (c) sketch.constraints.push(c);
+          if (!c) continue;
+          if (this.app._isDuplicateConstraint(sketch, c)) continue;
+          sketch.constraints.push(c);
         }
       }
       this.dragging = null;
+      this.app.lastDragSnaps = [];
       this.app.commit();
     }
   }
@@ -3368,6 +3430,11 @@ class App {
     this.polygonSides = 6;
     this.gridOn = true; this.snapOn = true; this.constructionMode = false;
     this.lastSnap = null; this.lastWorldCursor = { x:0, y:0 };
+    // While a drag is in progress, this holds *every* snap that is
+    // currently active across all dragged handles (primary + secondaries).
+    // The renderer draws a marker for each so the user sees, before
+    // releasing, which snap constraints will be added.
+    this.lastDragSnaps = [];
     this.selectionOrder = [];
     this.dirty = true;
     this.undoStack = []; this.redoStack = [];
@@ -3501,6 +3568,60 @@ class App {
       if (!best || ranked._p > best._p || (ranked._p === best._p && ranked._d < best._d)) best = ranked;
     }
     return best;
+  }
+
+  /** Mirror creation behavior on drag: every dragged handle that ends up
+   *  on a snap target should produce its own constraint, just like every
+   *  click during creation produces its own. The primary snap (already
+   *  used to latch the cursor delta) is one of them; the rest come from
+   *  probing each *other* handle at its post-solve final position. The
+   *  user sees a marker for every entry in the returned list. */
+  collectDragSnaps(drag, primary) {
+    if (!drag) return [];
+    const out = [];
+    const usedHandles = new Set();
+    if (primary) {
+      out.push(primary);
+      if (primary.dragRecord) usedHandles.add(primary.dragRecord);
+    }
+    const draggedSet = new Set(drag.pts.map(r => r.p));
+    const handles = drag.snapPts || drag.pts;
+    for (const r of handles) {
+      if (usedHandles.has(r)) continue;
+      // r.p has been mutated by solveLocalizedDrag to its final position
+      // for this drag step, regardless of mode (rigid/dof/rotate/...).
+      const probe = { x: r.p.x, y: r.p.y };
+      const snap = this.snap.find(probe, this.view, this.visibleSketches(), {
+        ignore: (candidate) =>
+          (candidate.entity && draggedSet.has(candidate.entity)) ||
+          this.shouldIgnoreDragSnap(drag, candidate)
+      });
+      if (!snap) continue;
+      // It's fine if a secondary picks up the same feature as the primary
+      // — e.g. dragging both endpoints of a line onto the same reference
+      // line gives two distinct PointOnLine constraints (different points,
+      // same line). Duplicate detection at release time deals with the
+      // pathological case.
+      out.push({ ...snap, dragPoint: r.p, dragRecord: r });
+      usedHandles.add(r);
+    }
+    return out;
+  }
+
+  /** True if `sketch.constraints` already contains a constraint of the
+   *  same kind referencing the exact same set of entity ids. Prevents
+   *  drag from piling on a duplicate Coincident / PointOnLine / etc.
+   *  when the user drags an already-constrained handle back onto its
+   *  reference. */
+  _isDuplicateConstraint(sketch, c) {
+    if (!c || !sketch) return false;
+    const a = [...c.refs()].sort().join('|');
+    for (const ex of sketch.constraints) {
+      if (ex.kind !== c.kind) continue;
+      const b = [...ex.refs()].sort().join('|');
+      if (a === b) return true;
+    }
+    return false;
   }
 
   /** Hit-test in screen pixels against the rectangles the renderer recorded
@@ -4745,7 +4866,16 @@ class App {
       if (prev.dimPreview) this.renderer.drawDimPreview(prev.dimPreview);
     }
 
-    if (this.snapOn) this.renderer.drawSnapMarker(this.lastSnap);
+    if (this.snapOn) {
+      // During a drag, lastDragSnaps holds every active snap (primary +
+      // any secondary handles that incidentally landed on snap targets).
+      // Otherwise, we just have the single cursor snap to draw.
+      if (this.lastDragSnaps && this.lastDragSnaps.length) {
+        for (const s of this.lastDragSnaps) this.renderer.drawSnapMarker(s);
+      } else {
+        this.renderer.drawSnapMarker(this.lastSnap);
+      }
+    }
   }
 
   /* ---- Tool selection ---- */
@@ -5213,6 +5343,7 @@ class App {
   _afterStateSwap() {
     if (this.tool && this.tool.activate) this.tool.activate();
     this.lastSnap = null;
+    this.lastDragSnaps = [];
     this.selectionOrder = [];
     this.refreshUI();
     this.solveAndRender();
