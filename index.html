@@ -548,6 +548,7 @@
       <button class="tbtn toggle on" data-action="grid"      title="Grid">▦ grid</button>
       <button class="tbtn toggle on" data-action="snap"      title="Snap">⊹ snap</button>
       <button class="tbtn"          data-action="mirror"    title="Mirror selected entities about selected line">Mirror</button>
+      <button class="tbtn"          data-action="offset"    title="Offset selected line, circle, or arc">Offset</button>
       <button class="tbtn"          data-action="solve"      title="Solve now (F5)">Solve</button>
     </div>
 
@@ -1003,6 +1004,30 @@ function mirrorPointAcrossLine(p, axis) {
   return { x: 2*hx - p.x, y: 2*hy - p.y };
 }
 
+function offsetLine(line, signedDistance) {
+  const dx = line.p2.x - line.p1.x;
+  const dy = line.p2.y - line.p1.y;
+  const len = Math.hypot(dx, dy);
+  if (len < EPS) return null;
+  const nx = -dy / len, ny = dx / len;
+  return {
+    p1: { x: line.p1.x + nx * signedDistance, y: line.p1.y + ny * signedDistance },
+    p2: { x: line.p2.x + nx * signedDistance, y: line.p2.y + ny * signedDistance }
+  };
+}
+
+function offsetCircle(circle, signedDistance) {
+  const r = circle.r + signedDistance;
+  if (r <= EPS) return null;
+  return { center: { x: circle.center.x, y: circle.center.y }, r };
+}
+
+function offsetArc(arc, signedDistance) {
+  const r = arc.r + signedDistance;
+  if (r <= EPS) return null;
+  return { center: { x: arc.center.x, y: arc.center.y }, r, a0: arc.a0, a1: arc.a1, clockwise: !!arc.clockwise };
+}
+
 /* =============== 2. ENTITIES ================================== */
 let _idSeq = 1;
 const newId = (prefix='e') => prefix + (_idSeq++);
@@ -1410,6 +1435,119 @@ class RadiusConstraint extends Constraint {
   }
 }
 
+class CurveDistanceConstraint extends Constraint {
+  constructor(c1Id, c2Id, mode, value) {
+    super('curveDistance');
+    this.c1 = c1Id;
+    this.c2 = c2Id;
+    this.mode = mode; // 'gap' | 'radial'
+    this.value = value;
+    this.labelOffset = null;
+    this.labelParallel = null;
+    this.labelAngle = null;
+    this.labelDist = null;
+    this.driven = false;
+  }
+  refs() { return [this.c1, this.c2]; }
+  residuals(L) {
+    if (this.driven) return [];
+    if (this.mode === 'gap') {
+      const dx = L(this.c2,'x') - L(this.c1,'x');
+      const dy = L(this.c2,'y') - L(this.c1,'y');
+      return [Math.hypot(dx, dy) - L(this.c1,'r') - L(this.c2,'r') - this.value];
+    }
+    return [L(this.c1,'r') - L(this.c2,'r') - this.value];
+  }
+  toJSON() {
+    const o = { id:this.id, kind:'curveDistance', c1:this.c1, c2:this.c2, mode:this.mode, value:this.value };
+    if (this.labelOffset != null) o.labelOffset = this.labelOffset;
+    if (this.labelParallel != null) o.labelParallel = this.labelParallel;
+    if (this.labelAngle != null) o.labelAngle = this.labelAngle;
+    if (this.labelDist != null) o.labelDist = this.labelDist;
+    if (this.driven) o.driven = true;
+    return o;
+  }
+}
+
+class OffsetConstraint extends Constraint {
+  /** Marks entity B as a geometric offset of entity A.
+   *  For lines: enforces parallelism (replaces ParallelConstraint).
+   *  For circles/arcs: enforces concentricity (replaces ConcentricConstraint).
+   *  No value — the distance is handled separately by OffsetDistanceConstraint. */
+  constructor(sourceEntityId, targetEntityId, offsetKind, pts) {
+    super('offset');
+    this.sourceEntityId = sourceEntityId;
+    this.targetEntityId = targetEntityId;
+    this.offsetKind = offsetKind; // 'line' | 'circle'
+    // For lines: pts = { l1: {a,b}, l2: {a,b} }  (point IDs of source & target lines)
+    // For circles/arcs: pts = { p1: centerId, p2: centerId }
+    Object.assign(this, pts);
+  }
+  refs() {
+    if (this.offsetKind === 'line')
+      return [this.sourceEntityId, this.targetEntityId, this.l1.a, this.l1.b, this.l2.a, this.l2.b];
+    return [this.sourceEntityId, this.targetEntityId, this.p1, this.p2];
+  }
+  residuals(L) {
+    if (this.offsetKind === 'line') {
+      const dx1=L(this.l1.b,'x')-L(this.l1.a,'x'), dy1=L(this.l1.b,'y')-L(this.l1.a,'y');
+      const dx2=L(this.l2.b,'x')-L(this.l2.a,'x'), dy2=L(this.l2.b,'y')-L(this.l2.a,'y');
+      return [dx1*dy2 - dy1*dx2]; // parallel
+    }
+    return [L(this.p1,'x')-L(this.p2,'x'), L(this.p1,'y')-L(this.p2,'y')]; // concentric
+  }
+  toJSON() {
+    const o = { id:this.id, kind:'offset', sourceEntityId:this.sourceEntityId,
+      targetEntityId:this.targetEntityId, offsetKind:this.offsetKind };
+    if (this.offsetKind === 'line') { o.l1 = this.l1; o.l2 = this.l2; }
+    else { o.p1 = this.p1; o.p2 = this.p2; }
+    return o;
+  }
+}
+
+class OffsetDistanceConstraint extends Constraint {
+  /** Shared distance value for an entire offset operation.
+   *  Stores one entry per offset pair and emits one residual per pair,
+   *  so changing this single value updates all offset entities at once.
+   *  pairs: Array of
+   *    { kind:'line',   pointId, l:{a,b} }  — same math as PointLineDistanceConstraint
+   *    { kind:'circle', c1:entityId, c2:entityId } — same math as CurveDistanceConstraint radial */
+  constructor(pairs, value) {
+    super('offsetDistance');
+    this.pairs = pairs;
+    this.value = value;
+    this.labelOffset = null; this.labelParallel = null;
+    this.labelAngle = null; this.labelDist = null; this.driven = false;
+  }
+  refs() {
+    return this.pairs.flatMap(p =>
+      p.kind === 'line' ? [p.pointId, p.l.a, p.l.b] : [p.c1, p.c2]
+    );
+  }
+  residuals(L) {
+    if (this.driven) return [];
+    return this.pairs.map(p => {
+      if (p.kind === 'line') {
+        const px=L(p.pointId,'x'), py=L(p.pointId,'y');
+        const ax=L(p.l.a,'x'), ay=L(p.l.a,'y'), bx=L(p.l.b,'x'), by=L(p.l.b,'y');
+        const dx=bx-ax, dy=by-ay;
+        const cross = dx*(py-ay) - dy*(px-ax);
+        return cross*cross - this.value*this.value*(dx*dx+dy*dy);
+      }
+      return L(p.c1,'r') - L(p.c2,'r') - this.value; // radial
+    });
+  }
+  toJSON() {
+    const o = { id:this.id, kind:'offsetDistance', pairs:this.pairs, value:this.value };
+    if (this.labelOffset   != null) o.labelOffset   = this.labelOffset;
+    if (this.labelParallel != null) o.labelParallel = this.labelParallel;
+    if (this.labelAngle    != null) o.labelAngle    = this.labelAngle;
+    if (this.labelDist     != null) o.labelDist     = this.labelDist;
+    if (this.driven) o.driven = true;
+    return o;
+  }
+}
+
 class AngleConstraint extends Constraint {
   /** Absolute angle between two lines, in radians (0 .. π). The sector
    *  is encoded by oriented endpoint refs, so the drawn
@@ -1568,9 +1706,10 @@ const CONSTRAINT_LABELS = {
   concentric:'Concentric', tangent:'Tangent', midpoint:'Midpoint', symmetric:'Symmetric',
   arcEndpointCoincident:'Arc endpoint coincident', arcEndpointFix:'Arc endpoint fixed',
   arcEndpointOnLine:'Arc endpoint on line', arcEndpointOnCircle:'Arc endpoint on circle',
-  distance:'Distance', radius:'Radius', angle:'Angle', directedAngle:'Central angle',
+  distance:'Distance', radius:'Radius', curveDistance:'Curve distance', angle:'Angle', directedAngle:'Central angle',
   pointLineDistance:'Pt-Line dist',
-  pointOnLine:'On line', pointOnCircle:'On circle'
+  pointOnLine:'On line', pointOnCircle:'On circle',
+  offset:'Offset', offsetDistance:'Offset dist'
 };
 
 const CONSTRAINT_GLYPHS = {
@@ -1580,9 +1719,10 @@ const CONSTRAINT_GLYPHS = {
   concentric:'⊙', tangent:'∽', midpoint:'⌐', symmetric:'⇋',
   arcEndpointCoincident:'⌖', arcEndpointFix:'⚓',
   arcEndpointOnLine:'⊥•', arcEndpointOnCircle:'○•',
-  distance:'↔', radius:'R', diameter:'⌀', angle:'∠',
+  distance:'↔', radius:'R', diameter:'⌀', curveDistance:'↔', angle:'∠',
   pointLineDistance:'↔',
-  pointOnLine:'⊥•', pointOnCircle:'○•'
+  pointOnLine:'⊥•', pointOnCircle:'○•',
+  offset:'⊿', offsetDistance:'↔'
 };
 
 /* =============== 4. SOLVER ==================================== */
@@ -1880,6 +2020,7 @@ class Project {
           case 'distance':      c = new DistanceConstraint(cj.p1, cj.p2, cj.value); break;
           case 'pointLineDistance': c = new PointLineDistanceConstraint(cj.pointId, cj.l, cj.value); break;
           case 'radius':        c = new RadiusConstraint(cj.circleId, cj.value); break;
+          case 'curveDistance': c = new CurveDistanceConstraint(cj.c1, cj.c2, cj.mode, cj.value); break;
           case 'angle':         c = new AngleConstraint(cj.l1, cj.l2, cj.value); break;
           case 'directedAngle': c = new DirectedAngleConstraint(cj.l1, cj.l2, cj.value); break;
           case 'pointOnLine':   c = new PointOnLineConstraint(cj.pointId, cj.l); break;
@@ -1888,6 +2029,9 @@ class Project {
           case 'arcEndpointFix': c = new ArcEndpointFixConstraint(cj.ref, cj.x, cj.y); break;
           case 'arcEndpointOnLine': c = new ArcEndpointOnLineConstraint(cj.ref, cj.l); break;
           case 'arcEndpointOnCircle': c = new ArcEndpointOnCircleConstraint(cj.ref, cj.circleId, cj.centerId); break;
+          case 'offset': c = new OffsetConstraint(cj.sourceEntityId, cj.targetEntityId, cj.offsetKind,
+            cj.offsetKind === 'line' ? { l1: cj.l1, l2: cj.l2 } : { p1: cj.p1, p2: cj.p2 }); break;
+          case 'offsetDistance': c = new OffsetDistanceConstraint(cj.pairs, cj.value); break;
         }
         if (c) {
           if (cj.id) c.id = cj.id;
@@ -2169,7 +2313,9 @@ class Renderer {
       const grey = c.driven || (redundantIds && redundantIds.has(c.id));
       switch (c.kind) {
         case 'distance':          this._drawDistance(c, entMap, grey); break;
+        case 'curveDistance':     this._drawCurveDistance(c, entMap, grey); break;
         case 'pointLineDistance': this._drawPLDistance(c, entMap, grey); break;
+        case 'offsetDistance':    this._drawOffsetDistance(c, entMap, grey); break;
         case 'radius':            this._drawRadius(c, entMap, grey); break;
         case 'angle':             this._drawAngle(c, entMap, grey); break;
       }
@@ -2187,6 +2333,14 @@ class Renderer {
                       labelOffset: preview.offset, labelParallel: preview.parallel };
       const map = new Map([['_a', preview.p1], ['_b', preview.p2]]);
       this._drawDistance(fake, map, false);
+    } else if (preview.kind === 'curveDistance') {
+      const fake = {
+        c1:'_c1', c2:'_c2', mode: preview.mode, value: preview.value,
+        labelOffset: preview.offset, labelParallel: preview.parallel,
+        labelAngle: preview.angle, labelDist: preview.dist
+      };
+      const map = new Map([['_c1', preview.c1], ['_c2', preview.c2]]);
+      this._drawCurveDistance(fake, map, false);
     } else if (preview.kind === 'pointLineDistance') {
       const fake = { pointId:'_p', l:{a:'_la', b:'_lb'}, value: preview.value,
                       labelOffset: preview.offset, labelParallel: preview.parallel };
@@ -2353,6 +2507,76 @@ class Renderer {
       grey,
       c
     );
+  }
+
+  _drawOffsetDistance(c, entMap, grey) {
+    // Render one shared dimension annotation using the first pair,
+    // but register `c` (not a fake) for hit-testing so clicking/dragging
+    // the label edits the real OffsetDistanceConstraint.
+    if (!c.pairs || !c.pairs.length) return;
+    const first = c.pairs[0];
+    if (first.kind === 'line') {
+      const pt = entMap.get(first.pointId);
+      const la = entMap.get(first.l.a), lb = entMap.get(first.l.b);
+      if (!pt || !la || !lb) return;
+      const dx = lb.x - la.x, dy = lb.y - la.y;
+      const len2 = dx*dx + dy*dy; if (len2 < EPS) return;
+      const t = ((pt.x - la.x)*dx + (pt.y - la.y)*dy) / len2;
+      const foot = { x: la.x + t*dx, y: la.y + t*dy };
+      this._drawDistance(
+        { p1:'_a', p2:'_b', value:c.value, labelOffset:c.labelOffset, labelParallel:c.labelParallel },
+        new Map([['_a', pt], ['_b', foot]]),
+        grey, c
+      );
+    } else {
+      const a = entMap.get(first.c1), b = entMap.get(first.c2);
+      if (!a || !b) return;
+      const outer = a.r >= b.r ? a : b;
+      const inner = outer === a ? b : a;
+      const angle = (c.labelAngle != null) ? c.labelAngle : Math.PI / 6;
+      const labelDist = (c.labelDist != null) ? c.labelDist : (outer.r + 14 / this.view.zoom);
+      const p1 = { x: inner.center.x + inner.r * Math.cos(angle), y: inner.center.y + inner.r * Math.sin(angle) };
+      const p2 = { x: outer.center.x + outer.r * Math.cos(angle), y: outer.center.y + outer.r * Math.sin(angle) };
+      this._drawDistance(
+        { p1:'_a', p2:'_b', value:c.value, labelOffset:0,
+          labelParallel: labelDist - (inner.r + outer.r) / 2 },
+        new Map([['_a', p1], ['_b', p2]]),
+        grey, c
+      );
+    }
+  }
+
+  _drawCurveDistance(c, entMap, grey) {
+    const a = entMap.get(c.c1), b = entMap.get(c.c2);
+    if (!a || !b) return;
+    if (c.mode === 'gap') {
+      const dx = b.center.x - a.center.x, dy = b.center.y - a.center.y;
+      const d = Math.hypot(dx, dy);
+      if (d < EPS) return;
+      const ux = dx / d, uy = dy / d;
+      const p1 = { x: a.center.x + ux * a.r, y: a.center.y + uy * a.r };
+      const p2 = { x: b.center.x - ux * b.r, y: b.center.y - uy * b.r };
+      this._drawDistance(
+        { p1:'_a', p2:'_b', value:c.value, labelOffset:c.labelOffset, labelParallel:c.labelParallel },
+        new Map([['_a', p1], ['_b', p2]]),
+        grey,
+        c
+      );
+      return;
+    }
+
+    const outer = a.r >= b.r ? a : b;
+    const inner = outer === a ? b : a;
+    const angle = (c.labelAngle != null) ? c.labelAngle : Math.PI / 6;
+    const labelDist = (c.labelDist != null) ? c.labelDist : (outer.r + 14 / this.view.zoom);
+    const p1 = { x: inner.center.x + inner.r * Math.cos(angle), y: inner.center.y + inner.r * Math.sin(angle) };
+    const p2 = { x: outer.center.x + outer.r * Math.cos(angle), y: outer.center.y + outer.r * Math.sin(angle) };
+    const fake = {
+      p1:'_a', p2:'_b', value:c.value,
+      labelOffset:0,
+      labelParallel: labelDist - (inner.r + outer.r) / 2
+    };
+    this._drawDistance(fake, new Map([['_a', p1], ['_b', p2]]), grey, c);
   }
 
   _drawRadius(c, entMap, grey) {
@@ -2626,6 +2850,15 @@ class SelectTool extends Tool {
       this.app.handleMirrorPick(hit);
       return;
     }
+    if (this.app.operationName === 'offset') {
+      if (!hit && this.app.offsetEntityIds.length && this.app.offsetPhase === 'placing') {
+        this.app.updateOffsetCursor(world);
+        this.app._showOffsetInput();
+        return;
+      }
+      this.app.handleOffsetPick(hit, world);
+      return;
+    }
     const isToggle = ev.ctrlKey || ev.metaKey;
     const isAdd    = ev.shiftKey;
     if (hit) {
@@ -2651,7 +2884,11 @@ class SelectTool extends Tool {
       const rigidLines = hit instanceof Line
         ? [{ lineId: hit.id, p1: hit.p1.id, p2: hit.p2.id, dx: hit.p2.x - hit.p1.x, dy: hit.p2.y - hit.p1.y }]
         : [];
-      this.dragging = pts.length ? this.app.beginLocalizedDrag(world, pts, hit, rigidLines) : null;
+      const sketch = this.app.activeSketch();
+      const hitIsResizableCircle = hit instanceof Circle &&
+        !sketch?.constraints.some(c => c.kind === 'radius' && c.circleId === hit.id);
+      const canDrag = pts.length || hitIsResizableCircle;
+      this.dragging = canDrag ? this.app.beginLocalizedDrag(world, pts, hit, rigidLines) : null;
       this.app.refreshUI();
       this.app.requestRender();
     } else {
@@ -2661,6 +2898,10 @@ class SelectTool extends Tool {
     }
   }
   onPointerMove(world, snap, ev) {
+    if (this.app.operationName === 'offset' && this.app.offsetPhase === 'placing' && !this.dimAction && !this.dragging && !this.box) {
+      this.app.updateOffsetCursor(world);
+      return;
+    }
     if (this.dimAction) {
       const dx = world.x - this.dimAction.startWorld.x;
       const dy = world.y - this.dimAction.startWorld.y;
@@ -3619,9 +3860,27 @@ class SmartDimensionTool extends Tool {
       }
       if ((circles.length + arcs.length) === 2) {
         const all = [...circles, ...arcs];
+        const d = dist(all[0].center, all[1].center);
+        if (d < EPS) {
+          const outer = all[0].r >= all[1].r ? all[0] : all[1];
+          const inner = outer === all[0] ? all[1] : all[0];
+          this.preview = {
+            kind:'curveDistance', mode:'radial', c1:outer, c2:inner,
+            value: Math.abs(outer.r - inner.r),
+            angle: oldAngle, dist: Math.max(outer.r, inner.r) + defOffset
+          };
+          return true;
+        }
+        if (this._cursorSuggestsCurveGap(all[0], all[1], this.cursor)) {
+          const gap = Math.max(0, d - all[0].r - all[1].r);
+          this.preview = {
+            kind:'curveDistance', mode:'gap', c1:all[0], c2:all[1],
+            value: gap, offset: oldOffset, parallel: oldParallel
+          };
+          return true;
+        }
         this.preview = { kind:'distance', p1:all[0].center, p2:all[1].center,
-                          value: dist(all[0].center, all[1].center),
-                          offset: oldOffset, parallel: oldParallel };
+                          value: d, offset: oldOffset, parallel: oldParallel };
         return true;
       }
     }
@@ -3649,6 +3908,28 @@ class SmartDimensionTool extends Tool {
       const wx = world.x - mid.x, wy = world.y - mid.y;
       p.offset   = wx * nx + wy * ny;
       p.parallel = wx * tx + wy * ty;
+    } else if (p.kind === 'curveDistance') {
+      if (p.mode === 'gap') {
+        const geom = this._curveGapEndpoints(p.c1, p.c2);
+        if (!geom) return;
+        const dx = geom.p2.x - geom.p1.x, dy = geom.p2.y - geom.p1.y;
+        const len = Math.hypot(dx, dy);
+        if (len < EPS) return;
+        const nx = -dy / len, ny = dx / len;
+        const tx =  dx / len, ty =  dy / len;
+        const mid = { x: (geom.p1.x + geom.p2.x)/2, y: (geom.p1.y + geom.p2.y)/2 };
+        const wx = world.x - mid.x, wy = world.y - mid.y;
+        p.offset   = wx * nx + wy * ny;
+        p.parallel = wx * tx + wy * ty;
+      } else if (p.mode === 'radial') {
+        const dx = world.x - p.c1.center.x;
+        const dy = world.y - p.c1.center.y;
+        const d = Math.hypot(dx, dy);
+        if (d > EPS) {
+          p.angle = Math.atan2(dy, dx);
+          p.dist = d;
+        }
+      }
     } else if (p.kind === 'pointLineDistance') {
       const dx = p.line.p2.x - p.line.p1.x, dy = p.line.p2.y - p.line.p1.y;
       const len = Math.hypot(dx, dy);
@@ -3761,6 +4042,28 @@ class SmartDimensionTool extends Tool {
         y: (p.p1.y + p.p2.y)/2 + ny * p.offset + ty * par
       });
     }
+    if (p.kind === 'curveDistance') {
+      if (p.mode === 'gap') {
+        const geom = this._curveGapEndpoints(p.c1, p.c2);
+        if (!geom) return null;
+        const dx = geom.p2.x - geom.p1.x, dy = geom.p2.y - geom.p1.y;
+        const len = Math.hypot(dx, dy); if (len < EPS) return null;
+        const nx = -dy / len, ny = dx / len;
+        const tx =  dx / len, ty =  dy / len;
+        const par = p.parallel || 0;
+        return view.worldToScreen({
+          x: (geom.p1.x + geom.p2.x)/2 + nx * p.offset + tx * par,
+          y: (geom.p1.y + geom.p2.y)/2 + ny * p.offset + ty * par
+        });
+      }
+      if (p.mode === 'radial') {
+        const dPos = (p.dist != null) ? p.dist : (p.c1.r + 14 / view.zoom);
+        return view.worldToScreen({
+          x: p.c1.center.x + dPos * Math.cos(p.angle),
+          y: p.c1.center.y + dPos * Math.sin(p.angle)
+        });
+      }
+    }
     if (p.kind === 'pointLineDistance') {
       const dx = p.line.p2.x - p.line.p1.x, dy = p.line.p2.y - p.line.p1.y;
       const len = Math.hypot(dx, dy); if (len < EPS) return null;
@@ -3814,6 +4117,15 @@ class SmartDimensionTool extends Tool {
       made = new DistanceConstraint(p.p1.id, p.p2.id, value);
       made.labelOffset   = p.offset;
       made.labelParallel = p.parallel || 0;
+    } else if (p.kind === 'curveDistance') {
+      made = new CurveDistanceConstraint(p.c1.id, p.c2.id, p.mode, value);
+      if (p.mode === 'gap') {
+        made.labelOffset = p.offset;
+        made.labelParallel = p.parallel || 0;
+      } else {
+        made.labelAngle = p.angle;
+        made.labelDist = p.dist;
+      }
     } else if (p.kind === 'pointLineDistance') {
       made = new PointLineDistanceConstraint(p.p.id, { a: p.line.p1.id, b: p.line.p2.id }, value);
       made.labelOffset   = p.offset;
@@ -3885,7 +4197,9 @@ function constraintAppliesToSelection(c, sel) {
       if (c.kind === 'fix') return c.pointId === e.id;
       if (c.kind === 'coincident') return c.p1 === e.id || c.p2 === e.id;
       if (c.kind === 'distance') return c.p1 === e.id || c.p2 === e.id;
+      if (c.kind === 'curveDistance') return c.c1 === e.id || c.c2 === e.id;
       if (c.kind === 'pointLineDistance') return c.pointId === e.id;
+      if (c.kind === 'offsetDistance') return c.pairs && c.pairs.some(p => p.kind === 'line' ? p.pointId === e.id : false);
       if (c.kind === 'midpoint') return c.pointId === e.id;
       if (c.kind === 'pointOnLine') return c.pointId === e.id;
       if (c.kind === 'pointOnCircle') return c.pointId === e.id;
@@ -3912,6 +4226,8 @@ function constraintAppliesToSelection(c, sel) {
         if (sameLineRefs(e, c.l)) return true;
         continue;
       }
+      if (c.kind === 'offset' && (c.sourceEntityId === e.id || c.targetEntityId === e.id)) return true;
+      if (c.kind === 'offsetDistance' && c.pairs && c.pairs.some(p => p.kind === 'line' && sameLineRefs(e, p.l))) return true;
       if (c.kind === 'symmetric' && sameLineRefs(e, c.axis)) return true;
       if (c.kind === 'distance' && refs.has(e.p1.id) && refs.has(e.p2.id)) return true;
       if (c.kind === 'fix' && (c.pointId === e.p1.id || c.pointId === e.p2.id)) return true;
@@ -3933,6 +4249,9 @@ function constraintAppliesToSelection(c, sel) {
   if (selectedCurves.length) {
     for (const e of selectedCurves) {
       if (c.kind === 'radius' && c.circleId === e.id) return true;
+      if (c.kind === 'curveDistance' && (c.c1 === e.id || c.c2 === e.id)) return true;
+      if (c.kind === 'offset' && (c.sourceEntityId === e.id || c.targetEntityId === e.id)) return true;
+      if (c.kind === 'offsetDistance' && c.pairs && c.pairs.some(p => p.c1 === e.id || p.c2 === e.id)) return true;
       if (c.kind === 'equalRadius' && (c.c1 === e.id || c.c2 === e.id)) return true;
       if (c.kind === 'pointOnCircle' && c.circleId === e.id) return true;
       if (c.kind === 'concentric' && (c.p1 === e.center.id || c.p2 === e.center.id)) return true;
@@ -4052,6 +4371,12 @@ class App {
     this.mirrorPickMode = 'entities';
     this.mirrorEntityIds = [];
     this.mirrorAxisId = null;
+    this.offsetEntityIds = [];
+    this.offsetAnchorId = null;
+    this.offsetPhase = 'selecting';
+    this.offsetDistance = 10;
+    this.offsetSide = 1;
+    this.offsetInputEl = null;
     this.polygonSides = 6;
     this.gridOn = true; this.snapOn = true; this.constructionMode = false;
     this.lastSnap = null; this.lastWorldCursor = { x:0, y:0 };
@@ -4310,7 +4635,7 @@ class App {
       const { id, ...rest } = o;
       return JSON.stringify(rest);
     };
-    const exactKinds = new Set(['arcEndpointCoincident', 'arcEndpointFix', 'arcEndpointOnLine', 'arcEndpointOnCircle']);
+    const exactKinds = new Set(['arcEndpointCoincident', 'arcEndpointFix', 'arcEndpointOnLine', 'arcEndpointOnCircle', 'curveDistance', 'offset', 'offsetDistance']);
     if (exactKinds.has(c.kind)) {
       const aExact = key(c);
       return sketch.constraints.some(ex => ex.kind === c.kind && key(ex) === aExact);
@@ -4339,10 +4664,55 @@ class App {
   /** Move an existing dimension's label based on the cursor world position.
    *  Updates labelOffset / labelAngle / labelDist on the constraint. */
   moveDimLabel(c, world) {
-    if (c.kind === 'distance' || c.kind === 'pointLineDistance') {
+    if (c.kind === 'distance' || c.kind === 'pointLineDistance' || c.kind === 'curveDistance' || c.kind === 'offsetDistance') {
       let p1, p2;
       if (c.kind === 'distance') {
         p1 = this._lookupAny(c.p1); p2 = this._lookupAny(c.p2);
+      } else if (c.kind === 'offsetDistance') {
+        // Use geometry of the first pair for label placement
+        const first = c.pairs && c.pairs[0];
+        if (!first) return;
+        if (first.kind === 'line') {
+          const pt = this._lookupAny(first.pointId);
+          const la = this._lookupAny(first.l.a), lb = this._lookupAny(first.l.b);
+          if (!pt || !la || !lb) return;
+          const dx = lb.x - la.x, dy = lb.y - la.y;
+          const len2 = dx*dx + dy*dy; if (len2 < EPS) return;
+          const t = ((pt.x - la.x)*dx + (pt.y - la.y)*dy) / len2;
+          p1 = pt; p2 = { x: la.x + t*dx, y: la.y + t*dy };
+        } else {
+          const a = this._lookupAny(first.c1), b = this._lookupAny(first.c2);
+          if (!a || !b) return;
+          if (c.mode === 'gap') {
+            const dx = b.center.x - a.center.x, dy = b.center.y - a.center.y;
+            const d = Math.hypot(dx, dy); if (d < EPS) return;
+            const ux = dx / d, uy = dy / d;
+            p1 = { x: a.center.x + ux * a.r, y: a.center.y + uy * a.r };
+            p2 = { x: b.center.x - ux * b.r, y: b.center.y - uy * b.r };
+          } else {
+            const outer = a.r >= b.r ? a : b;
+            const inner = outer === a ? b : a;
+            const angle = (c.labelAngle != null) ? c.labelAngle : Math.PI / 6;
+            p1 = { x: inner.center.x + inner.r * Math.cos(angle), y: inner.center.y + inner.r * Math.sin(angle) };
+            p2 = { x: outer.center.x + outer.r * Math.cos(angle), y: outer.center.y + outer.r * Math.sin(angle) };
+          }
+        }
+      } else if (c.kind === 'curveDistance') {
+        const a = this._lookupAny(c.c1), b = this._lookupAny(c.c2);
+        if (!a || !b) return;
+        if (c.mode === 'gap') {
+          const dx = b.center.x - a.center.x, dy = b.center.y - a.center.y;
+          const d = Math.hypot(dx, dy); if (d < EPS) return;
+          const ux = dx / d, uy = dy / d;
+          p1 = { x: a.center.x + ux * a.r, y: a.center.y + uy * a.r };
+          p2 = { x: b.center.x - ux * b.r, y: b.center.y - uy * b.r };
+        } else {
+          const outer = a.r >= b.r ? a : b;
+          const inner = outer === a ? b : a;
+          const angle = (c.labelAngle != null) ? c.labelAngle : Math.PI / 6;
+          p1 = { x: inner.center.x + inner.r * Math.cos(angle), y: inner.center.y + inner.r * Math.sin(angle) };
+          p2 = { x: outer.center.x + outer.r * Math.cos(angle), y: outer.center.y + outer.r * Math.sin(angle) };
+        }
       } else {
         const pt = this._lookupAny(c.pointId);
         const la = this._lookupAny(c.l.a), lb = this._lookupAny(c.l.b);
@@ -4359,8 +4729,28 @@ class App {
       const tx =  dx / len, ty =  dy / len;
       const mid = { x: (p1.x + p2.x)/2, y: (p1.y + p2.y)/2 };
       const wx = world.x - mid.x, wy = world.y - mid.y;
-      c.labelOffset   = wx * nx + wy * ny;
-      c.labelParallel = wx * tx + wy * ty;
+      const isRadialCircle = (c.kind === 'curveDistance' && c.mode === 'radial') ||
+        (c.kind === 'offsetDistance' && c.pairs && c.pairs[0] && c.pairs[0].kind === 'circle');
+      if (isRadialCircle) {
+        let anchor = mid;
+        if (c.kind === 'curveDistance') {
+          const outer = this._lookupAny(c.c1), inner = this._lookupAny(c.c2);
+          if (outer && inner) anchor = (outer.r >= inner.r ? outer.center : inner.center);
+        } else {
+          const first = c.pairs[0];
+          const a = this._lookupAny(first.c1), b = this._lookupAny(first.c2);
+          if (a && b) anchor = (a.r >= b.r ? a.center : b.center);
+        }
+        const dxw = world.x - anchor.x, dyw = world.y - anchor.y;
+        const dw = Math.hypot(dxw, dyw);
+        if (dw > EPS) {
+          c.labelAngle = Math.atan2(dyw, dxw);
+          c.labelDist = dw;
+        }
+      } else {
+        c.labelOffset   = wx * nx + wy * ny;
+        c.labelParallel = wx * tx + wy * ty;
+      }
     } else if (c.kind === 'radius') {
       const circ = this._lookupAny(c.circleId); if (!circ) return;
       const dx = world.x - circ.center.x, dy = world.y - circ.center.y;
@@ -4969,6 +5359,21 @@ class App {
   beginLocalizedDrag(startWorld, pts, hit = null, rigidLines = []) {
     const sketch = this.activeSketch();
     const state = this._captureSketchParams(sketch);
+    // Circle perimeter resize: when the center is fully determined by constraints,
+    // dragging the perimeter should resize the circle rather than translate it.
+    if (hit instanceof Circle &&
+        !sketch.constraints.some(c => c.kind === 'radius' && c.circleId === hit.id)) {
+      return {
+        mode: 'circleResize',
+        startWorld,
+        pts: [],
+        snapPts: [],
+        state,
+        circle: hit,
+        snapIgnoreIds: new Set([hit.id, hit.center.id])
+      };
+    }
+
     const endpointRef = this.arcEndpointRef(hit);
     if (endpointRef && pts.length === 1) {
       return {
@@ -5220,7 +5625,15 @@ class App {
 
   solveLocalizedDrag(drag, dx, dy) {
     const sketch = this.activeSketch();
-    if (!sketch || !drag || !drag.pts.length) return null;
+    if (!sketch || !drag) return null;
+
+    if (drag.mode === 'circleResize') {
+      const cx = drag.circle.center.x, cy = drag.circle.center.y;
+      drag.circle.r = Math.max(EPS, Math.hypot(drag.startWorld.x + dx - cx, drag.startWorld.y + dy - cy));
+      return { ok:true, iters:0, residual:0, state:'under' };
+    }
+
+    if (!drag.pts.length) return null;
 
     if (drag.mode === 'dof') {
       return this._solveDofDrag(drag, dx, dy);
@@ -5400,15 +5813,50 @@ class App {
   }
 
   /* ---- Operations ---- */
-  startMirrorOperation() {
-    this.operationName = 'mirror';
+  _clearOperationState() {
+    if (this.offsetInputEl) { this.offsetInputEl.remove(); this.offsetInputEl = null; }
+    this.operationName = null;
     this.mirrorPickMode = 'entities';
     this.mirrorEntityIds = [];
     this.mirrorAxisId = null;
+    this.offsetEntityIds = [];
+    this.offsetAnchorId = null;
+    this.offsetPhase = 'selecting';
+    this.offsetSide = 1;
+  }
+
+  _switchToSelectToolForOperation() {
+    if (this.toolName === 'select') return;
+    if (this.tool && this.tool.deactivate) this.tool.deactivate();
+    this.toolName = 'select';
+    this.tool = new SelectTool(this);
+    if (this.tool.activate) this.tool.activate();
+    document.querySelectorAll('#topbar .tool').forEach(b => b.classList.toggle('active', b.dataset.tool === 'select'));
+    document.getElementById('status-tool').textContent = 'Tool: Select';
+    this.canvas.style.cursor = 'default';
+  }
+
+  startMirrorOperation() {
+    this._clearOperationState();
+    this._switchToSelectToolForOperation();
+    this.operationName = 'mirror';
     const data = this._mirrorDataFromSelection();
     this.mirrorEntityIds = data.entityIds;
     this.mirrorAxisId = data.axisId;
     this._syncMirrorSelection();
+    this.refreshToolOptions();
+  }
+
+  startOffsetOperation() {
+    this._clearOperationState();
+    this._switchToSelectToolForOperation();
+    this.operationName = 'offset';
+    const entities = this._offsetEntitiesFromSelection();
+    this.offsetEntityIds = entities.map(e => e.id);
+    this.offsetAnchorId = entities[0]?.id || null;
+    this.offsetPhase = entities.length ? 'placing' : 'selecting';
+    if (this.offsetAnchorId && this.lastWorldCursor) this.updateOffsetCursor(this.lastWorldCursor);
+    this._syncOffsetSelection();
     this.refreshToolOptions();
   }
 
@@ -5419,6 +5867,247 @@ class App {
       : e instanceof Arc ? 'Arc'
       : e?.constructor?.kind || 'Entity';
     return `${kind} ${e.id}`;
+  }
+
+  _offsetEntitiesFromSelection() {
+    const sketch = this.activeSketch(); if (!sketch) return null;
+    const sel = this.selectedEntitiesAndPoints().filter(e => !(e instanceof Constraint));
+    return sel.filter(e => e instanceof Line || e instanceof Circle || e instanceof Arc);
+  }
+
+  _offsetEntities() {
+    const sketch = this.activeSketch(); if (!sketch) return [];
+    return this.offsetEntityIds
+      .map(id => this._lookupAny(id))
+      .filter(e => e && this.project.sketchOf(e) === sketch && (e instanceof Line || e instanceof Circle || e instanceof Arc));
+  }
+
+  _offsetSignedDistance() {
+    const d = Math.abs(Number(this.offsetDistance) || 0);
+    return d * (this.offsetSide >= 0 ? 1 : -1);
+  }
+
+  _offsetEndpointPair(entity) {
+    if (entity instanceof Line) return { a: entity.p1.id, b: entity.p2.id };
+    if (entity instanceof Arc) return { a: entity.start.id, b: entity.end.id };
+    return null;
+  }
+
+  _offsetLocalVector(entity, endpointId) {
+    if (entity instanceof Line) {
+      const dx = entity.p2.x - entity.p1.x;
+      const dy = entity.p2.y - entity.p1.y;
+      const len = Math.hypot(dx, dy);
+      if (len < EPS) return null;
+      return { x: -dy / len, y: dx / len };
+    }
+    if (entity instanceof Arc) {
+      entity.syncEnds();
+      const p = endpointId === entity.start.id ? entity.start : endpointId === entity.end.id ? entity.end : null;
+      if (!p) return null;
+      const dx = p.x - entity.center.x;
+      const dy = p.y - entity.center.y;
+      const len = Math.hypot(dx, dy);
+      if (len < EPS) return null;
+      return { x: dx / len, y: dy / len };
+    }
+    return null;
+  }
+
+  _offsetRelationAtConnection(a, b, sharedId) {
+    const va = this._offsetLocalVector(a, sharedId);
+    const vb = this._offsetLocalVector(b, sharedId);
+    if (va && vb) {
+      const dot = va.x * vb.x + va.y * vb.y;
+      if (Math.abs(dot) > 1e-4) return dot >= 0 ? 1 : -1;
+    }
+    const ea = this._offsetEndpointPair(a);
+    const eb = this._offsetEndpointPair(b);
+    if (!ea || !eb) return 1;
+    const sameSide = (ea.a === sharedId && eb.a === sharedId) || (ea.b === sharedId && eb.b === sharedId);
+    return sameSide ? -1 : 1;
+  }
+
+  _offsetEntitySigns(entities) {
+    const signs = new Map();
+    const byId = new Map(entities.map(e => [e.id, e]));
+    const neighbors = new Map(entities.map(e => [e.id, []]));
+    const endpointOwners = new Map();
+    for (const e of entities) {
+      const pair = this._offsetEndpointPair(e);
+      if (!pair) continue;
+      for (const id of [pair.a, pair.b]) {
+        if (!endpointOwners.has(id)) endpointOwners.set(id, []);
+        endpointOwners.get(id).push(e);
+      }
+    }
+    for (const [sharedId, owners] of endpointOwners.entries()) {
+      for (let i = 0; i < owners.length; i++) {
+        for (let j = i + 1; j < owners.length; j++) {
+          const a = owners[i], b = owners[j];
+          const rel = this._offsetRelationAtConnection(a, b, sharedId);
+          neighbors.get(a.id).push({ id: b.id, rel });
+          neighbors.get(b.id).push({ id: a.id, rel });
+        }
+      }
+    }
+    const roots = [];
+    if (this.offsetAnchorId && byId.has(this.offsetAnchorId)) roots.push(this.offsetAnchorId);
+    for (const e of entities) if (!roots.includes(e.id)) roots.push(e.id);
+    for (const root of roots) {
+      if (signs.has(root)) continue;
+      signs.set(root, 1);
+      const queue = [root];
+      while (queue.length) {
+        const id = queue.shift();
+        const base = signs.get(id);
+        for (const nb of neighbors.get(id) || []) {
+          if (signs.has(nb.id)) continue;
+          signs.set(nb.id, base * nb.rel);
+          queue.push(nb.id);
+        }
+      }
+    }
+    return signs;
+  }
+
+  _offsetDistanceFromCursor(world) {
+    const entity = this.offsetAnchorId ? this._lookupAny(this.offsetAnchorId) : null;
+    if (!entity || !world) return null;
+    if (entity instanceof Line) {
+      const dx = entity.p2.x - entity.p1.x;
+      const dy = entity.p2.y - entity.p1.y;
+      const len = Math.hypot(dx, dy);
+      if (len < EPS) return null;
+      const nx = -dy / len, ny = dx / len;
+      return Math.abs((world.x - entity.p1.x) * nx + (world.y - entity.p1.y) * ny);
+    }
+    return Math.abs(dist(world, entity.center) - entity.r);
+  }
+
+  _offsetLineNetworkPreview(lines, signs, signedDistance) {
+    const raw = new Map();
+    for (const line of lines) {
+      const shifted = offsetLine(line, signedDistance * (signs.get(line.id) || 1));
+      if (!shifted) return null;
+      raw.set(line.id, { source: line, kind:'line', p1: shifted.p1, p2: shifted.p2 });
+    }
+    const endpointOwners = new Map();
+    for (const line of lines) {
+      for (const point of [line.p1, line.p2]) {
+        if (!endpointOwners.has(point.id)) endpointOwners.set(point.id, []);
+        endpointOwners.get(point.id).push(line);
+      }
+    }
+    const pinned = new Map();
+    const endpointKey = (line, which) => `${line.id}:${which}`;
+    for (const [pointId, owners] of endpointOwners.entries()) {
+      if (owners.length !== 2) continue;
+      const [a, b] = owners;
+      const sa = raw.get(a.id), sb = raw.get(b.id);
+      if (!sa || !sb) continue;
+      const inter = lineIntersection(sa.p1, sa.p2, sb.p1, sb.p2);
+      if (!inter) continue;
+      pinned.set(endpointKey(a, a.p1.id === pointId ? 'p1' : 'p2'), inter);
+      pinned.set(endpointKey(b, b.p1.id === pointId ? 'p1' : 'p2'), inter);
+    }
+    return lines.map(line => {
+      const shifted = raw.get(line.id);
+      return {
+        kind:'line',
+        source: line,
+        p1: pinned.get(endpointKey(line, 'p1')) || shifted.p1,
+        p2: pinned.get(endpointKey(line, 'p2')) || shifted.p2
+      };
+    });
+  }
+
+  _offsetPreviewData() {
+    const entities = this._offsetEntities();
+    if (!entities.length) return null;
+    const signedDistance = this._offsetSignedDistance();
+    if (Math.abs(signedDistance) < EPS) return null;
+    const signs = this._offsetEntitySigns(entities);
+    const items = [];
+    const lines = entities.filter(e => e instanceof Line);
+    if (lines.length) {
+      const lineItems = this._offsetLineNetworkPreview(lines, signs, signedDistance);
+      if (!lineItems) return null;
+      for (const item of lineItems) item.offsetValue = signedDistance * (signs.get(item.source.id) || 1);
+      items.push(...lineItems);
+    }
+    for (const entity of entities) {
+      if (entity instanceof Line) continue;
+      const entityDistance = signedDistance * (signs.get(entity.id) || 1);
+      let shifted = null;
+      if (entity instanceof Circle) shifted = offsetCircle(entity, entityDistance) && { kind: 'circle', ...offsetCircle(entity, entityDistance) };
+      else if (entity instanceof Arc) shifted = offsetArc(entity, entityDistance) && { kind: 'arc', ...offsetArc(entity, entityDistance) };
+      if (!shifted) return null;
+      shifted.source = entity;
+      shifted.offsetValue = entityDistance;
+      items.push(shifted);
+    }
+    return { items };
+  }
+
+  _syncOffsetSelection() {
+    const sketch = this.activeSketch(); if (!sketch) return;
+    this.clearSelection();
+    const ids = new Set(this.offsetEntityIds);
+    for (const e of sketch.entities) {
+      if (ids.has(e.id)) this.setSelected(e, true);
+    }
+    this.refreshUI();
+    this.requestRender();
+  }
+
+  updateOffsetCursor(world) {
+    if (this.operationName !== 'offset' || !world) return;
+    const entity = this.offsetAnchorId ? this._lookupAny(this.offsetAnchorId) : null;
+    if (!entity) return;
+    if (entity instanceof Line) {
+      const dx = entity.p2.x - entity.p1.x;
+      const dy = entity.p2.y - entity.p1.y;
+      const len = Math.hypot(dx, dy);
+      if (len < EPS) return;
+      const nx = -dy / len, ny = dx / len;
+      this.offsetSide = ((world.x - entity.p1.x) * nx + (world.y - entity.p1.y) * ny) >= 0 ? 1 : -1;
+    } else {
+      this.offsetSide = dist(world, entity.center) >= entity.r ? 1 : -1;
+    }
+    const d = this._offsetDistanceFromCursor(world);
+    if (d != null) this.offsetDistance = d;
+  }
+
+  _curveGapEndpoints(a, b) {
+    const dx = b.center.x - a.center.x;
+    const dy = b.center.y - a.center.y;
+    const d = Math.hypot(dx, dy);
+    if (d < EPS) return null;
+    const ux = dx / d, uy = dy / d;
+    return {
+      p1: { x: a.center.x + ux * a.r, y: a.center.y + uy * a.r },
+      p2: { x: b.center.x - ux * b.r, y: b.center.y - uy * b.r },
+      d
+    };
+  }
+
+  _cursorSuggestsCurveGap(a, b, world) {
+    if (!world) return false;
+    const geom = this._curveGapEndpoints(a, b);
+    if (!geom) return false;
+    if (geom.d <= a.r + b.r + EPS) return false;
+    const mid = { x: (geom.p1.x + geom.p2.x) / 2, y: (geom.p1.y + geom.p2.y) / 2 };
+    const axisX = geom.p2.x - geom.p1.x;
+    const axisY = geom.p2.y - geom.p1.y;
+    const len = Math.hypot(axisX, axisY);
+    if (len < EPS) return false;
+    const nx = -axisY / len, ny = axisX / len;
+    const tx = axisX / len, ty = axisY / len;
+    const wx = world.x - mid.x, wy = world.y - mid.y;
+    const perp = Math.abs(wx * nx + wy * ny);
+    const along = Math.abs(wx * tx + wy * ty);
+    return perp < (18 / this.app.view.zoom) && along < (24 / this.app.view.zoom);
   }
 
   _mirrorDataFromSelection() {
@@ -5494,6 +6183,83 @@ class App {
     return true;
   }
 
+  handleOffsetPick(hit, world) {
+    if (this.operationName !== 'offset') return false;
+    if (!hit) {
+      if (this.offsetEntityIds.length) {
+        this.offsetPhase = 'placing';
+        this.updateOffsetCursor(world);
+        this.refreshToolOptions();
+      }
+      return true;
+    }
+    if (!(hit instanceof Line || hit instanceof Circle || hit instanceof Arc)) return true;
+    const sketch = this.activeSketch();
+    if (!sketch || this.project.sketchOf(hit) !== sketch) return true;
+    const i = this.offsetEntityIds.indexOf(hit.id);
+    if (i >= 0) this.offsetEntityIds.splice(i, 1);
+    else this.offsetEntityIds.push(hit.id);
+    this.offsetAnchorId = this.offsetEntityIds.includes(hit.id) ? hit.id : (this.offsetEntityIds[0] || null);
+    this.offsetPhase = this.offsetEntityIds.length ? 'placing' : 'selecting';
+    this.updateOffsetCursor(world);
+    this._syncOffsetSelection();
+    return true;
+  }
+
+  _showOffsetInput() {
+    if (this.offsetInputEl) { this.offsetInputEl.remove(); this.offsetInputEl = null; }
+    const pos = this.view.worldToScreen(this.lastWorldCursor || { x:0, y:0 });
+    const input = document.createElement('input');
+    input.type = 'text';
+    Object.assign(input.style, {
+      position: 'absolute',
+      left: pos.x + 'px',
+      top: pos.y + 'px',
+      transform: 'translate(-50%, -50%)',
+      zIndex: '30',
+      padding: '2px 5px',
+      border: '1.5px solid #2563a5',
+      borderRadius: '3px',
+      background: 'white',
+      font: '12px ui-sans-serif, system-ui',
+      width: '72px',
+      textAlign: 'right',
+      outline: 'none',
+      boxShadow: '0 1px 4px rgba(0,0,0,0.15)'
+    });
+    input.value = Number(this.offsetDistance || 0).toFixed(3);
+    document.getElementById('workspace').appendChild(input);
+    setTimeout(() => { input.focus(); input.select(); }, 0);
+    this.offsetInputEl = input;
+    this.offsetPhase = 'typing';
+    const finish = (commit) => {
+      if (!this.offsetInputEl) return;
+      const raw = this.offsetInputEl.value;
+      this.offsetInputEl.removeEventListener('keydown', onKey);
+      this.offsetInputEl.removeEventListener('blur', onBlur);
+      this.offsetInputEl.remove();
+      this.offsetInputEl = null;
+      if (commit) {
+        const v = Math.abs(parseFloat(raw));
+        if (Number.isFinite(v)) this.offsetDistance = v;
+        this.offsetSelection();
+      } else {
+        this.offsetPhase = this.offsetEntityIds.length ? 'placing' : 'selecting';
+        this.refreshToolOptions();
+        this.requestRender();
+      }
+    };
+    const onKey = (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); finish(true); }
+      else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(false); }
+      else e.stopPropagation();
+    };
+    const onBlur = () => finish(true);
+    input.addEventListener('keydown', onKey);
+    input.addEventListener('blur', onBlur);
+    this.refreshToolOptions();
+  }
+
   _refreshMirrorOptions(section, body) {
     const data = this._mirrorOperationData();
     section.hidden = false;
@@ -5540,12 +6306,61 @@ class App {
     });
     body.querySelector('#mirror-create')?.addEventListener('click', () => this.mirrorSelection());
     body.querySelector('#mirror-cancel')?.addEventListener('click', () => {
-      this.operationName = null;
-      this.mirrorPickMode = 'entities';
-      this.mirrorEntityIds = [];
-      this.mirrorAxisId = null;
+      this._clearOperationState();
       document.getElementById('status-hint').textContent = (this.tool.hint && this.tool.hint()) || '';
       this.refreshToolOptions();
+      this.requestRender();
+    });
+  }
+
+  _refreshOffsetOptions(section, body) {
+    section.hidden = false;
+    const entities = this._offsetEntities();
+    const preview = this._offsetPreviewData();
+    document.getElementById('status-hint').textContent =
+      this.offsetPhase === 'typing'
+        ? 'Offset: type a value, Enter to create, Esc to cancel.'
+        : entities.length
+        ? 'Offset: move the mouse to place. Click in space to type a value, or use Create below.'
+        : 'Offset: click one or more lines, circles, or arcs to select them.';
+    const entityHtml = entities.length
+      ? entities.map(entity => `<div class="sel-item"><span class="glyph">${entity instanceof Line ? 'L' : entity instanceof Circle ? 'C' : 'A'}</span><span>${this._entityLabel(entity)}${entity.id === this.offsetAnchorId ? ' anchor' : ''}</span></div>`).join('')
+      : '<div class="empty">Click one or more lines, circles, or arcs.</div>';
+    body.innerHTML = `
+      <div class="sb-subhead">Offset Entities</div>
+      ${entityHtml}
+      <div class="prop-row">
+        <label for="offset-distance">distance</label>
+        <input id="offset-distance" type="number" min="0" step="0.1" value="${Number(this.offsetDistance) || 0}">
+      </div>
+      <div class="prop-row">
+        <label>side</label>
+        <button class="rel-btn" id="offset-flip" ${entities.length ? '' : 'disabled'}>Flip</button>
+      </div>
+      ${entities.length && !preview ? '<div class="empty">Offset distance is invalid for one or more selected entities.</div>' : ''}
+      <div class="rel-grid">
+        <button class="rel-btn" id="offset-create" ${(!entities.length || !preview) ? 'disabled' : ''}><span class="glyph">+</span>Create Offset</button>
+        <button class="rel-btn" id="offset-cancel"><span class="glyph">Ã—</span>Cancel</button>
+      </div>
+    `;
+    const input = body.querySelector('#offset-distance');
+    input?.addEventListener('input', () => {
+      const n = Math.abs(parseFloat(input.value));
+      this.offsetDistance = Number.isFinite(n) ? n : 0;
+      this.refreshToolOptions();
+      this.requestRender();
+    });
+    body.querySelector('#offset-flip')?.addEventListener('click', () => {
+      this.offsetSide *= -1;
+      this.refreshToolOptions();
+      this.requestRender();
+    });
+    body.querySelector('#offset-create')?.addEventListener('click', () => this.offsetSelection());
+    body.querySelector('#offset-cancel')?.addEventListener('click', () => {
+      this._clearOperationState();
+      document.getElementById('status-hint').textContent = (this.tool.hint && this.tool.hint()) || '';
+      this.refreshToolOptions();
+      this.requestRender();
     });
   }
 
@@ -5644,6 +6459,95 @@ class App {
       }
     }
     return { paths, points, circles, dashed: true };
+  }
+
+  offsetSelection() {
+    const sketch = this.activeSketch(); if (!sketch) return;
+    const preview = this._offsetPreviewData();
+    const entities = this._offsetEntities();
+    if (!entities.length) {
+      alert('Select one or more lines, circles, or arcs to offset.');
+      return;
+    }
+    if (!preview) {
+      alert('Offset distance is invalid for one or more selected entities.');
+      return;
+    }
+
+    const made = [];
+    const madeBySourceId = new Map();
+    const pointMap = new Map();
+    const getPoint = (p) => {
+      if (!p) return null;
+      if (pointMap.has(p)) return pointMap.get(p);
+      const q = new Point(p.x, p.y);
+      pointMap.set(p, q);
+      return q;
+    };
+    for (const item of preview.items) {
+      let entity = null;
+      if (item.kind === 'line') {
+        entity = new Line(getPoint(item.p1), getPoint(item.p2));
+      } else if (item.kind === 'circle') {
+        entity = new Circle(new Point(item.center.x, item.center.y), item.r);
+      } else if (item.kind === 'arc') {
+        entity = new Arc(new Point(item.center.x, item.center.y), item.r, item.a0, item.a1);
+        entity.clockwise = !!item.clockwise;
+        entity.syncEnds();
+      }
+      if (!entity) continue;
+      entity.construction = item.source.construction;
+      sketch.addEntity(entity);
+      made.push(entity);
+      madeBySourceId.set(item.source.id, { source: item.source, entity, item });
+    }
+    const distPairs = [];
+    for (const { source, entity, item } of madeBySourceId.values()) {
+      if (source instanceof Line && entity instanceof Line) {
+        sketch.constraints.push(new OffsetConstraint(
+          source.id, entity.id, 'line',
+          { l1: { a: source.p1.id, b: source.p2.id },
+            l2: { a: entity.p1.id, b: entity.p2.id } }
+        ));
+        distPairs.push({ kind: 'line', pointId: entity.p1.id,
+          l: { a: source.p1.id, b: source.p2.id } });
+      } else if ((source instanceof Circle || source instanceof Arc) && (entity instanceof Circle || entity instanceof Arc)) {
+        sketch.constraints.push(new OffsetConstraint(
+          source.id, entity.id, 'circle',
+          { p1: source.center.id, p2: entity.center.id }
+        ));
+        distPairs.push({ kind: 'circle', c1: entity.id, c2: source.id });
+        if (source instanceof Arc && entity instanceof Arc) {
+          sketch.constraints.push(new ParamFixConstraint(entity.id, 'a0', entity.a0));
+          sketch.constraints.push(new ParamFixConstraint(entity.id, 'a1', entity.a1));
+        }
+      }
+    }
+    if (distPairs.length > 0) {
+      sketch.constraints.push(new OffsetDistanceConstraint(distPairs, Math.abs(preview.items[0].offsetValue)));
+    }
+    if (!made.length) return;
+
+    this.clearSelection();
+    for (const entity of made) this.setSelected(entity, true);
+    this._clearOperationState();
+    document.getElementById('status-hint').textContent = (this.tool.hint && this.tool.hint()) || '';
+    this.commit();
+    this.refreshUI();
+    this.solveAndRender();
+  }
+
+  getOffsetPreview() {
+    if (this.operationName !== 'offset') return null;
+    const preview = this._offsetPreviewData();
+    if (!preview) return null;
+    const paths = [], circles = [], arcs = [];
+    for (const item of preview.items) {
+      if (item.kind === 'line') paths.push([item.p1, item.p2]);
+      else if (item.kind === 'circle') circles.push({ center: item.center, r: item.r });
+      else if (item.kind === 'arc') arcs.push({ center: item.center, r: item.r, a0: item.a0, a1: item.a1, clockwise: item.clockwise });
+    }
+    return { paths, circles, arcs, dashed: true };
   }
 
   /* ---- Constraint application ---- */
@@ -5877,10 +6781,12 @@ class App {
       if (prev.dimPicks)   this.renderer.drawDimPicks(prev.dimPicks);
       if (prev.dimPreview) this.renderer.drawDimPreview(prev.dimPreview);
     }
-    const opPrev = this.getMirrorPreview && this.getMirrorPreview();
+    const opPrev = (this.getMirrorPreview && this.getMirrorPreview())
+      || (this.getOffsetPreview && this.getOffsetPreview());
     if (opPrev) {
       if (opPrev.paths)   for (const p of opPrev.paths) this.renderer.drawTempPath(p, true);
       if (opPrev.circles) for (const c of opPrev.circles) this.renderer.drawTempCircle(c.center, c.r);
+      if (opPrev.arcs)    for (const a of opPrev.arcs) this.renderer.drawTempArc(a.center, a.r, a.a0, a.a1, !!a.clockwise);
       if (opPrev.points)  for (const p of opPrev.points) this.renderer.drawTempPoint(p);
     }
 
@@ -5898,10 +6804,7 @@ class App {
 
   /* ---- Tool selection ---- */
   setTool(name) {
-    this.operationName = null;
-    this.mirrorPickMode = 'entities';
-    this.mirrorEntityIds = [];
-    this.mirrorAxisId = null;
+    this._clearOperationState();
     if (this.tool && this.tool.deactivate) this.tool.deactivate();
     this.toolName = name;
     switch (name) {
@@ -6043,6 +6946,7 @@ class App {
           case 'redo':         this.redo(); break;
           case 'solve':        this.solveAndRender(); break;
           case 'mirror':       this.startMirrorOperation(); break;
+          case 'offset':       this.startOffsetOperation(); break;
           case 'construction': this.constructionMode = !this.constructionMode; b.classList.toggle('on', this.constructionMode); break;
           case 'grid':         this.gridOn = !this.gridOn; b.classList.toggle('on', this.gridOn); this.requestRender(); break;
           case 'snap':         this.snapOn = !this.snapOn; b.classList.toggle('on', this.snapOn); this.requestRender(); break;
@@ -6093,6 +6997,10 @@ class App {
     if (!section || !body) return;
     if (this.operationName === 'mirror') {
       this._refreshMirrorOptions(section, body);
+      return;
+    }
+    if (this.operationName === 'offset') {
+      this._refreshOffsetOptions(section, body);
       return;
     }
     if (this.toolName !== 'hexagon') {
@@ -6260,7 +7168,7 @@ class App {
         ? (normalizeAngleValue(e.value) * 180 / Math.PI).toFixed(3) + '°'
         : (e.value != null ? Number(e.value).toFixed(3) : '');
       if (val) html += `<div class="prop-row"><label>value</label><span>${val}</span></div>`;
-      if (['distance','pointLineDistance','radius','angle'].includes(e.kind)) {
+      if (['distance','pointLineDistance','radius','curveDistance','angle','offsetDistance'].includes(e.kind)) {
         html += `<div class="prop-row"><label>driven</label><span>${e.driven ? 'yes' : 'no'}</span></div>`;
       }
     }
