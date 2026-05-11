@@ -246,6 +246,10 @@
     border-radius: 2px;
   }
   .sel-item:hover { background: var(--hover); }
+  .sel-item.active {
+    background: #e8f1fb;
+    outline: 1px solid var(--accent);
+  }
   .sel-item .glyph {
     width: 14px;
     flex: 0 0 14px;
@@ -510,17 +514,26 @@
       <button class="tbtn tool" data-tool="line" title="Line (L)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="4" y1="20" x2="20" y2="4"/><circle cx="4" cy="20" r="1.6" fill="currentColor"/><circle cx="20" cy="4" r="1.6" fill="currentColor"/></svg>
       </button>
+      <button class="tbtn tool" data-tool="centerLine" title="Centerpoint Line (Shift+L)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="4" y1="12" x2="20" y2="12"/><circle cx="4" cy="12" r="1.5" fill="currentColor"/><circle cx="20" cy="12" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg>
+      </button>
       <button class="tbtn tool" data-tool="rectangle" title="Rectangle (R)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="6" width="16" height="12"/></svg>
+      </button>
+      <button class="tbtn tool" data-tool="centerRectangle" title="Center Rectangle (Shift+R)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="6" width="16" height="12"/><path d="M4 12h16M12 6v12" stroke-dasharray="3 3"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/></svg>
       </button>
       <button class="tbtn tool" data-tool="circle" title="Circle (C)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/></svg>
       </button>
+      <button class="tbtn tool" data-tool="threePointCircle" title="3-Point Circle (Shift+C)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="4" r="1.4" fill="currentColor"/><circle cx="19" cy="15" r="1.4" fill="currentColor"/><circle cx="5" cy="15" r="1.4" fill="currentColor"/></svg>
+      </button>
       <button class="tbtn tool" data-tool="hexagon" title="Hexagon / Polygon (H)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 3.5l7.4 4.25v8.5L12 20.5l-7.4-4.25v-8.5z"/><circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none"/></svg>
       </button>
-      <button class="tbtn tool" data-tool="arc" title="3-Point Arc (A)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 18a10 10 0 0 1 16 0"/><circle cx="4" cy="18" r="1.4" fill="currentColor"/><circle cx="20" cy="18" r="1.4" fill="currentColor"/><circle cx="12" cy="8" r="1.4" fill="currentColor"/></svg>
+      <button class="tbtn tool" data-tool="arc" title="Centerpoint Arc (A)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 0 0-8-8"/><path d="M12 12h8M12 12V4" stroke-dasharray="3 3"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="20" cy="12" r="1.4" fill="currentColor"/><circle cx="12" cy="4" r="1.4" fill="currentColor"/></svg>
       </button>
       <button class="tbtn tool" data-tool="point" title="Point (P)">
         <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="3"/></svg>
@@ -534,6 +547,7 @@
       <button class="tbtn toggle" data-action="construction" title="Construction (toggle)">⌐ dashed</button>
       <button class="tbtn toggle on" data-action="grid"      title="Grid">▦ grid</button>
       <button class="tbtn toggle on" data-action="snap"      title="Snap">⊹ snap</button>
+      <button class="tbtn"          data-action="mirror"    title="Mirror selected entities about selected line">Mirror</button>
       <button class="tbtn"          data-action="solve"      title="Solve now (F5)">Solve</button>
     </div>
 
@@ -822,6 +836,43 @@ function ccwDelta(from, to) {
   return normAngle(to - from);
 }
 
+function signedAngleDelta(from, to) {
+  let d = to - from;
+  while (d > Math.PI) d -= TAU;
+  while (d < -Math.PI) d += TAU;
+  return d;
+}
+
+function unwrapAngleNear(angle, reference) {
+  return reference + signedAngleDelta(reference, angle);
+}
+
+function angleOnDirectedArc(theta, a0, a1, clockwise = false, tol = 1e-3) {
+  const span = clockwise ? normAngle(a0 - a1) : normAngle(a1 - a0);
+  const rel = clockwise ? normAngle(a0 - theta) : normAngle(theta - a0);
+  return rel <= span + tol;
+}
+
+function directedArcSpan(a0, a1, clockwise = false) {
+  return clockwise ? -normAngle(a0 - a1) : normAngle(a1 - a0);
+}
+
+function drawDirectedArcPath(ctx, view, center, radius, a0, a1, clockwise = false) {
+  const span = directedArcSpan(a0, a1, clockwise);
+  if (Math.abs(span) < 1e-6 || radius < EPS) return;
+  const steps = Math.max(8, Math.ceil(Math.abs(span) / (Math.PI / 24)));
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const a = a0 + span * t;
+    const p = view.worldToScreen({
+      x: center.x + radius * Math.cos(a),
+      y: center.y + radius * Math.sin(a)
+    });
+    if (i === 0) ctx.moveTo(p.x, p.y);
+    else ctx.lineTo(p.x, p.y);
+  }
+}
+
 function angleSeparation(a, b) {
   const d = ccwDelta(a, b);
   return d > Math.PI ? TAU - d : d;
@@ -919,6 +970,37 @@ function regularPolygonFromCenterEdge(center, edgeMid, sides) {
     pts.push({ x: center.x + radius * Math.cos(a), y: center.y + radius * Math.sin(a) });
   }
   return pts;
+}
+
+function centerRectangleCorners(center, corner) {
+  const dx = corner.x - center.x;
+  const dy = corner.y - center.y;
+  if (Math.abs(dx) < EPS || Math.abs(dy) < EPS) return null;
+  return {
+    a: { x: center.x - dx, y: center.y - dy },
+    b: { x: center.x + dx, y: center.y - dy },
+    c: { x: center.x + dx, y: center.y + dy },
+    d: { x: center.x - dx, y: center.y + dy }
+  };
+}
+
+function circleFrom3Points(a, b, c) {
+  const ax=a.x, ay=a.y, bx=b.x, by=b.y, cx=c.x, cy=c.y;
+  const d = 2*(ax*(by-cy) + bx*(cy-ay) + cx*(ay-by));
+  if (Math.abs(d) < EPS) return null;
+  const ux = ((ax*ax+ay*ay)*(by-cy) + (bx*bx+by*by)*(cy-ay) + (cx*cx+cy*cy)*(ay-by)) / d;
+  const uy = ((ax*ax+ay*ay)*(cx-bx) + (bx*bx+by*by)*(ax-cx) + (cx*cx+cy*cy)*(bx-ax)) / d;
+  return { center: { x: ux, y: uy }, r: Math.hypot(ax-ux, ay-uy) };
+}
+
+function mirrorPointAcrossLine(p, axis) {
+  const ax = axis.p1.x, ay = axis.p1.y;
+  const dx = axis.p2.x - axis.p1.x, dy = axis.p2.y - axis.p1.y;
+  const len2 = dx*dx + dy*dy;
+  if (len2 < EPS) return { x:p.x, y:p.y };
+  const t = ((p.x - ax)*dx + (p.y - ay)*dy) / len2;
+  const hx = ax + t*dx, hy = ay + t*dy;
+  return { x: 2*hx - p.x, y: 2*hy - p.y };
 }
 
 /* =============== 2. ENTITIES ================================== */
@@ -1033,11 +1115,14 @@ class Arc extends Entity {
   constructor(center, r, a0, a1) {
     super();
     this.center = center; this.r = r; this.a0 = a0; this.a1 = a1;
+    this.clockwise = false;
     this.start = new Point(center.x + r*Math.cos(a0), center.y + r*Math.sin(a0));
     this.end   = new Point(center.x + r*Math.cos(a1), center.y + r*Math.sin(a1));
+    this.start.arcOwner = this; this.start.arcEndpoint = 'start';
+    this.end.arcOwner = this;   this.end.arcEndpoint = 'end';
   }
   paramKeys() { return ['r', 'a0', 'a1']; }
-  children() { return [this.center]; }
+  children() { return [this.center, this.start, this.end]; }
   syncEnds() {
     this.start.x = this.center.x + this.r*Math.cos(this.a0);
     this.start.y = this.center.y + this.r*Math.sin(this.a0);
@@ -1049,23 +1134,16 @@ class Arc extends Entity {
     const dx = world.x - this.center.x, dy = world.y - this.center.y;
     const d = Math.hypot(dx, dy);
     if (Math.abs(d - this.r) * view.zoom > 6) return false;
-    let a = Math.atan2(dy, dx);
-    let a0 = this.a0, a1 = this.a1;
-    while (a1 < a0) a1 += TAU;
-    while (a < a0)  a  += TAU;
-    return a <= a1 + 1e-3;
+    return angleOnDirectedArc(Math.atan2(dy, dx), this.a0, this.a1, this.clockwise);
   }
   draw(ctx, view, style) {
     this.syncEnds();
-    const c = view.worldToScreen(this.center);
     ctx.save();
     ctx.strokeStyle = style.color;
     ctx.lineWidth = style.width;
     if (style.dashed) ctx.setLineDash([6, 4]);
     ctx.beginPath();
-    let a0 = this.a0, a1 = this.a1;
-    while (a1 < a0) a1 += TAU;
-    ctx.arc(c.x, c.y, this.r * view.zoom, a0, a1, false);
+    drawDirectedArcPath(ctx, view, this.center, this.r, this.a0, this.a1, this.clockwise);
     ctx.stroke();
     ctx.restore();
   }
@@ -1073,7 +1151,7 @@ class Arc extends Entity {
     return { type: 'arc', id: this.id,
              construction: this.construction, fixed: this.fixed,
              center: this.center.toJSON(),
-             r: this.r, a0: this.a0, a1: this.a1 };
+             r: this.r, a0: this.a0, a1: this.a1, clockwise: !!this.clockwise };
   }
 }
 
@@ -1123,6 +1201,31 @@ class VerticalConstraint extends Constraint {
   refs() { return [this.lineId, this.p1, this.p2]; }
   residuals(L) { return [ L(this.p1,'x') - L(this.p2,'x') ]; }
   toJSON() { return { id:this.id, kind:'vertical', lineId:this.lineId, p1:this.p1, p2:this.p2 }; }
+}
+
+class SymmetricConstraint extends Constraint {
+  constructor(p1Id, p2Id, axis) {
+    super('symmetric');
+    this.p1 = p1Id;
+    this.p2 = p2Id;
+    this.axis = axis;
+  }
+  refs() { return [this.p1, this.p2, this.axis.a, this.axis.b]; }
+  residuals(L) {
+    const ax=L(this.axis.a,'x'), ay=L(this.axis.a,'y');
+    const bx=L(this.axis.b,'x'), by=L(this.axis.b,'y');
+    const px=L(this.p1,'x'), py=L(this.p1,'y');
+    const qx=L(this.p2,'x'), qy=L(this.p2,'y');
+    const dx=bx-ax, dy=by-ay;
+    const len = Math.hypot(dx, dy);
+    if (len < EPS) return [0, 0];
+    const mx = (px + qx) / 2, my = (py + qy) / 2;
+    return [
+      (dx*(my-ay) - dy*(mx-ax)) / len,
+      (dx*(qx-px) + dy*(qy-py)) / len
+    ];
+  }
+  toJSON() { return { id:this.id, kind:'symmetric', p1:this.p1, p2:this.p2, axis:this.axis }; }
 }
 
 class ParallelConstraint extends Constraint {
@@ -1387,11 +1490,84 @@ class PointOnCircleConstraint extends Constraint {
   toJSON() { return { id:this.id, kind:'pointOnCircle', pointId:this.pointId, circleId:this.circleId, centerId:this.centerId }; }
 }
 
+function arcEndpointXY(L, ref) {
+  const angleKey = ref.which === 'start' ? 'a0' : 'a1';
+  const a = L(ref.arcId, angleKey);
+  const r = L(ref.arcId, 'r');
+  return {
+    x: L(ref.centerId, 'x') + r * Math.cos(a),
+    y: L(ref.centerId, 'y') + r * Math.sin(a)
+  };
+}
+
+class ArcEndpointCoincidentConstraint extends Constraint {
+  constructor(ref, pointId) {
+    super('arcEndpointCoincident');
+    this.ref = ref;
+    this.pointId = pointId;
+  }
+  refs() { return [this.ref.arcId, this.ref.centerId, this.pointId]; }
+  residuals(L) {
+    const p = arcEndpointXY(L, this.ref);
+    return [p.x - L(this.pointId, 'x'), p.y - L(this.pointId, 'y')];
+  }
+  toJSON() { return { id:this.id, kind:'arcEndpointCoincident', ref:this.ref, pointId:this.pointId }; }
+}
+
+class ArcEndpointFixConstraint extends Constraint {
+  constructor(ref, x, y) {
+    super('arcEndpointFix');
+    this.ref = ref;
+    this.x = x;
+    this.y = y;
+  }
+  refs() { return [this.ref.arcId, this.ref.centerId]; }
+  residuals(L) {
+    const p = arcEndpointXY(L, this.ref);
+    return [p.x - this.x, p.y - this.y];
+  }
+  toJSON() { return { id:this.id, kind:'arcEndpointFix', ref:this.ref, x:this.x, y:this.y }; }
+}
+
+class ArcEndpointOnLineConstraint extends Constraint {
+  constructor(ref, l) {
+    super('arcEndpointOnLine');
+    this.ref = ref;
+    this.l = l;
+  }
+  refs() { return [this.ref.arcId, this.ref.centerId, this.l.a, this.l.b]; }
+  residuals(L) {
+    const p = arcEndpointXY(L, this.ref);
+    const ax=L(this.l.a,'x'), ay=L(this.l.a,'y');
+    const bx=L(this.l.b,'x'), by=L(this.l.b,'y');
+    return [ (bx-ax)*(p.y-ay) - (by-ay)*(p.x-ax) ];
+  }
+  toJSON() { return { id:this.id, kind:'arcEndpointOnLine', ref:this.ref, l:this.l }; }
+}
+
+class ArcEndpointOnCircleConstraint extends Constraint {
+  constructor(ref, circleId, centerId) {
+    super('arcEndpointOnCircle');
+    this.ref = ref;
+    this.circleId = circleId;
+    this.centerId = centerId;
+  }
+  refs() { return [this.ref.arcId, this.ref.centerId, this.circleId, this.centerId]; }
+  residuals(L) {
+    const p = arcEndpointXY(L, this.ref);
+    const dx=p.x-L(this.centerId,'x'), dy=p.y-L(this.centerId,'y');
+    return [ Math.sqrt(dx*dx+dy*dy) - L(this.circleId,'r') ];
+  }
+  toJSON() { return { id:this.id, kind:'arcEndpointOnCircle', ref:this.ref, circleId:this.circleId, centerId:this.centerId }; }
+}
+
 const CONSTRAINT_LABELS = {
   fix:'Fix', coincident:'Coincident', horizontal:'Horizontal',
   vertical:'Vertical', parallel:'Parallel', perpendicular:'Perpendicular',
   collinear:'Collinear', equalLength:'Equal length', equalRadius:'Equal radius',
-  concentric:'Concentric', tangent:'Tangent', midpoint:'Midpoint',
+  concentric:'Concentric', tangent:'Tangent', midpoint:'Midpoint', symmetric:'Symmetric',
+  arcEndpointCoincident:'Arc endpoint coincident', arcEndpointFix:'Arc endpoint fixed',
+  arcEndpointOnLine:'Arc endpoint on line', arcEndpointOnCircle:'Arc endpoint on circle',
   distance:'Distance', radius:'Radius', angle:'Angle', directedAngle:'Central angle',
   pointLineDistance:'Pt-Line dist',
   pointOnLine:'On line', pointOnCircle:'On circle'
@@ -1401,7 +1577,9 @@ const CONSTRAINT_GLYPHS = {
   fix:'⚓', coincident:'⌖', horizontal:'━', vertical:'┃',
   parallel:'∥', perpendicular:'⟂', collinear:'≡',
   equal:'＝', equalLength:'＝', equalRadius:'＝',
-  concentric:'⊙', tangent:'∽', midpoint:'⌐',
+  concentric:'⊙', tangent:'∽', midpoint:'⌐', symmetric:'⇋',
+  arcEndpointCoincident:'⌖', arcEndpointFix:'⚓',
+  arcEndpointOnLine:'⊥•', arcEndpointOnCircle:'○•',
   distance:'↔', radius:'R', diameter:'⌀', angle:'∠',
   pointLineDistance:'↔',
   pointOnLine:'⊥•', pointOnCircle:'○•'
@@ -1595,7 +1773,14 @@ class Sketch {
     const ids = new Set();
     const walk = (x) => { ids.add(x.id); for (const c of x.children()) walk(c); };
     walk(e);
-    this.constraints = this.constraints.filter(c => !c.refs().some(r => ids.has(r)));
+    const liveIds = new Set();
+    for (const en of this.entities) walkLive(en);
+    function walkLive(x) {
+      liveIds.add(x.id);
+      for (const c of x.children()) walkLive(c);
+    }
+    const staleIds = new Set([...ids].filter(id => !liveIds.has(id)));
+    this.constraints = this.constraints.filter(c => !c.refs().some(r => staleIds.has(r)));
   }
   toJSON() {
     return {
@@ -1667,6 +1852,7 @@ class Project {
         if (ej.id) e.id = ej.id;
         e.construction = !!ej.construction;
         e.fixed = !!ej.fixed;
+        if (e instanceof Arc) e.clockwise = !!ej.clockwise;
         if (ej.id) idMap.set(ej.id, e);
         return e;
       };
@@ -1681,6 +1867,7 @@ class Project {
           case 'coincident':    c = new CoincidentConstraint(cj.p1, cj.p2); break;
           case 'horizontal':    c = new HorizontalConstraint(cj.lineId, cj.p1, cj.p2); break;
           case 'vertical':      c = new VerticalConstraint(cj.lineId, cj.p1, cj.p2); break;
+          case 'symmetric':     c = new SymmetricConstraint(cj.p1, cj.p2, cj.axis); break;
           case 'parallel':      c = new ParallelConstraint(cj.l1, cj.l2); break;
           case 'perpendicular': c = new PerpendicularConstraint(cj.l1, cj.l2); break;
           case 'collinear':     c = new CollinearConstraint(cj.l1, cj.l2); break;
@@ -1697,6 +1884,10 @@ class Project {
           case 'directedAngle': c = new DirectedAngleConstraint(cj.l1, cj.l2, cj.value); break;
           case 'pointOnLine':   c = new PointOnLineConstraint(cj.pointId, cj.l); break;
           case 'pointOnCircle': c = new PointOnCircleConstraint(cj.pointId, cj.circleId, cj.centerId); break;
+          case 'arcEndpointCoincident': c = new ArcEndpointCoincidentConstraint(cj.ref, cj.pointId); break;
+          case 'arcEndpointFix': c = new ArcEndpointFixConstraint(cj.ref, cj.x, cj.y); break;
+          case 'arcEndpointOnLine': c = new ArcEndpointOnLineConstraint(cj.ref, cj.l); break;
+          case 'arcEndpointOnCircle': c = new ArcEndpointOnCircleConstraint(cj.ref, cj.circleId, cj.centerId); break;
         }
         if (c) {
           if (cj.id) c.id = cj.id;
@@ -1902,6 +2093,31 @@ class Renderer {
     ctx.restore();
   }
 
+  drawTempArc(center, radius, a0, a1, clockwise=false) {
+    const v = this.view, ctx = this.ctx;
+    ctx.save();
+    ctx.strokeStyle = '#1f7ad6'; ctx.lineWidth = 1.2;
+    ctx.setLineDash([5, 4]);
+    ctx.beginPath();
+    drawDirectedArcPath(ctx, v, center, radius, a0, a1, clockwise);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  drawTempPoint(point) {
+    if (!point) return;
+    const v = this.view, ctx = this.ctx;
+    const p = v.worldToScreen(point);
+    ctx.save();
+    ctx.fillStyle = '#1f7ad6';
+    ctx.strokeStyle = 'white';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 4, 0, TAU);
+    ctx.fill(); ctx.stroke();
+    ctx.restore();
+  }
+
   drawSelectionBox(box) {
     if (!box) return;
     const ctx = this.ctx;
@@ -1936,9 +2152,7 @@ class Renderer {
         ctx.stroke();
       } else if (e instanceof Arc) {
         e.syncEnds();
-        const c = v.worldToScreen(e.center);
-        let a0 = e.a0, a1 = e.a1; while (a1 < a0) a1 += TAU;
-        ctx.beginPath(); ctx.arc(c.x, c.y, e.r * v.zoom, a0, a1, false);
+        ctx.beginPath(); drawDirectedArcPath(ctx, v, e.center, e.r, e.a0, e.a1, e.clockwise);
         ctx.stroke();
       }
     }
@@ -2353,11 +2567,8 @@ class SnapEngine {
           const adx = world.x - e.center.x, ady = world.y - e.center.y;
           const ad  = Math.hypot(adx, ady);
           if (ad > EPS) {
-            let theta = Math.atan2(ady, adx);
-            let a0 = e.a0, a1 = e.a1;
-            while (a1 < a0) a1 += TAU;
-            while (theta < a0) theta += TAU;
-            if (theta <= a1 + 1e-3) {
+            const theta = Math.atan2(ady, adx);
+            if (angleOnDirectedArc(theta, e.a0, e.a1, e.clockwise)) {
               consider({ x: e.center.x + adx/ad * e.r, y: e.center.y + ady/ad * e.r }, 'on-circle', e);
             }
           }
@@ -2411,6 +2622,10 @@ class SelectTool extends Tool {
       return;
     }
     const hit = this.app.hitTestActiveSketch(world);
+    if (this.app.operationName === 'mirror') {
+      this.app.handleMirrorPick(hit);
+      return;
+    }
     const isToggle = ev.ctrlKey || ev.metaKey;
     const isAdd    = ev.shiftKey;
     if (hit) {
@@ -2433,7 +2648,10 @@ class SelectTool extends Tool {
           walk(e, e.selected);
         }
       }
-      this.dragging = pts.length ? this.app.beginLocalizedDrag(world, pts, hit) : null;
+      const rigidLines = hit instanceof Line
+        ? [{ lineId: hit.id, p1: hit.p1.id, p2: hit.p2.id, dx: hit.p2.x - hit.p1.x, dy: hit.p2.y - hit.p1.y }]
+        : [];
+      this.dragging = pts.length ? this.app.beginLocalizedDrag(world, pts, hit, rigidLines) : null;
       this.app.refreshUI();
       this.app.requestRender();
     } else {
@@ -2481,16 +2699,15 @@ class SelectTool extends Tool {
     } else {
       // Hover is edit affordance, so only the active sketch can light up.
       let changed = false;
-      const activeId = this.app.project.activeSketchId;
+      const hit = this.app.hitTestActiveSketch(world);
       for (const s of this.app.project.visibleSketches()) {
-        const editable = s.id === activeId;
         for (const e of s.entities) {
-          let hov = editable && !!e.hit(world, this.app.view);
-          // also hover children if a child is hit
-          for (const c of e.children()) if (editable) {
-            if (c.hit && c.hit(world, this.app.view)) { hov = true; break; }
-          }
+          const hov = e === hit;
           if (e.hover !== hov) { e.hover = hov; changed = true; }
+          for (const c of e.children()) {
+            const childHov = c === hit;
+            if (c.hover !== childHov) { c.hover = childHov; changed = true; }
+          }
         }
       }
       if (changed) this.app.requestRender();
@@ -2543,6 +2760,7 @@ class SelectTool extends Tool {
           if (this.app.shouldIgnoreDragSnap(this.dragging, sn)) continue;
           const c = this.app.snapToConstraint(sn, pt);
           if (!c) continue;
+          if (this.app._isInvalidConstraint(sketch, c)) continue;
           if (this.app._isDuplicateConstraint(sketch, c)) continue;
           sketch.constraints.push(c);
         }
@@ -2566,18 +2784,73 @@ class SelectTool extends Tool {
 }
 
 class LineTool extends Tool {
-  constructor(app) { super(app); this.startPt = null; this.cursor = null; }
+  constructor(app) {
+    super(app);
+    this.startPt = null;
+    this.cursor = null;
+    this.axisIntent = null;
+    this.invalidEnd = false;
+    this._lastPlaced = null;
+  }
   hint() { return 'Click to place start, click again for end. Esc to finish.'; }
-  activate() { this.startPt = null; }
-  onPointerDown(world, snap) {
+  activate() { this.startPt = null; this.axisIntent = null; this.invalidEnd = false; this._lastPlaced = null; }
+  _axisSnapFor(target, snap) {
+    if (!this.startPt || snap) return { point: target, kind: null };
+    const dx = (target.x - this.startPt.x) * this.app.view.zoom;
+    const dy = (target.y - this.startPt.y) * this.app.view.zoom;
+    const adx = Math.abs(dx), ady = Math.abs(dy);
+    if (Math.max(adx, ady) < 16 || Math.min(adx, ady) > 8) return { point: target, kind: null };
+    if (ady <= adx) return { point: { x: target.x, y: this.startPt.y }, kind: 'horizontal' };
+    return { point: { x: this.startPt.x, y: target.y }, kind: 'vertical' };
+  }
+  _invalidEndFor(point, sketch) {
+    if (!this.startPt || !point) return false;
+    const minLen = 4 / this.app.view.zoom;
+    if (dist(this.startPt, point) <= minLen) return true;
+    return this.app.pointsCoincidentInSketch(sketch, this.startPt, point);
+  }
+  _setInvalidEnd(invalid) {
+    this.invalidEnd = invalid;
+    document.getElementById('status-hint').textContent = invalid
+      ? 'Select a different end point.'
+      : this.hint();
+  }
+  terminateChain(removeLastPlaced = false) {
+    const sketch = this.app.activeSketch();
+    if (removeLastPlaced && sketch && this._lastPlaced && sketch.entities.includes(this._lastPlaced.line)) {
+      sketch.removeEntity(this._lastPlaced.line);
+      if (this.app.undoStack.length === this._lastPlaced.undoLength) this.app.undoStack.pop();
+      this.app.solveAndRender();
+    }
+    this.startPt = null;
+    this._pendingStartSnap = null;
+    this.axisIntent = null;
+    this.cursor = null;
+    this._lastPlaced = null;
+    this._setInvalidEnd(false);
+    this.app.requestRender();
+  }
+  onPointerDown(world, snap, ev) {
     const sketch = this.app.activeSketch(); if (!sketch) return;
-    const w = snap ? { x: snap.x, y: snap.y } : world;
+    if (this.startPt && ev && ev.detail >= 2) {
+      this.terminateChain(true);
+      return;
+    }
+    const raw = snap ? { x: snap.x, y: snap.y } : world;
     if (!this.startPt) {
-      const { point, reused } = this.app.makeOrReusePoint(w, snap, sketch);
+      const { point, reused } = this.app.makeOrReusePoint(raw, snap, sketch);
       this.startPt = point;
       this._pendingStartSnap = reused ? null : snap;
+      this._lastPlaced = null;
     } else {
-      const { point: endPt, reused: endReused } = this.app.makeOrReusePoint(w, snap, sketch);
+      const axis = this._axisSnapFor(raw, snap);
+      const { point: endPt, reused: endReused } = this.app.makeOrReusePoint(axis.point, snap, sketch);
+      if (this._invalidEndFor(endPt, sketch)) {
+        this.cursor = axis.point;
+        this._setInvalidEnd(true);
+        this.app.requestRender();
+        return;
+      }
       const endSnap = endReused ? null : snap;
       const line = new Line(this.startPt, endPt);
       if (this.app.constructionMode) line.construction = true;
@@ -2592,24 +2865,136 @@ class LineTool extends Tool {
         const cs = this.app.snapToConstraint(endSnap, endPt);
         if (cs) sketch.constraints.push(cs);
       }
+      if (axis.kind === 'horizontal') {
+        sketch.constraints.push(new HorizontalConstraint(line.id, line.p1.id, line.p2.id));
+      } else if (axis.kind === 'vertical') {
+        sketch.constraints.push(new VerticalConstraint(line.id, line.p1.id, line.p2.id));
+      }
       this.app.commit();
+      this._lastPlaced = { line, undoLength:this.app.undoStack.length };
       // Chain — the end point is now in the sketch, so no pending constraint.
       this.startPt = endPt;
       this._pendingStartSnap = null;
+      this.axisIntent = null;
+      this._setInvalidEnd(false);
     }
     this.app.requestRender();
   }
-  onPointerMove(world, snap) { this.cursor = snap ? { x:snap.x, y:snap.y } : world; this.app.requestRender(); }
+  onPointerMove(world, snap) {
+    const raw = snap ? { x:snap.x, y:snap.y } : world;
+    const axis = this._axisSnapFor(raw, snap);
+    this.cursor = axis.point;
+    this.axisIntent = axis.kind;
+    if (this.startPt) {
+      const candidate = snap ? (snap.entity instanceof Point ? snap.entity : axis.point) : axis.point;
+      this._setInvalidEnd(this._invalidEndFor(candidate, this.app.activeSketch()));
+    }
+    this.app.requestRender();
+  }
   onKey(ev) {
     // First Esc closes the current line chain. Second Esc exits to Select.
     if (ev.key === 'Escape' || ev.key === 'Enter') {
-      if (this.startPt) { this.startPt = null; this._pendingStartSnap = null; this.app.requestRender(); }
+      if (this.startPt) { this.terminateChain(false); }
       else { this.app.setTool('select'); }
     }
   }
   getPreview() {
-    if (!this.startPt || !this.cursor) return null;
+    if (!this.startPt || !this.cursor || this.invalidEnd) return null;
     return { paths: [[this.startPt, this.cursor]], dashed: this.app.constructionMode };
+  }
+}
+
+class CenterLineTool extends Tool {
+  constructor(app) {
+    super(app);
+    this.center = null;
+    this.cursor = null;
+    this._centerSnap = null;
+    this._centerReused = false;
+    this.axisIntent = null;
+  }
+  hint() { return 'Click midpoint, then one endpoint.'; }
+  activate() {
+    this.center = null;
+    this.cursor = null;
+    this._centerSnap = null;
+    this._centerReused = false;
+    this.axisIntent = null;
+  }
+  _axisSnapFor(target, snap) {
+    if (!this.center || snap) return { point: target, kind: null };
+    const dx = (target.x - this.center.x) * this.app.view.zoom;
+    const dy = (target.y - this.center.y) * this.app.view.zoom;
+    const adx = Math.abs(dx), ady = Math.abs(dy);
+    if (Math.max(adx, ady) < 16 || Math.min(adx, ady) > 8) return { point: target, kind: null };
+    if (ady <= adx) return { point: { x: target.x, y: this.center.y }, kind: 'horizontal' };
+    return { point: { x: this.center.x, y: target.y }, kind: 'vertical' };
+  }
+  onPointerDown(world, snap) {
+    const sketch = this.app.activeSketch(); if (!sketch) return;
+    const raw = snap ? { x:snap.x, y:snap.y } : world;
+    if (!this.center) {
+      const info = this.app.makeOrReusePoint(raw, snap, sketch);
+      this.center = info.point;
+      this._centerSnap = info.reused ? null : snap;
+      this._centerReused = info.reused;
+    } else {
+      const axis = this._axisSnapFor(raw, snap);
+      const w = axis.point;
+      const dx = w.x - this.center.x;
+      const dy = w.y - this.center.y;
+      if (Math.hypot(dx, dy) < EPS) return;
+      const endInfo = this.app.makeOrReusePoint(w, snap, sketch);
+      const a = new Point(this.center.x - dx, this.center.y - dy);
+      const b = endInfo.point;
+      const line = new Line(a, b);
+      if (this.app.constructionMode) line.construction = true;
+      sketch.addEntity(line);
+      if (!this._centerReused) sketch.addEntity(this.center);
+      sketch.constraints.push(new MidpointConstraint(this.center.id, { a: line.p1.id, b: line.p2.id }));
+      if (axis.kind === 'horizontal') {
+        sketch.constraints.push(new HorizontalConstraint(line.id, line.p1.id, line.p2.id));
+      } else if (axis.kind === 'vertical') {
+        sketch.constraints.push(new VerticalConstraint(line.id, line.p1.id, line.p2.id));
+      }
+      if (this._centerSnap) {
+        const cs = this.app.snapToConstraint(this._centerSnap, this.center);
+        if (cs) sketch.constraints.push(cs);
+      }
+      if (!endInfo.reused && snap) {
+        const cs = this.app.snapToConstraint(snap, b);
+        if (cs) sketch.constraints.push(cs);
+      }
+      this.center = null;
+      this._centerSnap = null;
+      this._centerReused = false;
+      this.axisIntent = null;
+      this.app.commit();
+    }
+    this.app.requestRender();
+  }
+  onPointerMove(world, snap) {
+    const raw = snap ? { x:snap.x, y:snap.y } : world;
+    const axis = this._axisSnapFor(raw, snap);
+    this.cursor = axis.point;
+    this.axisIntent = axis.kind;
+    this.app.requestRender();
+  }
+  onKey(ev) {
+    if (ev.key === 'Escape') {
+      this.center = null;
+      this._centerSnap = null;
+      this._centerReused = false;
+      this.axisIntent = null;
+      this.app.setTool('select');
+    }
+  }
+  getPreview() {
+    if (!this.center || !this.cursor) return null;
+    const dx = this.cursor.x - this.center.x;
+    const dy = this.cursor.y - this.center.y;
+    if (Math.hypot(dx, dy) < EPS) return null;
+    return { paths: [[{ x: this.center.x - dx, y: this.center.y - dy }, this.cursor]], dashed: this.app.constructionMode };
   }
 }
 
@@ -2663,6 +3048,98 @@ class RectangleTool extends Tool {
   }
 }
 
+class CenterRectangleTool extends Tool {
+  constructor(app) {
+    super(app);
+    this.center = null;
+    this.cursor = null;
+    this._centerSnap = null;
+    this._centerReused = false;
+  }
+  hint() { return 'Click center, then a corner.'; }
+  activate() {
+    this.center = null;
+    this.cursor = null;
+    this._centerSnap = null;
+    this._centerReused = false;
+  }
+  onPointerDown(world, snap) {
+    const sketch = this.app.activeSketch(); if (!sketch) return;
+    const w = snap ? { x: snap.x, y: snap.y } : world;
+    if (!this.center) {
+      const info = this.app.makeOrReusePoint(w, snap, sketch);
+      this.center = info.point;
+      this._centerSnap = info.reused ? null : snap;
+      this._centerReused = info.reused;
+    } else {
+      const sq = centerRectangleCorners(this.center, w);
+      if (!sq) return;
+      const a = new Point(sq.a.x, sq.a.y);
+      const b = new Point(sq.b.x, sq.b.y);
+      const c = new Point(sq.c.x, sq.c.y);
+      const d = new Point(sq.d.x, sq.d.y);
+      const l1 = new Line(a, b), l2 = new Line(b, c);
+      const l3 = new Line(c, d), l4 = new Line(d, a);
+      const topMid = new Point((a.x + b.x) / 2, (a.y + b.y) / 2);
+      const rightMid = new Point((b.x + c.x) / 2, (b.y + c.y) / 2);
+      const bottomMid = new Point((c.x + d.x) / 2, (c.y + d.y) / 2);
+      const leftMid = new Point((d.x + a.x) / 2, (d.y + a.y) / 2);
+      const hCenter = new Line(leftMid, rightMid);
+      const vCenter = new Line(topMid, bottomMid);
+      hCenter.construction = true;
+      vCenter.construction = true;
+      if (this.app.constructionMode) [l1,l2,l3,l4].forEach(l => l.construction = true);
+      sketch.addEntity(l1); sketch.addEntity(l2);
+      sketch.addEntity(l3); sketch.addEntity(l4);
+      sketch.addEntity(hCenter); sketch.addEntity(vCenter);
+      if (!this._centerReused) sketch.addEntity(this.center);
+      sketch.constraints.push(new HorizontalConstraint(l1.id, a.id, b.id));
+      sketch.constraints.push(new VerticalConstraint  (l2.id, b.id, c.id));
+      sketch.constraints.push(new HorizontalConstraint(l3.id, c.id, d.id));
+      sketch.constraints.push(new VerticalConstraint  (l4.id, d.id, a.id));
+      sketch.constraints.push(new MidpointConstraint(topMid.id, { a: l1.p1.id, b: l1.p2.id }));
+      sketch.constraints.push(new MidpointConstraint(rightMid.id, { a: l2.p1.id, b: l2.p2.id }));
+      sketch.constraints.push(new MidpointConstraint(bottomMid.id, { a: l3.p1.id, b: l3.p2.id }));
+      sketch.constraints.push(new MidpointConstraint(leftMid.id, { a: l4.p1.id, b: l4.p2.id }));
+      sketch.constraints.push(new MidpointConstraint(this.center.id, { a: hCenter.p1.id, b: hCenter.p2.id }));
+      if (this._centerSnap) {
+        const cs = this.app.snapToConstraint(this._centerSnap, this.center);
+        if (cs) sketch.constraints.push(cs);
+      }
+      this.center = null;
+      this._centerSnap = null;
+      this._centerReused = false;
+      this.app.commit();
+    }
+    this.app.requestRender();
+  }
+  onPointerMove(world, snap) {
+    this.cursor = snap ? { x:snap.x, y:snap.y } : world;
+    this.app.requestRender();
+  }
+  onKey(ev) {
+    if (ev.key === 'Escape') {
+      this.center = null;
+      this._centerSnap = null;
+      this._centerReused = false;
+      this.app.setTool('select');
+    }
+  }
+  getPreview() {
+    if (!this.center || !this.cursor) return null;
+    const sq = centerRectangleCorners(this.center, this.cursor);
+    if (!sq) return null;
+    return {
+      paths: [[sq.a, sq.b, sq.c, sq.d, sq.a]],
+      dashed: this.app.constructionMode,
+      dashedPaths: [
+        [{ x: sq.a.x, y: this.center.y }, { x: sq.c.x, y: this.center.y }],
+        [{ x: this.center.x, y: sq.a.y }, { x: this.center.x, y: sq.c.y }]
+      ]
+    };
+  }
+}
+
 class CircleTool extends Tool {
   constructor(app) { super(app); this.center = null; this.cursor = null; }
   hint() { return 'Click center, then a point on the circle.'; }
@@ -2694,6 +3171,62 @@ class CircleTool extends Tool {
   getPreview() {
     if (!this.center || !this.cursor) return null;
     return { circles: [{ center: this.center, r: dist(this.center, this.cursor) }] };
+  }
+}
+
+class ThreePointCircleTool extends Tool {
+  constructor(app) { super(app); this.picks = []; this.cursor = null; }
+  hint() { return 'Click three points on the circle.'; }
+  activate() { this.picks = []; this.cursor = null; }
+  onPointerDown(world, snap) {
+    const sketch = this.app.activeSketch(); if (!sketch) return;
+    const w = snap ? { x:snap.x, y:snap.y } : world;
+    const info = this.app.makeOrReusePoint(w, snap, sketch);
+    this.picks.push({ ...info, snap: info.reused ? null : snap });
+    if (this.picks.length === 3) {
+      const circ = circleFrom3Points(this.picks[0].point, this.picks[1].point, this.picks[2].point);
+      if (circ) {
+        const center = new Point(circ.center.x, circ.center.y);
+        const circle = new Circle(center, circ.r);
+        if (this.app.constructionMode) circle.construction = true;
+        sketch.addEntity(circle);
+        for (const pick of this.picks) {
+          if (!pick.reused) sketch.addEntity(pick.point);
+        }
+        for (const pick of this.picks) {
+          sketch.constraints.push(new PointOnCircleConstraint(pick.point.id, circle.id, circle.center.id));
+          if (pick.snap) {
+            const cs = this.app.snapToConstraint(pick.snap, pick.point);
+            if (cs) sketch.constraints.push(cs);
+          }
+        }
+        this.app.commit();
+      }
+      this.picks = [];
+      this.cursor = null;
+    }
+    this.app.requestRender();
+  }
+  onPointerMove(world, snap) {
+    this.cursor = snap ? { x:snap.x, y:snap.y } : world;
+    this.app.requestRender();
+  }
+  onKey(ev) {
+    if (ev.key === 'Escape') {
+      this.picks = [];
+      this.cursor = null;
+      this.app.setTool('select');
+    }
+  }
+  getPreview() {
+    const pts = this.picks.map(p => p.point);
+    const points = [...pts];
+    if (pts.length === 2 && this.cursor) {
+      const circ = circleFrom3Points(pts[0], pts[1], this.cursor);
+      if (circ) return { points, circles: [{ center: circ.center, r: circ.r }] };
+    }
+    if (this.cursor && pts.length > 0 && pts.length < 2) points.push(this.cursor);
+    return points.length ? { points } : null;
   }
 }
 
@@ -2769,48 +3302,133 @@ class HexagonTool extends Tool {
 }
 
 class ArcTool extends Tool {
-  constructor(app) { super(app); this.pts = []; this.cursor = null; }
-  hint() { return 'Click start, end, then a third point on the arc.'; }
-  activate() { this.pts = []; }
+  constructor(app) {
+    super(app);
+    this.center = null;
+    this.start = null;
+    this.cursor = null;
+    this.dir = 1;
+    this.sweep = 0;
+    this.lastAngle = null;
+    this._pendingCenterSnap = null;
+    this._pendingStartSnap = null;
+  }
+  hint() { return 'Click center, start point, sweep to end point. Tab flips direction.'; }
+  activate() {
+    this.center = null;
+    this.start = null;
+    this.cursor = null;
+    this.dir = 1;
+    this.sweep = 0;
+    this.lastAngle = null;
+    this._pendingCenterSnap = null;
+    this._pendingStartSnap = null;
+  }
   onPointerDown(world, snap) {
     const sketch = this.app.activeSketch(); if (!sketch) return;
     const w = snap ? { x:snap.x, y:snap.y } : world;
-    this.pts.push(w);
-    if (this.pts.length === 3) {
-      const arc = this._arcFrom3(this.pts[0], this.pts[1], this.pts[2]);
-      if (arc) {
-        const center = new Point(arc.cx, arc.cy);
-        const A = new Arc(center, arc.r, arc.a0, arc.a1);
-        if (this.app.constructionMode) A.construction = true;
-        sketch.addEntity(A);
-        this.app.commit();
+    if (!this.center) {
+      const { point, reused } = this.app.makeOrReusePoint(w, snap, sketch);
+      this.center = point;
+      this._pendingCenterSnap = reused ? null : snap;
+    } else if (!this.start) {
+      if (dist(this.center, w) < EPS) return;
+      this.start = { x:w.x, y:w.y };
+      this.lastAngle = Math.atan2(w.y - this.center.y, w.x - this.center.x);
+      this.sweep = 0;
+      this._pendingStartSnap = snap;
+    } else {
+      const arc = this._arcFromCenterStartEnd(this.center, this.start, w);
+      if (!arc) return;
+      const A = new Arc(this.center, arc.r, arc.a0, arc.a1);
+      A.clockwise = arc.clockwise;
+      if (this.app.constructionMode) A.construction = true;
+      sketch.addEntity(A);
+      if (this._pendingCenterSnap) {
+        const cs = this.app.snapToConstraint(this._pendingCenterSnap, this.center);
+        if (cs) sketch.constraints.push(cs);
       }
-      this.pts = [];
+      if (this._pendingStartSnap) {
+        const cs = this.app.snapToConstraint(this._pendingStartSnap, A.start);
+        if (cs) sketch.constraints.push(cs);
+      }
+      if (snap) {
+        const cs = this.app.snapToConstraint(snap, A.end);
+        if (cs) sketch.constraints.push(cs);
+      }
+      this.center = null;
+      this.start = null;
+      this.cursor = null;
+      this.sweep = 0;
+      this.lastAngle = null;
+      this._pendingCenterSnap = null;
+      this._pendingStartSnap = null;
+      this.app.commit();
     }
     this.app.requestRender();
   }
-  onPointerMove(world, snap) { this.cursor = snap ? { x:snap.x, y:snap.y } : world; this.app.requestRender(); }
-  onKey(ev) { if (ev.key === 'Escape') { this.pts = []; this.app.setTool('select'); } }
-  _arcFrom3(a, b, c) {
-    const ax=a.x, ay=a.y, bx=b.x, by=b.y, cx=c.x, cy=c.y;
-    const d = 2*(ax*(by-cy) + bx*(cy-ay) + cx*(ay-by));
-    if (Math.abs(d) < EPS) return null;
-    const ux = ((ax*ax+ay*ay)*(by-cy) + (bx*bx+by*by)*(cy-ay) + (cx*cx+cy*cy)*(ay-by)) / d;
-    const uy = ((ax*ax+ay*ay)*(cx-bx) + (bx*bx+by*by)*(ax-cx) + (cx*cx+cy*cy)*(bx-ax)) / d;
-    const r  = Math.hypot(ax-ux, ay-uy);
-    let a0 = Math.atan2(ay-uy, ax-ux);
-    let a1 = Math.atan2(by-uy, bx-ux);
-    const ac = Math.atan2(cy-uy, cx-ux);
-    let lo = a0, hi = a1; while (hi < lo) hi += TAU;
-    let p = ac; while (p < lo) p += TAU;
-    if (p > hi) { [lo, hi] = [a1, a0]; while (hi < lo) hi += TAU; }
-    return { cx: ux, cy: uy, r, a0: lo, a1: hi };
+  onPointerMove(world, snap) {
+    const w = snap ? { x:snap.x, y:snap.y } : world;
+    this.cursor = w;
+    if (this.center && this.start && dist(this.center, w) > EPS) {
+      const a = Math.atan2(w.y - this.center.y, w.x - this.center.x);
+      if (this.lastAngle == null) this.lastAngle = Math.atan2(this.start.y - this.center.y, this.start.x - this.center.x);
+      const d = signedAngleDelta(this.lastAngle, a);
+      if (Math.abs(d) < Math.PI * 0.95) {
+        this.sweep += d;
+        if (Math.abs(this.sweep) > 1e-3) this.dir = this.sweep < 0 ? -1 : 1;
+      }
+      this.lastAngle = a;
+    }
+    this.app.requestRender();
+  }
+  onKey(ev) {
+    if (ev.key === 'Escape') {
+      if (this.start) { this.start = null; this.sweep = 0; this.lastAngle = null; this._pendingStartSnap = null; this.app.requestRender(); }
+      else if (this.center) { this.center = null; this.sweep = 0; this.lastAngle = null; this._pendingCenterSnap = null; this._pendingStartSnap = null; this.app.requestRender(); }
+      else this.app.setTool('select');
+    } else if (ev.key === 'Tab') {
+      ev.preventDefault();
+      this.dir *= -1;
+      this.sweep = this.dir * Math.max(Math.abs(this.sweep), 1e-3);
+      this.app.requestRender();
+    }
+  }
+  _arcFromCenterStartEnd(center, start, endRef) {
+    const r = dist(center, start);
+    if (r < EPS || dist(center, endRef) < EPS) return null;
+    const startAngle = Math.atan2(start.y - center.y, start.x - center.x);
+    const endAngle = Math.atan2(endRef.y - center.y, endRef.x - center.x);
+    const ccwSpan = normAngle(endAngle - startAngle);
+    const cwSpan = normAngle(startAngle - endAngle);
+    const span = this.dir > 0 ? ccwSpan : cwSpan;
+    if (span < 1e-4 || Math.abs(span - TAU) < 1e-4) return null;
+    return {
+      r,
+      a0:startAngle,
+      a1:endAngle,
+      clockwise:this.dir < 0,
+      end: {
+        x: center.x + r * Math.cos(endAngle),
+        y: center.y + r * Math.sin(endAngle)
+      }
+    };
   }
   getPreview() {
-    const draft = [];
-    if (this.pts.length === 1 && this.cursor) draft.push([this.pts[0], this.cursor]);
-    else if (this.pts.length === 2 && this.cursor) draft.push([this.pts[0], this.pts[1], this.cursor]);
-    return { paths: draft };
+    if (!this.center) return null;
+    const points = [this.center];
+    if (!this.start) {
+      if (this.cursor) return { points, paths: [[this.center, this.cursor]], dashed: this.app.constructionMode };
+      return { points };
+    }
+    points.push(this.start);
+    if (!this.cursor) return { points };
+    const arc = this._arcFromCenterStartEnd(this.center, this.start, this.cursor);
+    if (!arc) return { points };
+    return {
+      points: [...points, arc.end],
+      arcs: [{ center:this.center, r:arc.r, a0:arc.a0, a1:arc.a1, clockwise:arc.clockwise }]
+    };
   }
 }
 
@@ -3272,6 +3890,7 @@ function constraintAppliesToSelection(c, sel) {
       if (c.kind === 'pointOnLine') return c.pointId === e.id;
       if (c.kind === 'pointOnCircle') return c.pointId === e.id;
       if (c.kind === 'concentric') return c.p1 === e.id || c.p2 === e.id;
+      if (c.kind === 'symmetric') return c.p1 === e.id || c.p2 === e.id;
       if ((c.kind === 'horizontal' || c.kind === 'vertical') &&
           selectedPoints.has(c.p1) && selectedPoints.has(c.p2)) return true;
     } else if (e instanceof Line) {
@@ -3293,6 +3912,7 @@ function constraintAppliesToSelection(c, sel) {
         if (sameLineRefs(e, c.l)) return true;
         continue;
       }
+      if (c.kind === 'symmetric' && sameLineRefs(e, c.axis)) return true;
       if (c.kind === 'distance' && refs.has(e.p1.id) && refs.has(e.p2.id)) return true;
       if (c.kind === 'fix' && (c.pointId === e.p1.id || c.pointId === e.p2.id)) return true;
       if (c.kind === 'coincident' && (refs.has(e.p1.id) || refs.has(e.p2.id))) return true;
@@ -3309,6 +3929,7 @@ function constraintAppliesToSelection(c, sel) {
   if ((c.kind === 'horizontal' || c.kind === 'vertical')) {
     for (const l of selectedLines) if (c.lineId === l.id || selectedLineOwnsBothPoints(l)) return true;
   }
+  if (c.kind === 'symmetric' && hasLine(c.axis)) return true;
   if (selectedCurves.length) {
     for (const e of selectedCurves) {
       if (c.kind === 'radius' && c.circleId === e.id) return true;
@@ -3427,6 +4048,10 @@ class App {
     this.solver = new Solver();
     this.tool = new SelectTool(this);
     this.toolName = 'select';
+    this.operationName = null;
+    this.mirrorPickMode = 'entities';
+    this.mirrorEntityIds = [];
+    this.mirrorAxisId = null;
     this.polygonSides = 6;
     this.gridOn = true; this.snapOn = true; this.constructionMode = false;
     this.lastSnap = null; this.lastWorldCursor = { x:0, y:0 };
@@ -3463,13 +4088,19 @@ class App {
     // an existing corner only inside the active sketch. Endpoints from
     // inactive sketches stay reference geometry, so we create a new active
     // point and constrain it to the reference instead of sharing the object.
-    if (snap && snap.kind === 'endpoint' && snap.entity instanceof Point) {
+    if (snap && snap.kind === 'endpoint' && snap.entity instanceof Point && !this.arcEndpointRef(snap.entity)) {
       const owner = this.project.sketchOf(snap.entity);
       if (owner && owner.id === sketch.id) return { point: snap.entity, reused: true };
     }
     const wx = snap ? snap.x : world.x;
     const wy = snap ? snap.y : world.y;
     return { point: new Point(wx, wy), reused: false };
+  }
+
+  arcEndpointRef(point) {
+    const arc = point && point.arcOwner;
+    if (!(arc instanceof Arc) || (point.arcEndpoint !== 'start' && point.arcEndpoint !== 'end')) return null;
+    return { arcId: arc.id, centerId: arc.center.id, which: point.arcEndpoint };
   }
 
   /** Translate a snap result into the constraint that should pin a freshly
@@ -3479,6 +4110,24 @@ class App {
    *  find the new id). */
   snapToConstraint(snap, point) {
     if (!snap) return null;
+    const endpointRef = this.arcEndpointRef(point);
+    const snapEndpointRef = this.arcEndpointRef(snap.entity);
+    if (snap.kind === 'endpoint' && snapEndpointRef && !endpointRef) {
+      return new ArcEndpointCoincidentConstraint(snapEndpointRef, point.id);
+    }
+    if (endpointRef) {
+      if (snap.kind === 'endpoint' && snap.entity instanceof Point && snap.entity !== point) {
+        if (snapEndpointRef) return null;
+        return new ArcEndpointCoincidentConstraint(endpointRef, snap.entity.id);
+      }
+      if (snap.kind === 'origin') return new ArcEndpointFixConstraint(endpointRef, 0, 0);
+      if (snap.kind === 'on-line' && snap.entity instanceof Line) {
+        return new ArcEndpointOnLineConstraint(endpointRef, { a: snap.entity.p1.id, b: snap.entity.p2.id });
+      }
+      if ((snap.kind === 'on-circle' || snap.kind === 'quadrant') && snap.entity && (snap.entity instanceof Circle || snap.entity instanceof Arc)) {
+        return new ArcEndpointOnCircleConstraint(endpointRef, snap.entity.id, snap.entity.center.id);
+      }
+    }
     if (snap.kind === 'endpoint' && snap.entity instanceof Point && snap.entity !== point) {
       return new CoincidentConstraint(point.id, snap.entity.id);
     }
@@ -3504,6 +4153,45 @@ class App {
     return null;
   }
 
+  pointsCoincidentInSketch(sketch, a, b) {
+    if (!sketch || !a || !b) return false;
+    if (a === b || a.id === b.id) return true;
+    const parent = new Map();
+    const find = (id) => {
+      if (!parent.has(id)) parent.set(id, id);
+      while (parent.get(id) !== id) {
+        parent.set(id, parent.get(parent.get(id)));
+        id = parent.get(id);
+      }
+      return id;
+    };
+    const union = (x, y) => {
+      const rx = find(x), ry = find(y);
+      if (rx !== ry) parent.set(rx, ry);
+    };
+    for (const e of sketch.entities) {
+      for (const p of e.children()) if (p instanceof Point) find(p.id);
+      if (e instanceof Point) find(e.id);
+    }
+    for (const c of sketch.constraints) {
+      if (c.kind === 'coincident') union(c.p1, c.p2);
+    }
+    return find(a.id) === find(b.id);
+  }
+
+  _isInvalidConstraint(sketch, c) {
+    if (!sketch || !c) return false;
+    if (c.kind !== 'coincident') return false;
+    for (const e of sketch.entities) {
+      if (e instanceof Line) {
+        const samePair = (c.p1 === e.p1.id && c.p2 === e.p2.id) ||
+          (c.p1 === e.p2.id && c.p2 === e.p1.id);
+        if (samePair) return true;
+      }
+    }
+    return false;
+  }
+
   /** Hit test that walks ALL visible sketches. Children (points) win
    *  over their parent entities so endpoint dragging works. */
   hitTestAcrossLayers(world) {
@@ -3516,14 +4204,16 @@ class App {
 
   hitTestSketches(world, sketches) {
     const v = this.view;
-    // Prefer children (points) first, then entities.
+    // Prefer points first, then larger entities. Standalone Point
+    // entities, such as centerline midpoints, must win over line bodies.
     for (const s of sketches) {
       for (const e of s.entities) {
         for (const c of e.children()) if (c.hit(world, v)) return c;
+        if (e instanceof Point && e.hit(world, v)) return e;
       }
     }
     for (const s of sketches) {
-      for (const e of s.entities) if (e.hit(world, v)) return e;
+      for (const e of s.entities) if (!(e instanceof Point) && e.hit(world, v)) return e;
     }
     return null;
   }
@@ -3541,7 +4231,7 @@ class App {
    *  hints flash at the cursor. */
   _snapForCurrentTool(world) {
     if (!this.snapOn) return null;
-    const drawing = ['line','rectangle','circle','hexagon','arc','point'].includes(this.toolName);
+    const drawing = ['line','centerLine','rectangle','centerRectangle','circle','threePointCircle','hexagon','arc','point'].includes(this.toolName);
     const dragging = this.toolName === 'select' && this.tool && this.tool.dragging;
     if (!drawing && !dragging) return null;
     if (dragging) return this._snapForDragging(world);
@@ -3615,6 +4305,16 @@ class App {
    *  reference. */
   _isDuplicateConstraint(sketch, c) {
     if (!c || !sketch) return false;
+    const key = (x) => {
+      const o = x.toJSON ? x.toJSON() : { kind:x.kind, refs:x.refs() };
+      const { id, ...rest } = o;
+      return JSON.stringify(rest);
+    };
+    const exactKinds = new Set(['arcEndpointCoincident', 'arcEndpointFix', 'arcEndpointOnLine', 'arcEndpointOnCircle']);
+    if (exactKinds.has(c.kind)) {
+      const aExact = key(c);
+      return sketch.constraints.some(ex => ex.kind === c.kind && key(ex) === aExact);
+    }
     const a = [...c.refs()].sort().join('|');
     for (const ex of sketch.constraints) {
       if (ex.kind !== c.kind) continue;
@@ -4139,8 +4839,16 @@ class App {
     return n ? Math.sqrt(sum / n) : 0;
   }
 
-  _beginDofDrag(sketch, state, startWorld, pts, hit, distances) {
-    const constraints = sketch.constraints.filter(c => !c.driven);
+  _dragRigidLineConstraints(dragOrLocks) {
+    const locks = Array.isArray(dragOrLocks) ? dragOrLocks : (dragOrLocks?.rigidLines || []);
+    return locks.flatMap(l => {
+      const length = Math.hypot(l.dx, l.dy);
+      return [new DistanceConstraint(l.p1, l.p2, length)];
+    });
+  }
+
+  _beginDofDrag(sketch, state, startWorld, pts, hit, distances, rigidLines = []) {
+    const constraints = sketch.constraints.filter(c => !c.driven).concat(this._dragRigidLineConstraints(rigidLines));
     const sys = this._constraintSystem(state, constraints);
     if (sys.residual > 1e-4) return null;
     const intent = this._makeDragIntent(startWorld, pts, hit, state);
@@ -4155,6 +4863,7 @@ class App {
         snapPts:pts,
         state,
         distances,
+        rigidLines,
         snapIgnoreIds:new Set(distances.keys())
       };
     }
@@ -4176,6 +4885,7 @@ class App {
       constraints,
       intent,
       distances,
+      rigidLines,
       snapIgnoreIds:new Set(distances.keys())
     };
   }
@@ -4256,14 +4966,34 @@ class App {
     };
   }
 
-  beginLocalizedDrag(startWorld, pts, hit = null) {
+  beginLocalizedDrag(startWorld, pts, hit = null, rigidLines = []) {
     const sketch = this.activeSketch();
     const state = this._captureSketchParams(sketch);
+    const endpointRef = this.arcEndpointRef(hit);
+    if (endpointRef && pts.length === 1) {
+      return {
+        mode:'arcEndpoint',
+        startWorld,
+        pts,
+        snapPts:pts,
+        state,
+        endpointRef,
+        arc:hit.arcOwner,
+        which:hit.arcEndpoint,
+        startRadius:hit.arcOwner.r,
+        startAngle:hit.arcEndpoint === 'start' ? hit.arcOwner.a0 : hit.arcOwner.a1,
+        referenceAngle:hit.arcEndpoint === 'start' ? hit.arcOwner.a1 : hit.arcOwner.a0,
+        unwrappedAngle:hit.arcEndpoint === 'start' ? hit.arcOwner.a0 : hit.arcOwner.a1,
+        snapIgnoreIds:new Set([hit.id, hit.arcOwner.id])
+      };
+    }
     const graph = this._buildConstraintGraph(sketch);
     const startIds = new Set(pts.map(r => r.p.id));
     const distances = this._graphDistances(graph, startIds);
 
     const { ids: activeIds, points: pointById } = this._activeIdsAndPoints(sketch);
+    const isPointOnCircleHandleDrag = hit instanceof Point && pts.length === 1 &&
+      sketch.constraints.some(c => c.kind === 'pointOnCircle' && c.pointId === hit.id);
     const components = [];
     const componentKeys = new Set();
     for (const id of startIds) {
@@ -4275,7 +5005,8 @@ class App {
       }
     }
 
-    if (components.length && components.every(c => !this._componentIsAnchored(sketch, c, activeIds, pointById))) {
+    if (!isPointOnCircleHandleDrag &&
+        components.length && components.every(c => !this._componentIsAnchored(sketch, c, activeIds, pointById))) {
       const moveIds = new Set();
       for (const c of components) for (const id of c) moveIds.add(id);
       const rigidPts = [];
@@ -4290,12 +5021,13 @@ class App {
           snapPts:pts,
           startIds,
           distances,
+          rigidLines,
           snapIgnoreIds:moveIds
         };
       }
     }
 
-    const dofDrag = this._beginDofDrag(sketch, state, startWorld, pts, hit, distances);
+    const dofDrag = this._beginDofDrag(sketch, state, startWorld, pts, hit, distances, rigidLines);
     if (dofDrag) return dofDrag;
 
     const solveGraph = this._buildSolvingGraph(sketch);
@@ -4328,13 +5060,14 @@ class App {
       if (rotatePts.length && handle && transformFreedom.rotate) {
         const transformParams = state.filter(r => moveIds.has(r.id) && !(r.ent instanceof Point));
         return {
-          mode: transformFreedom.scale ? 'similarity' : 'rotate',
+          mode: (transformFreedom.scale && !rigidLines.length) ? 'similarity' : 'rotate',
           startWorld,
           pts:rotatePts,
           transformParams,
           snapPts:pts.filter(r => r.p !== anchor),
           startIds,
           distances,
+          rigidLines,
           anchor:{ p:anchor, x:anchor.x, y:anchor.y },
           rotateHandle:handle,
           snapIgnoreIds
@@ -4348,7 +5081,7 @@ class App {
       if (Number.isFinite(d)) depthSet.add(d);
     }
     const depths = [...depthSet].sort((a, b) => a - b);
-    return { startWorld, pts, snapPts:pts, state, startIds, distances, depths, snapIgnoreIds:new Set(distances.keys()) };
+    return { startWorld, pts, snapPts:pts, state, startIds, distances, depths, rigidLines, snapIgnoreIds:new Set(distances.keys()) };
   }
 
   _dragMovableIds(drag, depth) {
@@ -4359,7 +5092,7 @@ class App {
     return movable;
   }
 
-  _dragTempConstraints(state, movableIds, targetById) {
+  _dragTempConstraints(state, movableIds, targetById, drag = null) {
     const extra = [];
     const fixedPoints = new Map();
     for (const r of state) {
@@ -4375,6 +5108,7 @@ class App {
     if (targetById) {
       for (const [id, t] of targetById) extra.push(new FixConstraint(id, t.x, t.y));
     }
+    extra.push(...this._dragLengthConstraints(drag));
     return extra;
   }
 
@@ -4497,6 +5231,29 @@ class App {
       return { ok:true, iters:0, residual:0, state:this._lastSolve?.state || 'fully' };
     }
 
+    if (drag.mode === 'arcEndpoint') {
+      this._restoreSketchParams(drag.state || []);
+      const arc = drag.arc;
+      const target = { x:drag.pts[0].x + dx, y:drag.pts[0].y + dy };
+      const vx = target.x - arc.center.x;
+      const vy = target.y - arc.center.y;
+      const r = Math.hypot(vx, vy);
+      if (r > EPS) {
+        const angle = Math.atan2(vy, vx);
+        const unwrapped = unwrapAngleNear(angle, drag.unwrappedAngle ?? angle);
+        drag.unwrappedAngle = unwrapped;
+        const sweep = drag.which === 'start'
+          ? drag.referenceAngle - unwrapped
+          : unwrapped - drag.referenceAngle;
+        if (Math.abs(sweep) > 1e-3) arc.clockwise = sweep < 0;
+        arc.r = r;
+        if (drag.which === 'start') arc.a0 = angle;
+        else arc.a1 = angle;
+      }
+      arc.syncEnds();
+      return { ok:true, iters:0, residual:0, state:this._lastSolve?.state || 'under' };
+    }
+
     if (drag.mode === 'rotate' || drag.mode === 'similarity') {
       const a = drag.anchor;
       const { delta, scale } = this._similarityFromDrag(drag, dx, dy);
@@ -4546,7 +5303,7 @@ class App {
       this._restoreSketchParams(drag.state);
       placeDraggedPoints();
       const movable = this._dragMovableIds(drag, depth);
-      const extra = this._dragTempConstraints(drag.state, movable, includeTargets ? targets : null);
+      const extra = this._dragTempConstraints(drag.state, movable, includeTargets ? targets : null, drag);
       const result = this.solver.solve(sketch, this.project.sketches, extra);
       const values = this._captureParamValues(drag.state);
       if (!best || result.residual < best.result.residual) best = { result, values };
@@ -4642,6 +5399,253 @@ class App {
     }
   }
 
+  /* ---- Operations ---- */
+  startMirrorOperation() {
+    this.operationName = 'mirror';
+    this.mirrorPickMode = 'entities';
+    this.mirrorEntityIds = [];
+    this.mirrorAxisId = null;
+    const data = this._mirrorDataFromSelection();
+    this.mirrorEntityIds = data.entityIds;
+    this.mirrorAxisId = data.axisId;
+    this._syncMirrorSelection();
+    this.refreshToolOptions();
+  }
+
+  _entityLabel(e) {
+    const kind = e instanceof Point ? 'Point'
+      : e instanceof Line ? 'Line'
+      : e instanceof Circle ? 'Circle'
+      : e instanceof Arc ? 'Arc'
+      : e?.constructor?.kind || 'Entity';
+    return `${kind} ${e.id}`;
+  }
+
+  _mirrorDataFromSelection() {
+    const sketch = this.activeSketch(); if (!sketch) return { entityIds: [], axisId: null };
+    const sel = this.selectedEntitiesAndPoints().filter(e => !(e instanceof Constraint));
+    const selectedLines = sel.filter(e => e instanceof Line);
+    const constructionAxes = selectedLines.filter(l => l.construction);
+    const axis = constructionAxes.length === 1 ? constructionAxes[0] : null;
+    const sources = this._mirrorSourcesFrom(sel, axis);
+    return { entityIds: sources.map(e => e.id), axisId: axis?.id || null };
+  }
+
+  _mirrorSourcesFrom(sel, axis) {
+    const sketch = this.activeSketch(); if (!sketch) return [];
+    const selectedTop = new Set(sketch.entities.filter(e => (sel.includes(e) || e.selected) && e !== axis));
+    const pointOwnedBySelectedEntity = (p) => {
+      for (const e of selectedTop) {
+        if (e === p) return true;
+        for (const c of e.children()) if (c === p) return true;
+      }
+      return false;
+    };
+    const sources = [];
+    for (const e of sketch.entities) {
+      if (e !== axis && (sel.includes(e) || e.selected) && (e instanceof Point || e instanceof Line || e instanceof Circle)) sources.push(e);
+    }
+    for (const e of sel) {
+      if (e instanceof Point && e !== axis && !pointOwnedBySelectedEntity(e) && !sources.includes(e)) sources.push(e);
+    }
+    return sources;
+  }
+
+  _mirrorOperationData() {
+    const sketch = this.activeSketch(); if (!sketch) return null;
+    const axis = this.mirrorAxisId ? sketch.entities.find(e => e instanceof Line && e.id === this.mirrorAxisId) : null;
+    const sources = this.mirrorEntityIds
+      .map(id => this._lookupAny(id))
+      .filter(e => e && this.project.sketchOf(e) === sketch && e !== axis && (e instanceof Point || e instanceof Line || e instanceof Circle));
+    return { axis, sources };
+  }
+
+  _syncMirrorSelection() {
+    const sketch = this.activeSketch(); if (!sketch) return;
+    this.clearSelection();
+    const ids = new Set(this.mirrorEntityIds);
+    if (this.mirrorAxisId) ids.add(this.mirrorAxisId);
+    for (const e of sketch.entities) {
+      if (ids.has(e.id)) this.setSelected(e, true);
+      for (const c of e.children()) if (ids.has(c.id)) this.setSelected(c, true);
+    }
+    this.refreshUI();
+    this.requestRender();
+  }
+
+  handleMirrorPick(hit) {
+    if (this.operationName !== 'mirror') return false;
+    if (!hit) return true;
+    const sketch = this.activeSketch();
+    if (!sketch || this.project.sketchOf(hit) !== sketch) return true;
+    if (this.mirrorPickMode === 'axis') {
+      if (!(hit instanceof Line)) return true;
+      this.mirrorAxisId = hit.id;
+      this.mirrorEntityIds = this.mirrorEntityIds.filter(id => id !== hit.id);
+      this.mirrorPickMode = 'entities';
+    } else {
+      if (!(hit instanceof Point || hit instanceof Line || hit instanceof Circle)) return true;
+      if (hit.id === this.mirrorAxisId) return true;
+      const i = this.mirrorEntityIds.indexOf(hit.id);
+      if (i >= 0) this.mirrorEntityIds.splice(i, 1);
+      else this.mirrorEntityIds.push(hit.id);
+    }
+    this._syncMirrorSelection();
+    return true;
+  }
+
+  _refreshMirrorOptions(section, body) {
+    const data = this._mirrorOperationData();
+    section.hidden = false;
+    if (!data) {
+      body.innerHTML = '<div class="empty">No active sketch.</div>';
+      return;
+    }
+    const sources = data.sources;
+    const axis = data.axis;
+    const sourceHtml = sources.length
+      ? sources.map(e => `<div class="sel-item"><span class="glyph">${e instanceof Point ? '•' : e instanceof Line ? '╱' : '○'}</span><span>${this._entityLabel(e)}</span></div>`).join('')
+      : '<div class="empty">Click here, then click points, lines, or circles.</div>';
+    const axisHtml = axis
+      ? `<div class="sel-item"><span class="glyph">━</span><span>${this._entityLabel(axis)}${axis.construction ? ' construction' : ''}</span></div>`
+      : '<div class="empty">Click here, then click a line.</div>';
+    const entitiesActive = this.mirrorPickMode === 'entities';
+    const axisActive = this.mirrorPickMode === 'axis';
+    document.getElementById('status-hint').textContent = entitiesActive
+      ? 'Mirror: click points, lines, or circles to add/remove them.'
+      : 'Mirror: click a line to set the mirror axis.';
+    body.innerHTML = `
+      <div class="sb-subhead">Mirrored Entities</div>
+      <div class="sel-item ${entitiesActive ? 'active' : ''}" id="mirror-pick-entities">
+        <span class="glyph">${entitiesActive ? '▶' : '+'}</span><span>${entitiesActive ? 'Picking entities' : 'Pick entities'}</span>
+      </div>
+      ${sourceHtml}
+      <div class="sb-subhead">Mirror Axis</div>
+      <div class="sel-item ${axisActive ? 'active' : ''}" id="mirror-pick-axis">
+        <span class="glyph">${axisActive ? '▶' : '+'}</span><span>${axisActive ? 'Picking axis' : 'Pick axis'}</span>
+      </div>
+      ${axisHtml}
+      <div class="rel-grid">
+        <button class="rel-btn" id="mirror-create" ${(!axis || !sources.length) ? 'disabled' : ''}><span class="glyph">⇋</span>Create Mirror</button>
+        <button class="rel-btn" id="mirror-cancel"><span class="glyph">×</span>Cancel</button>
+      </div>
+    `;
+    body.querySelector('#mirror-pick-entities')?.addEventListener('click', () => {
+      this.mirrorPickMode = 'entities';
+      this.refreshToolOptions();
+    });
+    body.querySelector('#mirror-pick-axis')?.addEventListener('click', () => {
+      this.mirrorPickMode = 'axis';
+      this.refreshToolOptions();
+    });
+    body.querySelector('#mirror-create')?.addEventListener('click', () => this.mirrorSelection());
+    body.querySelector('#mirror-cancel')?.addEventListener('click', () => {
+      this.operationName = null;
+      this.mirrorPickMode = 'entities';
+      this.mirrorEntityIds = [];
+      this.mirrorAxisId = null;
+      document.getElementById('status-hint').textContent = (this.tool.hint && this.tool.hint()) || '';
+      this.refreshToolOptions();
+    });
+  }
+
+  mirrorSelection() {
+    const sketch = this.activeSketch(); if (!sketch) return;
+    const data = this._mirrorOperationData();
+    const axis = data?.axis;
+    const sources = data?.sources || [];
+    if (!axis) {
+      alert('Select a mirror axis.');
+      return;
+    }
+    if (!sources.length) {
+      alert('Select at least one point, line, or circle in addition to the mirror axis.');
+      return;
+    }
+
+    const pointMap = new Map();
+    const linkedPoints = new Set();
+    const newEntities = [];
+    const axisRef = { a: axis.p1.id, b: axis.p2.id };
+    const mirroredPoint = (p) => {
+      if (pointMap.has(p)) return pointMap.get(p);
+      const mp = mirrorPointAcrossLine(p, axis);
+      const q = new Point(mp.x, mp.y);
+      pointMap.set(p, q);
+      return q;
+    };
+    const linkPoint = (p) => {
+      const q = mirroredPoint(p);
+      if (!linkedPoints.has(p.id)) {
+        sketch.constraints.push(new SymmetricConstraint(p.id, q.id, axisRef));
+        linkedPoints.add(p.id);
+      }
+      return q;
+    };
+
+    for (const src of sources) {
+      if (src instanceof Point) {
+        const p = linkPoint(src);
+        sketch.addEntity(p);
+        newEntities.push(p);
+      } else if (src instanceof Line) {
+        const a = linkPoint(src.p1);
+        const b = linkPoint(src.p2);
+        const line = new Line(a, b);
+        line.construction = src.construction;
+        sketch.addEntity(line);
+        newEntities.push(line);
+      } else if (src instanceof Circle) {
+        const center = linkPoint(src.center);
+        const circle = new Circle(center, src.r);
+        circle.construction = src.construction;
+        sketch.addEntity(circle);
+        sketch.constraints.push(new EqualRadiusConstraint(src.id, circle.id));
+        newEntities.push(circle);
+      }
+    }
+
+    if (!newEntities.length) return;
+    this.clearSelection();
+    for (const e of newEntities) this.setSelected(e, true);
+    this.operationName = null;
+    this.mirrorPickMode = 'entities';
+    this.mirrorEntityIds = [];
+    this.mirrorAxisId = null;
+    document.getElementById('status-hint').textContent = (this.tool.hint && this.tool.hint()) || '';
+    this.commit();
+    this.refreshUI();
+    this.solveAndRender();
+  }
+
+  getMirrorPreview() {
+    if (this.operationName !== 'mirror') return null;
+    const data = this._mirrorOperationData();
+    const axis = data?.axis;
+    const sources = data?.sources || [];
+    if (!axis || !sources.length) return null;
+    const pointMap = new Map();
+    const mirroredPoint = (p) => {
+      if (pointMap.has(p)) return pointMap.get(p);
+      const q = mirrorPointAcrossLine(p, axis);
+      pointMap.set(p, q);
+      return q;
+    };
+    const paths = [];
+    const points = [];
+    const circles = [];
+    for (const src of sources) {
+      if (src instanceof Point) {
+        points.push(mirroredPoint(src));
+      } else if (src instanceof Line) {
+        paths.push([mirroredPoint(src.p1), mirroredPoint(src.p2)]);
+      } else if (src instanceof Circle) {
+        circles.push({ center: mirroredPoint(src.center), r: src.r });
+      }
+    }
+    return { paths, points, circles, dashed: true };
+  }
+
   /* ---- Constraint application ---- */
   applyConstraint(kind) {
     const sketch = this.activeSketch(); if (!sketch) return;
@@ -4651,7 +5655,12 @@ class App {
     const beforeJSON = JSON.stringify(this.project.toJSON());
     const beforeState = this._captureSketchParams(sketch);
     const beforeGraph = this._buildConstraintGraph(sketch);
-    const tryAdd = (cons) => { if (Array.isArray(cons)) sketch.constraints.push(...cons); else sketch.constraints.push(cons); };
+    const tryAdd = (cons) => {
+      const list = Array.isArray(cons) ? cons : [cons];
+      for (const c of list) {
+        if (!this._isInvalidConstraint(sketch, c)) sketch.constraints.push(c);
+      }
+    };
 
     let added = false;
     switch (kind) {
@@ -4860,10 +5869,19 @@ class App {
     const prev = this.tool.getPreview && this.tool.getPreview();
     if (prev) {
       if (prev.paths)      for (const p of prev.paths) this.renderer.drawTempPath(p, prev.dashed);
+      if (prev.dashedPaths) for (const p of prev.dashedPaths) this.renderer.drawTempPath(p, true);
       if (prev.circles)    for (const c of prev.circles) this.renderer.drawTempCircle(c.center, c.r);
+      if (prev.arcs)       for (const a of prev.arcs) this.renderer.drawTempArc(a.center, a.r, a.a0, a.a1, !!a.clockwise);
+      if (prev.points)     for (const p of prev.points) this.renderer.drawTempPoint(p);
       if (prev.box)        this.renderer.drawSelectionBox(prev.box);
       if (prev.dimPicks)   this.renderer.drawDimPicks(prev.dimPicks);
       if (prev.dimPreview) this.renderer.drawDimPreview(prev.dimPreview);
+    }
+    const opPrev = this.getMirrorPreview && this.getMirrorPreview();
+    if (opPrev) {
+      if (opPrev.paths)   for (const p of opPrev.paths) this.renderer.drawTempPath(p, true);
+      if (opPrev.circles) for (const c of opPrev.circles) this.renderer.drawTempCircle(c.center, c.r);
+      if (opPrev.points)  for (const p of opPrev.points) this.renderer.drawTempPoint(p);
     }
 
     if (this.snapOn) {
@@ -4880,13 +5898,20 @@ class App {
 
   /* ---- Tool selection ---- */
   setTool(name) {
+    this.operationName = null;
+    this.mirrorPickMode = 'entities';
+    this.mirrorEntityIds = [];
+    this.mirrorAxisId = null;
     if (this.tool && this.tool.deactivate) this.tool.deactivate();
     this.toolName = name;
     switch (name) {
       case 'select':    this.tool = new SelectTool(this); break;
       case 'line':      this.tool = new LineTool(this); break;
+      case 'centerLine': this.tool = new CenterLineTool(this); break;
       case 'rectangle': this.tool = new RectangleTool(this); break;
+      case 'centerRectangle': this.tool = new CenterRectangleTool(this); break;
       case 'circle':    this.tool = new CircleTool(this); break;
+      case 'threePointCircle': this.tool = new ThreePointCircleTool(this); break;
       case 'hexagon':   this.tool = new HexagonTool(this); break;
       case 'arc':       this.tool = new ArcTool(this); break;
       case 'point':     this.tool = new PointTool(this); break;
@@ -4894,7 +5919,12 @@ class App {
     }
     if (this.tool.activate) this.tool.activate();
     document.querySelectorAll('#topbar .tool').forEach(b => b.classList.toggle('active', b.dataset.tool === name));
-    document.getElementById('status-tool').textContent = 'Tool: ' + name[0].toUpperCase() + name.slice(1);
+    document.getElementById('status-tool').textContent = 'Tool: ' + (
+      name === 'centerRectangle' ? 'Center Rectangle' :
+      name === 'centerLine' ? 'Centerpoint Line' :
+      name === 'threePointCircle' ? '3-Point Circle' :
+      name[0].toUpperCase() + name.slice(1)
+    );
     document.getElementById('status-hint').textContent = (this.tool.hint && this.tool.hint()) || '';
     this.canvas.style.cursor = name === 'select' ? 'default' : 'crosshair';
     this.refreshToolOptions();
@@ -4913,6 +5943,13 @@ class App {
     };
 
     c.addEventListener('contextmenu', e => e.preventDefault());
+
+    c.addEventListener('dblclick', (ev) => {
+      if (this.toolName === 'line' && this.tool && this.tool.startPt) {
+        ev.preventDefault();
+        this.tool.terminateChain(true);
+      }
+    });
 
     c.addEventListener('pointerdown', (ev) => {
       c.setPointerCapture(ev.pointerId);
@@ -4976,9 +6013,9 @@ class App {
       if ((ev.ctrlKey || ev.metaKey) && k === 'z') { ev.preventDefault(); this.undo(); return; }
       if ((ev.ctrlKey || ev.metaKey) && (k === 'y' || (ev.shiftKey && k === 'z'))) { ev.preventDefault(); this.redo(); return; }
       if (k === 's') this.setTool('select');
-      else if (k === 'l') this.setTool('line');
-      else if (k === 'r') this.setTool('rectangle');
-      else if (k === 'c') this.setTool('circle');
+      else if (k === 'l') this.setTool(ev.shiftKey ? 'centerLine' : 'line');
+      else if (k === 'r') this.setTool(ev.shiftKey ? 'centerRectangle' : 'rectangle');
+      else if (k === 'c') this.setTool(ev.shiftKey ? 'threePointCircle' : 'circle');
       else if (k === 'h') this.setTool('hexagon');
       else if (k === 'a') this.setTool('arc');
       else if (k === 'p') this.setTool('point');
@@ -5005,6 +6042,7 @@ class App {
           case 'undo':         this.undo(); break;
           case 'redo':         this.redo(); break;
           case 'solve':        this.solveAndRender(); break;
+          case 'mirror':       this.startMirrorOperation(); break;
           case 'construction': this.constructionMode = !this.constructionMode; b.classList.toggle('on', this.constructionMode); break;
           case 'grid':         this.gridOn = !this.gridOn; b.classList.toggle('on', this.gridOn); this.requestRender(); break;
           case 'snap':         this.snapOn = !this.snapOn; b.classList.toggle('on', this.snapOn); this.requestRender(); break;
@@ -5053,6 +6091,10 @@ class App {
     const section = document.getElementById('tool-options-section');
     const body = document.getElementById('tool-options-body');
     if (!section || !body) return;
+    if (this.operationName === 'mirror') {
+      this._refreshMirrorOptions(section, body);
+      return;
+    }
     if (this.toolName !== 'hexagon') {
       section.hidden = true;
       body.innerHTML = '';
@@ -5192,10 +6234,18 @@ class App {
       html += '</div>';
     }
 
-    // ---- Properties for the first item ----
+    // ---- Properties ----
     const e = sel[0];
+    const constructionTargets = sel.filter(x => x instanceof Line || x instanceof Circle || x instanceof Arc);
     html += '<div class="sb-subhead">Properties</div>';
-    if (e instanceof Point) {
+    if (sel.length > 1) {
+      if (constructionTargets.length) {
+        const allConstruction = constructionTargets.every(x => x.construction);
+        html += `<div class="prop-row"><label>construction</label><input type="checkbox" data-toggle="construction-all" ${allConstruction?'checked':''}></div>`;
+      } else {
+        html += '<div class="empty">No shared properties.</div>';
+      }
+    } else if (e instanceof Point) {
       html += `<div class="prop-row"><label>x</label><input type="number" step="0.001" data-edit="x" value="${e.x.toFixed(4)}"></div>`;
       html += `<div class="prop-row"><label>y</label><input type="number" step="0.001" data-edit="y" value="${e.y.toFixed(4)}"></div>`;
       html += `<div class="prop-row"><label>fixed</label><input type="checkbox" data-toggle="fixed" ${e.fixed?'checked':''}></div>`;
@@ -5216,6 +6266,11 @@ class App {
     }
 
     body.innerHTML = html;
+    const constructionAll = body.querySelector('input[data-toggle="construction-all"]');
+    if (constructionAll) {
+      constructionAll.indeterminate = constructionTargets.some(x => x.construction) &&
+        !constructionTargets.every(x => x.construction);
+    }
 
     // Wire up buttons / inputs
     body.querySelectorAll('[data-rel]').forEach(b =>
@@ -5241,7 +6296,14 @@ class App {
     });
     body.querySelectorAll('input[data-toggle]').forEach(inp => {
       inp.addEventListener('change', () => {
-        const k = inp.dataset.toggle; e[k] = inp.checked;
+        const k = inp.dataset.toggle;
+        if (k === 'construction-all') {
+          for (const target of constructionTargets) target.construction = inp.checked;
+          this.commit();
+          this.refreshUI();
+          return;
+        }
+        e[k] = inp.checked;
         if (k === 'fixed' && inp.checked && e instanceof Point) {
           sketch.constraints.push(new FixConstraint(e.id, e.x, e.y));
         }
