@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>SketchCAD</title>
+<title>OnSketch</title>
 <script defer src="https://cloud.umami.is/script.js" data-website-id="50dad292-9502-4749-a86e-68f2ed8b2e7a"></script>
 <style>
   /* ============================================================
-     SketchCAD — light, professional, utilitarian.
+     OnSketch — light, professional, utilitarian.
      ============================================================ */
   :root {
     --bg:            #eef0f3;
@@ -1492,7 +1492,12 @@ class OffsetConstraint extends Constraint {
     if (this.offsetKind === 'line') {
       const dx1=L(this.l1.b,'x')-L(this.l1.a,'x'), dy1=L(this.l1.b,'y')-L(this.l1.a,'y');
       const dx2=L(this.l2.b,'x')-L(this.l2.a,'x'), dy2=L(this.l2.b,'y')-L(this.l2.a,'y');
-      return [dx1*dy2 - dy1*dx2]; // parallel
+      const len1 = Math.hypot(dx1, dy1), len2 = Math.hypot(dx2, dy2);
+      if (len1 < EPS || len2 < EPS) return [0, 1];
+      return [
+        (dx1*dy2 - dy1*dx2) / (len1 * len2), // parallel
+        (dx1*dx2 + dy1*dy2) / (len1 * len2) - 1 // same direction
+      ];
     }
     return [L(this.p1,'x')-L(this.p2,'x'), L(this.p1,'y')-L(this.p2,'y')]; // concentric
   }
@@ -1531,10 +1536,15 @@ class OffsetDistanceConstraint extends Constraint {
         const px=L(p.pointId,'x'), py=L(p.pointId,'y');
         const ax=L(p.l.a,'x'), ay=L(p.l.a,'y'), bx=L(p.l.b,'x'), by=L(p.l.b,'y');
         const dx=bx-ax, dy=by-ay;
+        const len = Math.hypot(dx, dy);
+        if (len < EPS) return 0;
         const cross = dx*(py-ay) - dy*(px-ax);
-        return cross*cross - this.value*this.value*(dx*dx+dy*dy);
+        const value = p.value != null ? p.value : (cross < 0 ? -Math.abs(this.value) : Math.abs(this.value));
+        return cross / len - value;
       }
-      return L(p.c1,'r') - L(p.c2,'r') - this.value; // radial
+      const radial = L(p.c1,'r') - L(p.c2,'r');
+      const value = p.value != null ? p.value : (radial < 0 ? -Math.abs(this.value) : Math.abs(this.value));
+      return radial - value; // radial
     });
   }
   toJSON() {
@@ -2516,8 +2526,13 @@ class Renderer {
     if (!c.pairs || !c.pairs.length) return;
     const first = c.pairs[0];
     if (first.kind === 'line') {
-      const pt = entMap.get(first.pointId);
-      const la = entMap.get(first.l.a), lb = entMap.get(first.l.b);
+      const src = entMap.get(first.sourceEntityId);
+      const dst = entMap.get(first.targetEntityId);
+      const la = src instanceof Line ? src.p1 : entMap.get(first.l.a);
+      const lb = src instanceof Line ? src.p2 : entMap.get(first.l.b);
+      const pt = dst instanceof Line
+        ? { x:(dst.p1.x + dst.p2.x) / 2, y:(dst.p1.y + dst.p2.y) / 2 }
+        : entMap.get(first.pointId);
       if (!pt || !la || !lb) return;
       const dx = lb.x - la.x, dy = lb.y - la.y;
       const len2 = dx*dx + dy*dy; if (len2 < EPS) return;
@@ -2851,6 +2866,7 @@ class SelectTool extends Tool {
       return;
     }
     if (this.app.operationName === 'offset') {
+      if (this.app.offsetPhase === 'typing') return;
       if (!hit && this.app.offsetEntityIds.length && this.app.offsetPhase === 'placing') {
         this.app.updateOffsetCursor(world);
         this.app._showOffsetInput();
@@ -3013,7 +3029,14 @@ class SelectTool extends Tool {
   }
   onKey(ev) {
     if (ev.key === 'Delete' || ev.key === 'Backspace') { this.app.deleteSelection(); ev.preventDefault(); }
-    else if (ev.key === 'Escape') this.app.clearSelection();
+    else if (ev.key === 'Escape') {
+      if (this.app.operationName === 'offset') {
+        this.app.cancelOffsetOperation();
+        ev.preventDefault();
+      } else {
+        this.app.clearSelection();
+      }
+    }
   }
   getPreview() {
     if (!this.box) return null;
@@ -4673,8 +4696,13 @@ class App {
         const first = c.pairs && c.pairs[0];
         if (!first) return;
         if (first.kind === 'line') {
-          const pt = this._lookupAny(first.pointId);
-          const la = this._lookupAny(first.l.a), lb = this._lookupAny(first.l.b);
+          const src = this._lookupAny(first.sourceEntityId);
+          const dst = this._lookupAny(first.targetEntityId);
+          const pt = dst instanceof Line
+            ? { x:(dst.p1.x + dst.p2.x) / 2, y:(dst.p1.y + dst.p2.y) / 2 }
+            : this._lookupAny(first.pointId);
+          const la = src instanceof Line ? src.p1 : this._lookupAny(first.l.a);
+          const lb = src instanceof Line ? src.p2 : this._lookupAny(first.l.b);
           if (!pt || !la || !lb) return;
           const dx = lb.x - la.x, dy = lb.y - la.y;
           const len2 = dx*dx + dy*dy; if (len2 < EPS) return;
@@ -4787,6 +4815,24 @@ class App {
     return null;
   }
 
+  _lookupMap(sketches = this.project.sketches) {
+    const byId = new Map();
+    const walk = (e) => {
+      byId.set(e.id, e);
+      for (const c of e.children()) walk(c);
+    };
+    for (const s of sketches) for (const e of s.entities) walk(e);
+    return byId;
+  }
+
+  _lookupFn(sketches = this.project.sketches) {
+    const byId = this._lookupMap(sketches);
+    return (id, key) => {
+      const e = byId.get(id);
+      return e ? e[key] : 0;
+    };
+  }
+
   /** Open an inline input over a dimension's label so the user can edit
    *  the value (or Esc to leave it untouched). Reuses the SmartDim input
    *  styling. */
@@ -4825,6 +4871,7 @@ class App {
         if (Number.isFinite(v)) {
           if (c.kind === 'angle')                       c.value = normalizeAngleValue(v * Math.PI / 180);
           else if (c.kind === 'radius' && c.isDiameter) c.value = v / 2;
+          else if (c.kind === 'offsetDistance')          this._setOffsetDistanceValue(c, v);
           else                                            c.value = v;
           this.commit();
         }
@@ -4933,6 +4980,87 @@ class App {
 
   _applyParamValues(rows, values) {
     for (let i = 0; i < rows.length; i++) rows[i].ent[rows[i].key] = values[i];
+  }
+
+  _offsetGeometryValid(sketch) {
+    if (!sketch) return true;
+    const L = (id, key) => {
+      const e = this._lookupAny(id);
+      return e ? e[key] : 0;
+    };
+    for (const c of sketch.constraints) {
+      if (c.driven) continue;
+      if (c.kind === 'offset' && c.offsetKind === 'line') {
+        const dx1=L(c.l1.b,'x')-L(c.l1.a,'x'), dy1=L(c.l1.b,'y')-L(c.l1.a,'y');
+        const dx2=L(c.l2.b,'x')-L(c.l2.a,'x'), dy2=L(c.l2.b,'y')-L(c.l2.a,'y');
+        if (Math.hypot(dx1, dy1) <= EPS || Math.hypot(dx2, dy2) <= EPS) return false;
+        if (dx1 * dx2 + dy1 * dy2 <= EPS) return false;
+      } else if (c.kind === 'offsetDistance' && c.pairs) {
+        for (const p of c.pairs) {
+          if (p.value == null || Math.abs(p.value) <= EPS) continue;
+          if (p.kind === 'line') {
+            const px=L(p.pointId,'x'), py=L(p.pointId,'y');
+            const ax=L(p.l.a,'x'), ay=L(p.l.a,'y'), bx=L(p.l.b,'x'), by=L(p.l.b,'y');
+            const dx=bx-ax, dy=by-ay;
+            const len = Math.hypot(dx, dy);
+            if (len <= EPS) return false;
+            const signed = (dx*(py-ay) - dy*(px-ax)) / len;
+            if (signed * p.value <= EPS) return false;
+          } else if (p.kind === 'circle') {
+            const radial = L(p.c1,'r') - L(p.c2,'r');
+            if (radial * p.value <= EPS) return false;
+          }
+        }
+      }
+    }
+    return true;
+  }
+
+  _finishDragStep(drag, result) {
+    const sketch = this.activeSketch();
+    if (!sketch) return result;
+    if (sketch && !this._offsetGeometryValid(sketch)) {
+      if (drag?.lastValidValues) this._applyParamValues(drag.state, drag.lastValidValues);
+      else if (drag?.state) this._restoreSketchParams(drag.state);
+      for (const e of sketch.entities) if (e instanceof Arc) e.syncEnds();
+      return { ...(result || {}), ok:false, state:this._lastSolve?.state || 'under' };
+    }
+    if (drag?.state) drag.lastValidValues = this._captureParamValues(drag.state);
+    for (const e of sketch.entities) if (e instanceof Arc) e.syncEnds();
+    return result;
+  }
+
+  _setOffsetDistanceValue(c, value) {
+    const mag = Math.abs(value);
+    c.value = mag;
+    if (!c.pairs) return;
+    const L = (id, key) => {
+      const e = this._lookupAny(id);
+      return e ? e[key] : 0;
+    };
+    for (const p of c.pairs) {
+      let sign = p.value != null && p.value < 0 ? -1 : 1;
+      if (p.value == null) {
+        if (p.kind === 'line') {
+          const px=L(p.pointId,'x'), py=L(p.pointId,'y');
+          const ax=L(p.l.a,'x'), ay=L(p.l.a,'y'), bx=L(p.l.b,'x'), by=L(p.l.b,'y');
+          const dx=bx-ax, dy=by-ay;
+          const len = Math.hypot(dx, dy);
+          if (len > EPS) sign = (dx*(py-ay) - dy*(px-ax)) < 0 ? -1 : 1;
+        } else if (p.kind === 'circle') {
+          sign = (L(p.c1,'r') - L(p.c2,'r')) < 0 ? -1 : 1;
+        }
+      }
+      p.value = sign * mag;
+    }
+  }
+
+  _ensureOffsetPairSigns(sketch) {
+    if (!sketch) return;
+    for (const c of sketch.constraints) {
+      if (c.kind !== 'offsetDistance' || !c.pairs) continue;
+      this._setOffsetDistanceValue(c, c.value);
+    }
   }
 
   _buildConstraintGraph(sketch) {
@@ -5068,11 +5196,8 @@ class App {
     return anchors.size === 1 ? [...anchors.values()][0] : null;
   }
 
-  _constraintResidualNorm(constraints) {
-    const L = (id, key) => {
-      const e = this._lookupAny(id);
-      return e ? e[key] : 0;
-    };
+  _constraintResidualNorm(constraints, L = null) {
+    L = L || this._lookupFn();
     let sum = 0;
     for (const c of constraints) {
       for (const r of c.residuals(L)) sum += r * r;
@@ -5080,12 +5205,9 @@ class App {
     return Math.sqrt(sum);
   }
 
-  _constraintSystem(rows, constraints) {
+  _constraintSystem(rows, constraints, L = null) {
     const activeConstraints = constraints.filter(c => !c.driven);
-    const L = (id, key) => {
-      const e = this._lookupAny(id);
-      return e ? e[key] : 0;
-    };
+    L = L || this._lookupFn();
     const computeF = () => {
       const f = [];
       for (const c of activeConstraints) for (const r of c.residuals(L)) f.push(r);
@@ -5117,20 +5239,21 @@ class App {
     }
   }
 
-  _projectConstraintResidual(rows, constraints, passes = 2) {
+  _projectConstraintResidual(rows, constraints, passes = 2, L = null) {
+    L = L || this._lookupFn();
     for (let pass = 0; pass < passes; pass++) {
-      const sys = this._constraintSystem(rows, constraints);
+      const sys = this._constraintSystem(rows, constraints, L);
       if (sys.residual < 1e-7 || !sys.J.length) return sys;
       const step = solveLeastSquares(sys.J, sys.f.map(v => -v), 1e-6);
       if (!step) return sys;
       const before = this._captureParamValues(rows);
       this._applyParamStep(rows, step);
-      const next = this._constraintSystem(rows, constraints);
+      const next = this._constraintSystem(rows, constraints, L);
       if (next.residual <= sys.residual) continue;
       this._applyParamValues(rows, before);
       return sys;
     }
-    return this._constraintSystem(rows, constraints);
+    return this._constraintSystem(rows, constraints, L);
   }
 
   _makeDragIntent(startWorld, pts, hit, rows) {
@@ -5238,20 +5361,26 @@ class App {
   }
 
   _beginDofDrag(sketch, state, startWorld, pts, hit, distances, rigidLines = []) {
-    const constraints = sketch.constraints.filter(c => !c.driven).concat(this._dragRigidLineConstraints(rigidLines));
-    const sys = this._constraintSystem(state, constraints);
+    const componentIds = new Set(distances.keys());
+    const localState = state.filter(r => componentIds.has(r.id));
+    if (!localState.length) return null;
+    const constraints = sketch.constraints
+      .filter(c => !c.driven && c.refs().some(id => componentIds.has(id)))
+      .concat(this._dragRigidLineConstraints(rigidLines));
+    const lookup = this._lookupFn(this.project.sketches);
+    const sys = this._constraintSystem(localState, constraints, lookup);
     if (sys.residual > 1e-4) return null;
-    const intent = this._makeDragIntent(startWorld, pts, hit, state);
+    const intent = this._makeDragIntent(startWorld, pts, hit, localState);
     if (!intent) return null;
     const rowBasis = rowSpaceBasis(sys.J, 1e-7);
-    const nullBasis = nullSpaceBasis(rowBasis, state.length, 1e-7);
+    const nullBasis = nullSpaceBasis(rowBasis, localState.length, 1e-7);
     if (!nullBasis.length) {
       return {
         mode:'locked',
         startWorld,
         pts,
         snapPts:pts,
-        state,
+        state:localState,
         distances,
         rigidLines,
         snapIgnoreIds:new Set(distances.keys())
@@ -5271,23 +5400,25 @@ class App {
       startWorld,
       pts,
       snapPts:pts,
-      state,
+      state:localState,
       constraints,
       intent,
       distances,
       rigidLines,
+      lookup,
       snapIgnoreIds:new Set(distances.keys())
     };
   }
 
   _solveDofDrag(drag, dx, dy) {
-    const sketch = this.activeSketch();
     this._restoreSketchParams(drag.state);
     let bestValues = this._captureParamValues(drag.state);
     let bestError = this._dragIntentError(drag, dx, dy);
+    let iterations = 0;
 
     for (let iter = 0; iter < 20; iter++) {
-      const sys = this._constraintSystem(drag.state, drag.constraints);
+      iterations = iter + 1;
+      const sys = this._constraintSystem(drag.state, drag.constraints, drag.lookup);
       const rowBasis = rowSpaceBasis(sys.J, 1e-7);
       const nullBasis = nullSpaceBasis(rowBasis, drag.state.length, 1e-7);
       if (!nullBasis.length) break;
@@ -5302,7 +5433,7 @@ class App {
       const maxStep = step.reduce((m, v) => Math.max(m, Math.abs(v)), 0);
       if (maxStep < 1e-7) break;
       this._applyParamStep(drag.state, step);
-      this._projectConstraintResidual(drag.state, drag.constraints, 2);
+      this._projectConstraintResidual(drag.state, drag.constraints, 2, drag.lookup);
       const err = this._dragIntentError(drag, dx, dy);
       if (err < bestError) {
         bestError = err;
@@ -5312,10 +5443,14 @@ class App {
     }
 
     this._applyParamValues(drag.state, bestValues);
-    const result = this.solver.solve(sketch, this.project.sketches);
-    if (!result.ok && bestValues) this._applyParamValues(drag.state, bestValues);
-    for (const e of sketch.entities) if (e instanceof Arc) e.syncEnds();
-    return result;
+    const sys = this._constraintSystem(drag.state, drag.constraints, drag.lookup);
+    const result = {
+      ok: sys.residual < 1e-4,
+      iters: iterations,
+      residual: sys.residual,
+      state: this._lastSolve?.state || 'under'
+    };
+    return this._finishDragStep(drag, result);
   }
 
   _applySimilarityToRows(rows, component, anchor, scale, angle) {
@@ -5343,10 +5478,11 @@ class App {
 
   _componentTransformFreedom(sketch, state, component, anchor) {
     const relevant = sketch.constraints.filter(c => !c.driven && c.refs().some(id => component.has(id)));
-    const before = this._constraintResidualNorm(relevant);
+    const lookup = this._lookupFn(this.project.sketches);
+    const before = this._constraintResidualNorm(relevant, lookup);
     const allowed = (scale, angle) => {
       this._applySimilarityToRows(state, component, anchor, scale, angle);
-      const after = this._constraintResidualNorm(relevant);
+      const after = this._constraintResidualNorm(relevant, lookup);
       this._restoreSketchParams(state);
       return after <= Math.max(1e-5, before * 1.05 + 1e-6);
     };
@@ -5358,6 +5494,7 @@ class App {
 
   beginLocalizedDrag(startWorld, pts, hit = null, rigidLines = []) {
     const sketch = this.activeSketch();
+    this._ensureOffsetPairSigns(sketch);
     const state = this._captureSketchParams(sketch);
     // Circle perimeter resize: when the center is fully determined by constraints,
     // dragging the perimeter should resize the circle rather than translate it.
@@ -5630,7 +5767,7 @@ class App {
     if (drag.mode === 'circleResize') {
       const cx = drag.circle.center.x, cy = drag.circle.center.y;
       drag.circle.r = Math.max(EPS, Math.hypot(drag.startWorld.x + dx - cx, drag.startWorld.y + dy - cy));
-      return { ok:true, iters:0, residual:0, state:'under' };
+      return this._finishDragStep(drag, { ok:true, iters:0, residual:0, state:'under' });
     }
 
     if (!drag.pts.length) return null;
@@ -5664,7 +5801,7 @@ class App {
         else arc.a1 = angle;
       }
       arc.syncEnds();
-      return { ok:true, iters:0, residual:0, state:this._lastSolve?.state || 'under' };
+      return this._finishDragStep(drag, { ok:true, iters:0, residual:0, state:this._lastSolve?.state || 'under' });
     }
 
     if (drag.mode === 'rotate' || drag.mode === 'similarity') {
@@ -5682,7 +5819,7 @@ class App {
         else r.ent[r.key] = r.value;
       }
       for (const e of sketch.entities) if (e instanceof Arc) e.syncEnds();
-      return { ok:true, iters:0, residual:0, state:this._lastSolve?.state || 'under' };
+      return this._finishDragStep(drag, { ok:true, iters:0, residual:0, state:this._lastSolve?.state || 'under' });
     }
 
     if (drag.mode === 'rigid') {
@@ -5691,7 +5828,7 @@ class App {
         r.p.y = r.y + dy;
       }
       for (const e of sketch.entities) if (e instanceof Arc) e.syncEnds();
-      return { ok:true, iters:0, residual:0, state:this._lastSolve?.state || 'under' };
+      return this._finishDragStep(drag, { ok:true, iters:0, residual:0, state:this._lastSolve?.state || 'under' });
     }
 
     const targets = new Map();
@@ -5706,11 +5843,10 @@ class App {
       }
     };
     const finish = (result) => {
-      for (const e of sketch.entities) if (e instanceof Arc) e.syncEnds();
       // Drag solves use temporary pins to keep unaffected geometry local.
       // Those pins are not real sketch constraints, so do not use their
       // fully-defined analysis for canvas colouring while the pointer moves.
-      return result;
+      return this._finishDragStep(drag, result);
     };
     const trySolve = (depth, includeTargets) => {
       this._restoreSketchParams(drag.state);
@@ -5825,6 +5961,14 @@ class App {
     this.offsetSide = 1;
   }
 
+  cancelOffsetOperation() {
+    if (this.operationName !== 'offset') return;
+    this._clearOperationState();
+    document.getElementById('status-hint').textContent = (this.tool.hint && this.tool.hint()) || '';
+    this.refreshToolOptions();
+    this.requestRender();
+  }
+
   _switchToSelectToolForOperation() {
     if (this.toolName === 'select') return;
     if (this.tool && this.tool.deactivate) this.tool.deactivate();
@@ -5887,6 +6031,133 @@ class App {
     return d * (this.offsetSide >= 0 ? 1 : -1);
   }
 
+  _offsetGroupBounds(entities = this._offsetEntities()) {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    const acc = (p) => {
+      minX = Math.min(minX, p.x); minY = Math.min(minY, p.y);
+      maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y);
+    };
+    for (const e of entities) {
+      if (e instanceof Line) {
+        acc(e.p1); acc(e.p2);
+      } else if (e instanceof Circle || e instanceof Arc) {
+        acc({ x:e.center.x - e.r, y:e.center.y - e.r });
+        acc({ x:e.center.x + e.r, y:e.center.y + e.r });
+      }
+    }
+    return minX === Infinity ? null : { minX, minY, maxX, maxY };
+  }
+
+  _offsetGroupCenter(entities = this._offsetEntities()) {
+    const bounds = this._offsetGroupBounds(entities);
+    if (!bounds) return null;
+    let wx = 0, wy = 0, weight = 0;
+    const addWeighted = (p, w) => {
+      if (!Number.isFinite(w) || w <= EPS) return;
+      wx += p.x * w; wy += p.y * w; weight += w;
+    };
+    for (const e of entities) {
+      if (e instanceof Line) {
+        const len = dist(e.p1, e.p2);
+        addWeighted({ x:(e.p1.x + e.p2.x) / 2, y:(e.p1.y + e.p2.y) / 2 }, len);
+      } else if (e instanceof Circle || e instanceof Arc) {
+        if (e instanceof Circle) {
+          addWeighted(e.center, TAU * e.r);
+        } else {
+          const span = Math.abs(directedArcSpan(e.a0, e.a1, e.clockwise));
+          const mid = e.a0 + directedArcSpan(e.a0, e.a1, e.clockwise) / 2;
+          addWeighted({ x:e.center.x + e.r * Math.cos(mid), y:e.center.y + e.r * Math.sin(mid) }, span * e.r);
+        }
+      }
+    }
+    return weight > EPS
+      ? { x:wx / weight, y:wy / weight }
+      : { x:(bounds.minX + bounds.maxX) / 2, y:(bounds.minY + bounds.maxY) / 2 };
+  }
+
+  _offsetRayBoxBoundaryDistance(center, ux, uy, bounds) {
+    if (!bounds) return null;
+    let best = Infinity;
+    const note = (t, x, y) => {
+      if (!Number.isFinite(t) || t <= EPS) return;
+      if (x < bounds.minX - 1e-6 || x > bounds.maxX + 1e-6) return;
+      if (y < bounds.minY - 1e-6 || y > bounds.maxY + 1e-6) return;
+      best = Math.min(best, t);
+    };
+    if (Math.abs(ux) > EPS) {
+      let t = (bounds.minX - center.x) / ux;
+      note(t, bounds.minX, center.y + uy * t);
+      t = (bounds.maxX - center.x) / ux;
+      note(t, bounds.maxX, center.y + uy * t);
+    }
+    if (Math.abs(uy) > EPS) {
+      let t = (bounds.minY - center.y) / uy;
+      note(t, center.x + ux * t, bounds.minY);
+      t = (bounds.maxY - center.y) / uy;
+      note(t, center.x + ux * t, bounds.maxY);
+    }
+    return Number.isFinite(best) ? best : null;
+  }
+
+  _offsetGroupSignedDistanceFromCursor(world) {
+    const entities = this._offsetEntities();
+    const bounds = this._offsetGroupBounds(entities);
+    const center = this._offsetGroupCenter(entities);
+    if (!center || !world) return null;
+    const vx = world.x - center.x, vy = world.y - center.y;
+    const cursorR = Math.hypot(vx, vy);
+    if (cursorR < EPS) return null;
+    const ux = vx / cursorR, uy = vy / cursorR;
+    let boundaryR = Infinity;
+    const note = (t) => {
+      if (Number.isFinite(t) && t > EPS && t < boundaryR) boundaryR = t;
+    };
+    for (const e of entities) {
+      if (e instanceof Line) {
+        const sx = e.p2.x - e.p1.x, sy = e.p2.y - e.p1.y;
+        const denom = ux * sy - uy * sx;
+        if (Math.abs(denom) < EPS) continue;
+        const qx = e.p1.x - center.x, qy = e.p1.y - center.y;
+        const t = (qx * sy - qy * sx) / denom;
+        const s = (qx * uy - qy * ux) / denom;
+        if (s >= -1e-6 && s <= 1 + 1e-6) note(t);
+      } else if (e instanceof Circle || e instanceof Arc) {
+        const cx = center.x - e.center.x, cy = center.y - e.center.y;
+        const b = 2 * (ux * cx + uy * cy);
+        const c = cx*cx + cy*cy - e.r*e.r;
+        const disc = b*b - 4*c;
+        if (disc < -EPS) continue;
+        const root = Math.sqrt(Math.max(0, disc));
+        for (const t of [(-b - root) / 2, (-b + root) / 2]) {
+          if (t <= EPS) continue;
+          if (e instanceof Arc) {
+            const px = center.x + ux * t, py = center.y + uy * t;
+            if (!angleOnDirectedArc(Math.atan2(py - e.center.y, px - e.center.x), e.a0, e.a1, e.clockwise)) continue;
+          }
+          note(t);
+        }
+      }
+    }
+    if (!Number.isFinite(boundaryR)) {
+      const boxR = this._offsetRayBoxBoundaryDistance(center, ux, uy, bounds);
+      if (boxR == null) return null;
+      boundaryR = boxR;
+    }
+    const radialOffset = cursorR - boundaryR;
+    const anchor = this.offsetAnchorId ? this._lookupAny(this.offsetAnchorId) : null;
+    if (anchor instanceof Line) {
+      const dx = anchor.p2.x - anchor.p1.x;
+      const dy = anchor.p2.y - anchor.p1.y;
+      const len = Math.hypot(dx, dy);
+      if (len > EPS) {
+        const nx = -dy / len, ny = dx / len;
+        const centerSide = (center.x - anchor.p1.x) * nx + (center.y - anchor.p1.y) * ny;
+        if (Math.abs(centerSide) > EPS) return radialOffset * (centerSide < 0 ? 1 : -1);
+      }
+    }
+    return radialOffset;
+  }
+
   _offsetEndpointPair(entity) {
     if (entity instanceof Line) return { a: entity.p1.id, b: entity.p2.id };
     if (entity instanceof Arc) return { a: entity.start.id, b: entity.end.id };
@@ -5915,15 +6186,19 @@ class App {
   }
 
   _offsetRelationAtConnection(a, b, sharedId) {
+    const ea = this._offsetEndpointPair(a);
+    const eb = this._offsetEndpointPair(b);
+    if (!ea || !eb) return 1;
+    if (a instanceof Line && b instanceof Line) {
+      const sameEnd = (ea.a === sharedId && eb.a === sharedId) || (ea.b === sharedId && eb.b === sharedId);
+      return sameEnd ? -1 : 1;
+    }
     const va = this._offsetLocalVector(a, sharedId);
     const vb = this._offsetLocalVector(b, sharedId);
     if (va && vb) {
       const dot = va.x * vb.x + va.y * vb.y;
       if (Math.abs(dot) > 1e-4) return dot >= 0 ? 1 : -1;
     }
-    const ea = this._offsetEndpointPair(a);
-    const eb = this._offsetEndpointPair(b);
-    if (!ea || !eb) return 1;
     const sameSide = (ea.a === sharedId && eb.a === sharedId) || (ea.b === sharedId && eb.b === sharedId);
     return sameSide ? -1 : 1;
   }
@@ -5951,6 +6226,39 @@ class App {
         }
       }
     }
+
+    const lineComponents = [];
+    const seenLines = new Set();
+    for (const e of entities) {
+      if (!(e instanceof Line) || seenLines.has(e.id)) continue;
+      const component = [];
+      const queue = [e.id];
+      seenLines.add(e.id);
+      while (queue.length) {
+        const id = queue.shift();
+        const line = byId.get(id);
+        if (line instanceof Line) component.push(line);
+        for (const nb of neighbors.get(id) || []) {
+          const next = byId.get(nb.id);
+          if (!(next instanceof Line) || seenLines.has(nb.id)) continue;
+          seenLines.add(nb.id);
+          queue.push(nb.id);
+        }
+      }
+      if (component.length) lineComponents.push(component);
+    }
+
+    const closedLineComponents = [];
+    for (const component of lineComponents) {
+      if (component.length < 3) continue;
+      const counts = new Map();
+      for (const line of component) {
+        counts.set(line.p1.id, (counts.get(line.p1.id) || 0) + 1);
+        counts.set(line.p2.id, (counts.get(line.p2.id) || 0) + 1);
+      }
+      if ([...counts.values()].every(n => n === 2)) closedLineComponents.push(component);
+    }
+
     const roots = [];
     if (this.offsetAnchorId && byId.has(this.offsetAnchorId)) roots.push(this.offsetAnchorId);
     for (const e of entities) if (!roots.includes(e.id)) roots.push(e.id);
@@ -5968,10 +6276,27 @@ class App {
         }
       }
     }
+
+    const groupCenter = closedLineComponents.length ? this._offsetGroupCenter(entities) : null;
+    if (groupCenter) {
+      for (const component of closedLineComponents) {
+        for (const line of component) {
+          const dx = line.p2.x - line.p1.x;
+          const dy = line.p2.y - line.p1.y;
+          const len = Math.hypot(dx, dy);
+          if (len < EPS) continue;
+          const nx = -dy / len, ny = dx / len;
+          const side = (groupCenter.x - line.p1.x) * nx + (groupCenter.y - line.p1.y) * ny;
+          if (Math.abs(side) > EPS) signs.set(line.id, side > 0 ? -1 : 1);
+        }
+      }
+    }
     return signs;
   }
 
   _offsetDistanceFromCursor(world) {
+    const groupSigned = this._offsetGroupSignedDistanceFromCursor(world);
+    if (groupSigned != null) return Math.abs(groupSigned);
     const entity = this.offsetAnchorId ? this._lookupAny(this.offsetAnchorId) : null;
     if (!entity || !world) return null;
     if (entity instanceof Line) {
@@ -5983,6 +6308,25 @@ class App {
       return Math.abs((world.x - entity.p1.x) * nx + (world.y - entity.p1.y) * ny);
     }
     return Math.abs(dist(world, entity.center) - entity.r);
+  }
+
+  _offsetCursorSide(entity, world) {
+    const groupSigned = this._offsetGroupSignedDistanceFromCursor(world);
+    if (groupSigned != null && Math.abs(groupSigned) > EPS) return groupSigned >= 0 ? 1 : -1;
+    if (!entity || !world) return null;
+    if (entity instanceof Line) {
+      const dx = entity.p2.x - entity.p1.x;
+      const dy = entity.p2.y - entity.p1.y;
+      const len = Math.hypot(dx, dy);
+      if (len < EPS) return null;
+      const nx = -dy / len, ny = dx / len;
+      const signed = (world.x - entity.p1.x) * nx + (world.y - entity.p1.y) * ny;
+      if (Math.abs(signed) < EPS) return null;
+      return signed >= 0 ? 1 : -1;
+    }
+    const radial = dist(world, entity.center) - entity.r;
+    if (Math.abs(radial) < EPS) return null;
+    return radial >= 0 ? 1 : -1;
   }
 
   _offsetLineNetworkPreview(lines, signs, signedDistance) {
@@ -6011,23 +6355,26 @@ class App {
       pinned.set(endpointKey(a, a.p1.id === pointId ? 'p1' : 'p2'), inter);
       pinned.set(endpointKey(b, b.p1.id === pointId ? 'p1' : 'p2'), inter);
     }
-    return lines.map(line => {
+    const items = [];
+    for (const line of lines) {
       const shifted = raw.get(line.id);
-      return {
+      const p1 = pinned.get(endpointKey(line, 'p1')) || shifted.p1;
+      const p2 = pinned.get(endpointKey(line, 'p2')) || shifted.p2;
+      const sdx = line.p2.x - line.p1.x, sdy = line.p2.y - line.p1.y;
+      const tdx = p2.x - p1.x, tdy = p2.y - p1.y;
+      if (Math.hypot(sdx, sdy) < EPS || Math.hypot(tdx, tdy) < EPS) return null;
+      if (sdx * tdx + sdy * tdy <= EPS) return null;
+      items.push({
         kind:'line',
         source: line,
-        p1: pinned.get(endpointKey(line, 'p1')) || shifted.p1,
-        p2: pinned.get(endpointKey(line, 'p2')) || shifted.p2
-      };
-    });
+        p1,
+        p2
+      });
+    }
+    return items;
   }
 
-  _offsetPreviewData() {
-    const entities = this._offsetEntities();
-    if (!entities.length) return null;
-    const signedDistance = this._offsetSignedDistance();
-    if (Math.abs(signedDistance) < EPS) return null;
-    const signs = this._offsetEntitySigns(entities);
+  _offsetPreviewDataForSignedDistance(entities, signs, signedDistance) {
     const items = [];
     const lines = entities.filter(e => e instanceof Line);
     if (lines.length) {
@@ -6050,6 +6397,34 @@ class App {
     return { items };
   }
 
+  _clampOffsetDistanceToValidRange(entities, signs, signedDistance) {
+    const direction = signedDistance >= 0 ? 1 : -1;
+    const target = Math.abs(signedDistance);
+    let lo = 0, hi = target;
+    let best = null;
+    for (let i = 0; i < 32; i++) {
+      const mid = (lo + hi) / 2;
+      const preview = this._offsetPreviewDataForSignedDistance(entities, signs, direction * mid);
+      if (preview) {
+        lo = mid;
+        best = preview;
+      } else {
+        hi = mid;
+      }
+    }
+    return best;
+  }
+
+  _offsetPreviewData() {
+    const entities = this._offsetEntities();
+    if (!entities.length) return null;
+    const signedDistance = this._offsetSignedDistance();
+    if (Math.abs(signedDistance) < EPS) return null;
+    const signs = this._offsetEntitySigns(entities);
+    return this._offsetPreviewDataForSignedDistance(entities, signs, signedDistance)
+      || this._clampOffsetDistanceToValidRange(entities, signs, signedDistance);
+  }
+
   _syncOffsetSelection() {
     const sketch = this.activeSketch(); if (!sketch) return;
     this.clearSelection();
@@ -6065,16 +6440,8 @@ class App {
     if (this.operationName !== 'offset' || !world) return;
     const entity = this.offsetAnchorId ? this._lookupAny(this.offsetAnchorId) : null;
     if (!entity) return;
-    if (entity instanceof Line) {
-      const dx = entity.p2.x - entity.p1.x;
-      const dy = entity.p2.y - entity.p1.y;
-      const len = Math.hypot(dx, dy);
-      if (len < EPS) return;
-      const nx = -dy / len, ny = dx / len;
-      this.offsetSide = ((world.x - entity.p1.x) * nx + (world.y - entity.p1.y) * ny) >= 0 ? 1 : -1;
-    } else {
-      this.offsetSide = dist(world, entity.center) >= entity.r ? 1 : -1;
-    }
+    const side = this._offsetCursorSide(entity, world);
+    if (side != null) this.offsetSide = side;
     const d = this._offsetDistanceFromCursor(world);
     if (d != null) this.offsetDistance = d;
   }
@@ -6185,6 +6552,7 @@ class App {
 
   handleOffsetPick(hit, world) {
     if (this.operationName !== 'offset') return false;
+    if (this.offsetPhase === 'typing') return true;
     if (!hit) {
       if (this.offsetEntityIds.length) {
         this.offsetPhase = 'placing';
@@ -6510,13 +6878,16 @@ class App {
             l2: { a: entity.p1.id, b: entity.p2.id } }
         ));
         distPairs.push({ kind: 'line', pointId: entity.p1.id,
-          l: { a: source.p1.id, b: source.p2.id } });
+          l: { a: source.p1.id, b: source.p2.id },
+          sourceEntityId: source.id,
+          targetEntityId: entity.id,
+          value: item.offsetValue });
       } else if ((source instanceof Circle || source instanceof Arc) && (entity instanceof Circle || entity instanceof Arc)) {
         sketch.constraints.push(new OffsetConstraint(
           source.id, entity.id, 'circle',
           { p1: source.center.id, p2: entity.center.id }
         ));
-        distPairs.push({ kind: 'circle', c1: entity.id, c2: source.id });
+        distPairs.push({ kind: 'circle', c1: entity.id, c2: source.id, value: item.offsetValue });
         if (source instanceof Arc && entity instanceof Arc) {
           sketch.constraints.push(new ParamFixConstraint(entity.id, 'a0', entity.a0));
           sketch.constraints.push(new ParamFixConstraint(entity.id, 'a1', entity.a1));
