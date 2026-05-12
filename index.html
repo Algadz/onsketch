@@ -1648,6 +1648,15 @@ function arcEndpointXY(L, ref) {
   };
 }
 
+function pointRefXY(L, ref) {
+  if (ref.pointId) return { x: L(ref.pointId, 'x'), y: L(ref.pointId, 'y') };
+  return arcEndpointXY(L, ref);
+}
+
+function pointRefIds(ref) {
+  return ref.pointId ? [ref.pointId] : [ref.arcId, ref.centerId];
+}
+
 class ArcEndpointCoincidentConstraint extends Constraint {
   constructor(ref, pointId) {
     super('arcEndpointCoincident');
@@ -1660,6 +1669,68 @@ class ArcEndpointCoincidentConstraint extends Constraint {
     return [p.x - L(this.pointId, 'x'), p.y - L(this.pointId, 'y')];
   }
   toJSON() { return { id:this.id, kind:'arcEndpointCoincident', ref:this.ref, pointId:this.pointId }; }
+}
+
+class ArcEndpointArcEndpointCoincidentConstraint extends Constraint {
+  constructor(ref1, ref2) {
+    super('arcEndpointArcEndpointCoincident');
+    this.ref1 = ref1;
+    this.ref2 = ref2;
+  }
+  refs() { return [this.ref1.arcId, this.ref1.centerId, this.ref2.arcId, this.ref2.centerId]; }
+  residuals(L) {
+    const a = arcEndpointXY(L, this.ref1);
+    const b = arcEndpointXY(L, this.ref2);
+    return [a.x - b.x, a.y - b.y];
+  }
+  toJSON() { return { id:this.id, kind:'arcEndpointArcEndpointCoincident', ref1:this.ref1, ref2:this.ref2 }; }
+}
+
+class PointRefHorizontalConstraint extends Constraint {
+  constructor(ref1, ref2) {
+    super('pointRefHorizontal');
+    this.ref1 = ref1;
+    this.ref2 = ref2;
+  }
+  refs() { return [...pointRefIds(this.ref1), ...pointRefIds(this.ref2)]; }
+  residuals(L) {
+    const a = pointRefXY(L, this.ref1);
+    const b = pointRefXY(L, this.ref2);
+    return [a.y - b.y];
+  }
+  toJSON() { return { id:this.id, kind:'pointRefHorizontal', ref1:this.ref1, ref2:this.ref2 }; }
+}
+
+class PointRefVerticalConstraint extends Constraint {
+  constructor(ref1, ref2) {
+    super('pointRefVertical');
+    this.ref1 = ref1;
+    this.ref2 = ref2;
+  }
+  refs() { return [...pointRefIds(this.ref1), ...pointRefIds(this.ref2)]; }
+  residuals(L) {
+    const a = pointRefXY(L, this.ref1);
+    const b = pointRefXY(L, this.ref2);
+    return [a.x - b.x];
+  }
+  toJSON() { return { id:this.id, kind:'pointRefVertical', ref1:this.ref1, ref2:this.ref2 }; }
+}
+
+class ArcEndpointMidpointConstraint extends Constraint {
+  constructor(ref, l) {
+    super('arcEndpointMidpoint');
+    this.ref = ref;
+    this.l = l;
+  }
+  refs() { return [this.ref.arcId, this.ref.centerId, this.l.a, this.l.b]; }
+  residuals(L) {
+    const p = arcEndpointXY(L, this.ref);
+    return [
+      2 * p.x - L(this.l.a, 'x') - L(this.l.b, 'x'),
+      2 * p.y - L(this.l.a, 'y') - L(this.l.b, 'y')
+    ];
+  }
+  toJSON() { return { id:this.id, kind:'arcEndpointMidpoint', ref:this.ref, l:this.l }; }
 }
 
 class ArcEndpointFixConstraint extends Constraint {
@@ -1714,7 +1785,9 @@ const CONSTRAINT_LABELS = {
   vertical:'Vertical', parallel:'Parallel', perpendicular:'Perpendicular',
   collinear:'Collinear', equalLength:'Equal length', equalRadius:'Equal radius',
   concentric:'Concentric', tangent:'Tangent', midpoint:'Midpoint', symmetric:'Symmetric',
-  arcEndpointCoincident:'Arc endpoint coincident', arcEndpointFix:'Arc endpoint fixed',
+  arcEndpointCoincident:'Arc endpoint coincident', arcEndpointArcEndpointCoincident:'Arc endpoint coincident',
+  pointRefHorizontal:'Horizontal', pointRefVertical:'Vertical',
+  arcEndpointFix:'Arc endpoint fixed', arcEndpointMidpoint:'Arc endpoint midpoint',
   arcEndpointOnLine:'Arc endpoint on line', arcEndpointOnCircle:'Arc endpoint on circle',
   distance:'Distance', radius:'Radius', curveDistance:'Curve distance', angle:'Angle', directedAngle:'Central angle',
   pointLineDistance:'Pt-Line dist',
@@ -1727,7 +1800,9 @@ const CONSTRAINT_GLYPHS = {
   parallel:'∥', perpendicular:'⟂', collinear:'≡',
   equal:'＝', equalLength:'＝', equalRadius:'＝',
   concentric:'⊙', tangent:'∽', midpoint:'⌐', symmetric:'⇋',
-  arcEndpointCoincident:'⌖', arcEndpointFix:'⚓',
+  arcEndpointCoincident:'⌖', arcEndpointArcEndpointCoincident:'⌖',
+  pointRefHorizontal:'━', pointRefVertical:'┃',
+  arcEndpointFix:'⚓', arcEndpointMidpoint:'⌐',
   arcEndpointOnLine:'⊥•', arcEndpointOnCircle:'○•',
   distance:'↔', radius:'R', diameter:'⌀', curveDistance:'↔', angle:'∠',
   pointLineDistance:'↔',
@@ -1766,18 +1841,148 @@ class Solver {
     };
   }
 
-  solve(activeSketch, allVisibleSketches = [activeSketch], extraConstraints = []) {
-    const params = this._collectParams(activeSketch);
-    const n = params.length;
+  _componentGroups(activeSketch, constraints) {
+    const graph = new Map();
+    const add = (id) => {
+      if (!id) return;
+      if (!graph.has(id)) graph.set(id, new Set());
+    };
+    const link = (a, b) => {
+      if (!a || !b || a === b) return;
+      add(a); add(b);
+      graph.get(a).add(b);
+      graph.get(b).add(a);
+    };
+    const walk = (e) => {
+      add(e.id);
+      for (const child of e.children()) {
+        add(child.id);
+        link(e.id, child.id);
+        walk(child);
+      }
+    };
+    for (const e of activeSketch.entities) walk(e);
+    for (const c of constraints) {
+      if (c.driven) continue;
+      const refs = c.refs().filter(Boolean);
+      for (const id of refs) add(id);
+      for (let i = 0; i < refs.length; i++) {
+        for (let j = i + 1; j < refs.length; j++) link(refs[i], refs[j]);
+      }
+    }
+
+    const seen = new Set();
+    const groups = [];
+    for (const e of activeSketch.entities) {
+      if (seen.has(e.id)) continue;
+      const ids = new Set();
+      const q = [e.id];
+      seen.add(e.id);
+      ids.add(e.id);
+      for (let qi = 0; qi < q.length; qi++) {
+        const id = q[qi];
+        for (const nb of (graph.get(id) || [])) {
+          if (seen.has(nb)) continue;
+          seen.add(nb);
+          ids.add(nb);
+          q.push(nb);
+        }
+      }
+      const entities = activeSketch.entities.filter(ent => {
+        if (ids.has(ent.id)) return true;
+        return ent.children().some(child => ids.has(child.id));
+      });
+      const groupConstraints = constraints.filter(c => c.refs().some(id => ids.has(id)));
+      groups.push({ ids, entities, constraints:groupConstraints });
+    }
+    return groups;
+  }
+
+  _solveComponents(activeSketch, allVisibleSketches, constraints, options) {
+    const groups = this._componentGroups(activeSketch, constraints);
+    if (groups.length <= 1) {
+      return this.solve(activeSketch, allVisibleSketches, [], { ...options, componentize:false });
+    }
+    const activeIds = options.activeIds instanceof Set
+      ? options.activeIds
+      : (options.activeIds ? new Set(options.activeIds) : null);
+    const groupsToSolve = activeIds && activeIds.size
+      ? groups.filter(g => [...activeIds].some(id => g.ids.has(id)))
+      : groups;
+    if (!groupsToSolve.length) {
+      const diagnostics = options.diagnostics !== false;
+      return {
+        ok:true, iters:0, residual:0, dof:diagnostics ? 0 : null,
+        n:0, m:0, rank:diagnostics ? 0 : null, redundant:0,
+        state:diagnostics ? 'under' : 'solved',
+        entityStatus:diagnostics ? new Map() : null,
+        redundantIds:diagnostics ? new Set() : null,
+        pinned:diagnostics ? [] : null, diagnostics
+      };
+    }
+
+    const diagnostics = options.diagnostics !== false;
+    const entityStatus = diagnostics ? new Map() : null;
+    const redundantIds = diagnostics ? new Set() : null;
+    const pinned = [];
+    let ok = true, iters = 0, residualSq = 0, n = 0, m = 0, rank = 0, redundant = 0, dof = 0;
+    let over = false, under = false;
+
+    for (const group of groupsToSolve) {
+      const subSketch = { entities: group.entities, constraints: group.constraints };
+      const r = this.solve(subSketch, allVisibleSketches, [], { ...options, componentize:false });
+      ok = ok && r.ok;
+      iters = Math.max(iters, r.iters || 0);
+      residualSq += (r.residual || 0) * (r.residual || 0);
+      n += r.n || 0;
+      m += r.m || 0;
+      if (diagnostics) {
+        rank += r.rank || 0;
+        redundant += r.redundant || 0;
+        dof += r.dof || 0;
+        if (r.state === 'over') over = true;
+        else if (r.state === 'under') under = true;
+        for (const [id, status] of r.entityStatus || []) entityStatus.set(id, status);
+        for (const id of r.redundantIds || []) redundantIds.add(id);
+        if (r.pinned) pinned.push(...r.pinned);
+      } else if (r.state === 'over') {
+        over = true;
+      }
+    }
+
+    const residual = Math.sqrt(residualSq);
+    const state = diagnostics
+      ? (over ? 'over' : (under || dof > 0 ? 'under' : 'fully'))
+      : (over || residual > 1e-3 ? 'over' : 'solved');
+    return {
+      ok, iters, residual, dof:diagnostics ? dof : null, n, m,
+      rank:diagnostics ? rank : null, redundant, state,
+      entityStatus, redundantIds, pinned:diagnostics ? pinned : null, diagnostics
+    };
+  }
+
+  solve(activeSketch, allVisibleSketches = [activeSketch], extraConstraints = [], options = {}) {
+    const diagnostics = options.diagnostics !== false;
     const constraints = extraConstraints.length
       ? activeSketch.constraints.concat(extraConstraints)
       : activeSketch.constraints;
+    if (options.componentize !== false && !extraConstraints.length && activeSketch.entities?.length > 1) {
+      return this._solveComponents(activeSketch, allVisibleSketches, constraints, options);
+    }
+    const params = this._collectParams(activeSketch);
+    const n = params.length;
 
-    if (n === 0) return { ok:true, iters:0, residual:0, dof:0, n:0, m:constraints.length, rank:0, redundant:0, state:'fully',
-                          entityStatus:new Map(), redundantIds:new Set(), pinned:[] };
+    if (n === 0) return { ok:true, iters:0, residual:0, dof:diagnostics ? 0 : null, n:0, m:constraints.length,
+                          rank:diagnostics ? 0 : null, redundant:0, state:diagnostics ? 'fully' : 'solved',
+                          entityStatus:diagnostics ? new Map() : null,
+                          redundantIds:diagnostics ? new Set() : null,
+                          pinned:diagnostics ? [] : null, diagnostics };
     if (constraints.length === 0) {
-      return { ok:true, iters:0, residual:0, dof:n, n, m:0, rank:0, redundant:0, state:'under',
-               entityStatus:new Map(), redundantIds:new Set(), pinned:new Array(n).fill(false) };
+      return { ok:true, iters:0, residual:0, dof:diagnostics ? n : null, n, m:0,
+               rank:diagnostics ? 0 : null, redundant:0, state:diagnostics ? 'under' : 'solved',
+               entityStatus:diagnostics ? new Map() : null,
+               redundantIds:diagnostics ? new Set() : null,
+               pinned:diagnostics ? new Array(n).fill(false) : null, diagnostics };
     }
 
     const L = this._lookupBuilder(allVisibleSketches);
@@ -1844,6 +2049,13 @@ class Solver {
     }
 
     const residual = Math.sqrt(f.reduce((s,v)=>s+v*v, 0));
+    if (!diagnostics) {
+      const state = residual > 1e-3 ? 'over' : 'solved';
+      return { ok: residual < 1e-4, iters, residual, dof:null, n, m, rank:null,
+               redundant:0, state, entityStatus:null, redundantIds:null, pinned:null,
+               diagnostics:false };
+    }
+
     // Rank-based analysis of the final Jacobian. The orthonormal basis
     // of J's row space lets us answer two questions cheaply:
     //   1) Is parameter j fully determined?  → projection of e_j onto
@@ -1916,8 +2128,18 @@ class Sketch {
     this.visible = true;
     this.entities = [];
     this.constraints = [];
+    this.features = [];
+    this.dirtyIds = new Set();
   }
-  addEntity(e) { e.layerId = this.id; this.entities.push(e); }
+  addEntity(e) {
+    e.layerId = this.id;
+    this.entities.push(e);
+    const mark = (x) => {
+      this.dirtyIds.add(x.id);
+      for (const c of x.children()) mark(c);
+    };
+    mark(e);
+  }
   removeEntity(e) {
     this.entities = this.entities.filter(x => x !== e);
     const ids = new Set();
@@ -1931,13 +2153,21 @@ class Sketch {
     }
     const staleIds = new Set([...ids].filter(id => !liveIds.has(id)));
     this.constraints = this.constraints.filter(c => !c.refs().some(r => staleIds.has(r)));
+    this.features = (this.features || []).filter(f => {
+      const refs = []
+        .concat(f.sourceEntityIds || [])
+        .concat(f.generatedEntityIds || []);
+      return !refs.some(id => staleIds.has(id));
+    });
   }
   toJSON() {
-    return {
+    const o = {
       id:this.id, name:this.name, visible:this.visible,
       entities:this.entities.map(e => e.toJSON()),
       constraints:this.constraints.map(c => c.toJSON())
     };
+    if (this.features && this.features.length) o.features = this.features;
+    return o;
   }
 }
 
@@ -1984,6 +2214,7 @@ class Project {
     p.sketches = (o.sketches || []).map(sj => {
       const s = new Sketch(sj.name);
       s.id = sj.id; s.visible = sj.visible !== false;
+      s.features = Array.isArray(sj.features) ? sj.features.map(f => ({ ...f })) : [];
       // CRITICAL — shared point identity must be preserved across revival.
       // Without this map, a corner that was a single Point shared by two
       // lines comes back as TWO Points carrying the same id. The solver's
@@ -2010,6 +2241,7 @@ class Project {
         const e = reviveEntity(ej);
         if (e) s.addEntity(e);
       }
+      s.dirtyIds.clear();
       for (const cj of (sj.constraints || [])) {
         let c = null;
         switch (cj.kind) {
@@ -2017,6 +2249,8 @@ class Project {
           case 'coincident':    c = new CoincidentConstraint(cj.p1, cj.p2); break;
           case 'horizontal':    c = new HorizontalConstraint(cj.lineId, cj.p1, cj.p2); break;
           case 'vertical':      c = new VerticalConstraint(cj.lineId, cj.p1, cj.p2); break;
+          case 'pointRefHorizontal': c = new PointRefHorizontalConstraint(cj.ref1, cj.ref2); break;
+          case 'pointRefVertical': c = new PointRefVerticalConstraint(cj.ref1, cj.ref2); break;
           case 'symmetric':     c = new SymmetricConstraint(cj.p1, cj.p2, cj.axis); break;
           case 'parallel':      c = new ParallelConstraint(cj.l1, cj.l2); break;
           case 'perpendicular': c = new PerpendicularConstraint(cj.l1, cj.l2); break;
@@ -2036,6 +2270,8 @@ class Project {
           case 'pointOnLine':   c = new PointOnLineConstraint(cj.pointId, cj.l); break;
           case 'pointOnCircle': c = new PointOnCircleConstraint(cj.pointId, cj.circleId, cj.centerId); break;
           case 'arcEndpointCoincident': c = new ArcEndpointCoincidentConstraint(cj.ref, cj.pointId); break;
+          case 'arcEndpointArcEndpointCoincident': c = new ArcEndpointArcEndpointCoincidentConstraint(cj.ref1, cj.ref2); break;
+          case 'arcEndpointMidpoint': c = new ArcEndpointMidpointConstraint(cj.ref, cj.l); break;
           case 'arcEndpointFix': c = new ArcEndpointFixConstraint(cj.ref, cj.x, cj.y); break;
           case 'arcEndpointOnLine': c = new ArcEndpointOnLineConstraint(cj.ref, cj.l); break;
           case 'arcEndpointOnCircle': c = new ArcEndpointOnCircleConstraint(cj.ref, cj.circleId, cj.centerId); break;
@@ -2834,6 +3070,7 @@ class SelectTool extends Tool {
     super(app);
     this.dragging = null;
     this.box = null;
+    this.boxMode = 'select';
   }
   hint() { return 'Click to select. Ctrl-click to add/remove. Drag to move. Click a selected driving dimension to edit.'; }
   onPointerDown(world, snap, ev) {
@@ -2861,22 +3098,27 @@ class SelectTool extends Tool {
       return;
     }
     const hit = this.app.hitTestActiveSketch(world);
+    const isToggle = ev.ctrlKey || ev.metaKey;
+    const isAdd    = ev.shiftKey;
     if (this.app.operationName === 'mirror') {
       this.app.handleMirrorPick(hit);
       return;
     }
     if (this.app.operationName === 'offset') {
       if (this.app.offsetPhase === 'typing') return;
-      if (!hit && this.app.offsetEntityIds.length && this.app.offsetPhase === 'placing') {
-        this.app.updateOffsetCursor(world);
-        this.app._showOffsetInput();
+      if (!hit) {
+        this.boxMode = 'offset';
+        this.box = {
+          x0: world.x, y0: world.y, x1: world.x, y1: world.y,
+          replace: !isAdd && !isToggle,
+          sx0: sx, sy0: sy
+        };
+        this.app.requestRender();
         return;
       }
       this.app.handleOffsetPick(hit, world);
       return;
     }
-    const isToggle = ev.ctrlKey || ev.metaKey;
-    const isAdd    = ev.shiftKey;
     if (hit) {
       if (isToggle) this.app.setSelected(hit, !hit.selected);
       else if (isAdd) this.app.setSelected(hit, true);
@@ -2909,6 +3151,7 @@ class SelectTool extends Tool {
       this.app.requestRender();
     } else {
       if (!isAdd && !isToggle) this.app.clearSelection();
+      this.boxMode = 'select';
       this.box = { x0: world.x, y0: world.y, x1: world.x, y1: world.y };
       this.app.requestRender();
     }
@@ -2938,16 +3181,28 @@ class SelectTool extends Tool {
       let dx = world.x - this.dragging.startWorld.x;
       let dy = world.y - this.dragging.startWorld.y;
       let primary = null;
+      let result = null;
+      this.dragging.rejectedSnapKeys = new Set();
       if (snap && snap.dragRecord && !this.app.shouldIgnoreDragSnap(this.dragging, snap)) {
-        ({ dx, dy } = this.app._dragDeltaForSnap(this.dragging, snap));
-        primary = snap;
+        const snapped = this.app._dragDeltaForSnap(this.dragging, snap);
+        result = this.app.solveLocalizedDrag(this.dragging, snapped.dx, snapped.dy);
+        if (result && result.ok && !result.rejected) {
+          dx = snapped.dx;
+          dy = snapped.dy;
+          primary = snap;
+        } else {
+          snap.rejected = true;
+          this.dragging.rejectedSnapKeys.add(this.app._snapKey(snap));
+          this.app.lastSnap = null;
+          result = null;
+        }
       }
-      this.app.solveLocalizedDrag(this.dragging, dx, dy);
+      if (!result) result = this.app.solveLocalizedDrag(this.dragging, dx, dy);
       // After the solve, probe each *other* handle at its now-final
       // position so secondary snaps (e.g. the far end of a dragged line
       // happening to fall on another line) light up too. This mirrors
       // creation, where each click contributes its own snap constraint.
-      this.dragging.endSnaps = this.app.collectDragSnaps(this.dragging, primary);
+      this.dragging.endSnaps = result?.rejected ? [] : this.app.collectDragSnaps(this.dragging, primary);
       this.app.lastDragSnaps = this.dragging.endSnaps;
       this.app.requestRender();
     } else if (this.box) {
@@ -2984,10 +3239,27 @@ class SelectTool extends Tool {
       return;
     }
     if (this.box) {
+      const wasOffsetBox = this.boxMode === 'offset';
+      const box = this.box;
       const x0 = Math.min(this.box.x0, this.box.x1);
       const y0 = Math.min(this.box.y0, this.box.y1);
       const x1 = Math.max(this.box.x0, this.box.x1);
       const y1 = Math.max(this.box.y0, this.box.y1);
+      const movedPx = Math.hypot((world.x - box.x0) * this.app.view.zoom, (world.y - box.y0) * this.app.view.zoom);
+      this.box = null;
+      this.boxMode = 'select';
+
+      if (wasOffsetBox && movedPx <= 3) {
+        if (this.app.offsetEntityIds.length && this.app.offsetPhase === 'placing') {
+          this.app.updateOffsetCursor(world);
+          this.app._showOffsetInput();
+        }
+        return;
+      }
+
+      if (wasOffsetBox && box.replace) this.app.offsetEntityIds = [];
+      else if (!wasOffsetBox && box.replace) this.app.clearSelection();
+
       for (const s of this.app.activeVisibleSketches()) {
         for (const e of s.entities) {
           const inBox = (p) => p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1;
@@ -2996,10 +3268,21 @@ class SelectTool extends Tool {
           else if (e instanceof Circle) inside = inBox(e.center);
           else if (e instanceof Arc)    inside = inBox(e.center);
           else if (e instanceof Point)  inside = inBox(e);
-          if (inside) this.app.setSelected(e, true);
+          if (!inside) continue;
+          if (wasOffsetBox) {
+            if (e instanceof Line || e instanceof Circle || e instanceof Arc) {
+              if (!this.app.offsetEntityIds.includes(e.id)) this.app.offsetEntityIds.push(e.id);
+            }
+          } else {
+            this.app.setSelected(e, true);
+          }
         }
       }
-      this.box = null;
+      if (wasOffsetBox) {
+        this.app.offsetAnchorId = this.app.offsetEntityIds[0] || null;
+        this.app.offsetPhase = this.app.offsetEntityIds.length ? 'placing' : 'selecting';
+        this.app._syncOffsetSelection();
+      }
       this.app.refreshUI();
     }
     if (this.dragging) {
@@ -4176,11 +4459,15 @@ class SmartDimensionTool extends Tool {
       // sketch, demote it to a "driven" dimension — informational only,
       // doesn't enforce. SolidWorks asks the user; we just do it silently
       // and render in grey.
-      const probe = this.app.solver.solve(sketch, this.app.project.sketches);
+      const affectedIds = made.refs();
+      const probe = this.app.solver.solve(sketch, this.app.project.sketches, [], {
+        diagnostics:true,
+        activeIds:affectedIds
+      });
       if (probe.state === 'over' || (probe.redundantIds && probe.redundantIds.has(made.id))) {
         made.driven = true;
       }
-      this.app.commit();
+      this.app.commit({ activeIds: affectedIds });
       this.app.refreshUI();
     }
   }
@@ -4217,15 +4504,28 @@ function constraintAppliesToSelection(c, sel) {
 
   for (const e of sel) {
     if (e instanceof Point) {
+      const arcRef = (e.arcOwner instanceof Arc && (e.arcEndpoint === 'start' || e.arcEndpoint === 'end'))
+        ? { arcId:e.arcOwner.id, centerId:e.arcOwner.center.id, which:e.arcEndpoint }
+        : null;
+      const sameArcRef = (r) => arcRef && r && r.arcId === arcRef.arcId && r.centerId === arcRef.centerId && r.which === arcRef.which;
       if (c.kind === 'fix') return c.pointId === e.id;
+      if (c.kind === 'arcEndpointFix') return sameArcRef(c.ref);
       if (c.kind === 'coincident') return c.p1 === e.id || c.p2 === e.id;
+      if (c.kind === 'arcEndpointCoincident') return c.pointId === e.id || sameArcRef(c.ref);
+      if (c.kind === 'arcEndpointArcEndpointCoincident') return sameArcRef(c.ref1) || sameArcRef(c.ref2);
+      if (c.kind === 'pointRefHorizontal' || c.kind === 'pointRefVertical') {
+        return c.ref1.pointId === e.id || c.ref2.pointId === e.id || sameArcRef(c.ref1) || sameArcRef(c.ref2);
+      }
       if (c.kind === 'distance') return c.p1 === e.id || c.p2 === e.id;
       if (c.kind === 'curveDistance') return c.c1 === e.id || c.c2 === e.id;
       if (c.kind === 'pointLineDistance') return c.pointId === e.id;
       if (c.kind === 'offsetDistance') return c.pairs && c.pairs.some(p => p.kind === 'line' ? p.pointId === e.id : false);
       if (c.kind === 'midpoint') return c.pointId === e.id;
+      if (c.kind === 'arcEndpointMidpoint') return sameArcRef(c.ref);
       if (c.kind === 'pointOnLine') return c.pointId === e.id;
+      if (c.kind === 'arcEndpointOnLine') return sameArcRef(c.ref);
       if (c.kind === 'pointOnCircle') return c.pointId === e.id;
+      if (c.kind === 'arcEndpointOnCircle') return sameArcRef(c.ref);
       if (c.kind === 'concentric') return c.p1 === e.id || c.p2 === e.id;
       if (c.kind === 'symmetric') return c.p1 === e.id || c.p2 === e.id;
       if ((c.kind === 'horizontal' || c.kind === 'vertical') &&
@@ -4411,6 +4711,10 @@ class App {
     this.selectionOrder = [];
     this.dirty = true;
     this.undoStack = []; this.redoStack = [];
+    this._diagnosticsToken = 0;
+    this._diagnosticsFrame = null;
+    this._diagnosticsTimer = null;
+    this._diagnosticsIdleId = null;
 
     this._setupCanvasEvents();
     this._setupKeyboard();
@@ -4465,10 +4769,16 @@ class App {
     }
     if (endpointRef) {
       if (snap.kind === 'endpoint' && snap.entity instanceof Point && snap.entity !== point) {
-        if (snapEndpointRef) return null;
+        if (snapEndpointRef) return new ArcEndpointArcEndpointCoincidentConstraint(endpointRef, snapEndpointRef);
         return new ArcEndpointCoincidentConstraint(endpointRef, snap.entity.id);
       }
       if (snap.kind === 'origin') return new ArcEndpointFixConstraint(endpointRef, 0, 0);
+      if (snap.kind === 'midpoint' && snap.entity instanceof Line) {
+        return new ArcEndpointMidpointConstraint(endpointRef, { a: snap.entity.p1.id, b: snap.entity.p2.id });
+      }
+      if (snap.kind === 'center' && snap.entity && snap.entity.center) {
+        return new ArcEndpointCoincidentConstraint(endpointRef, snap.entity.center.id);
+      }
       if (snap.kind === 'on-line' && snap.entity instanceof Line) {
         return new ArcEndpointOnLineConstraint(endpointRef, { a: snap.entity.p1.id, b: snap.entity.p2.id });
       }
@@ -4499,6 +4809,54 @@ class App {
       return new PointOnCircleConstraint(point.id, snap.entity.id, snap.entity.center.id);
     }
     return null;
+  }
+
+  _pointRef(point) {
+    return this.arcEndpointRef(point) || { pointId: point.id };
+  }
+
+  _fixConstraintForPoint(point) {
+    const ref = this.arcEndpointRef(point);
+    return ref ? new ArcEndpointFixConstraint(ref, point.x, point.y) : new FixConstraint(point.id, point.x, point.y);
+  }
+
+  _coincidentConstraintForPoints(a, b) {
+    const ar = this.arcEndpointRef(a);
+    const br = this.arcEndpointRef(b);
+    if (ar && br) return new ArcEndpointArcEndpointCoincidentConstraint(ar, br);
+    if (ar) return new ArcEndpointCoincidentConstraint(ar, b.id);
+    if (br) return new ArcEndpointCoincidentConstraint(br, a.id);
+    return new CoincidentConstraint(a.id, b.id);
+  }
+
+  _axisConstraintForPoints(kind, a, b) {
+    const ar = this.arcEndpointRef(a);
+    const br = this.arcEndpointRef(b);
+    if (ar || br) {
+      const C = kind === 'horizontal' ? PointRefHorizontalConstraint : PointRefVerticalConstraint;
+      return new C(this._pointRef(a), this._pointRef(b));
+    }
+    const C = kind === 'horizontal' ? HorizontalConstraint : VerticalConstraint;
+    return new C(newId('virt'), a.id, b.id);
+  }
+
+  _midpointConstraintForPoint(point, line) {
+    const ref = this.arcEndpointRef(point);
+    const l = { a: line.p1.id, b: line.p2.id };
+    return ref ? new ArcEndpointMidpointConstraint(ref, l) : new MidpointConstraint(point.id, l);
+  }
+
+  _pointOnLineConstraintForPoint(point, line) {
+    const ref = this.arcEndpointRef(point);
+    const l = { a: line.p1.id, b: line.p2.id };
+    return ref ? new ArcEndpointOnLineConstraint(ref, l) : new PointOnLineConstraint(point.id, l);
+  }
+
+  _pointOnCircleConstraintForPoint(point, curve) {
+    const ref = this.arcEndpointRef(point);
+    return ref
+      ? new ArcEndpointOnCircleConstraint(ref, curve.id, curve.center.id)
+      : new PointOnCircleConstraint(point.id, curve.id, curve.center.id);
   }
 
   pointsCoincidentInSketch(sketch, a, b) {
@@ -4635,6 +4993,7 @@ class App {
           this.shouldIgnoreDragSnap(drag, candidate)
       });
       if (!snap) continue;
+      if (drag.rejectedSnapKeys && drag.rejectedSnapKeys.has(this._snapKey(snap))) continue;
       // It's fine if a secondary picks up the same feature as the primary
       // — e.g. dragging both endpoints of a line onto the same reference
       // line gives two distinct PointOnLine constraints (different points,
@@ -4658,7 +5017,7 @@ class App {
       const { id, ...rest } = o;
       return JSON.stringify(rest);
     };
-    const exactKinds = new Set(['arcEndpointCoincident', 'arcEndpointFix', 'arcEndpointOnLine', 'arcEndpointOnCircle', 'curveDistance', 'offset', 'offsetDistance']);
+    const exactKinds = new Set(['arcEndpointCoincident', 'arcEndpointArcEndpointCoincident', 'arcEndpointFix', 'arcEndpointMidpoint', 'arcEndpointOnLine', 'arcEndpointOnCircle', 'pointRefHorizontal', 'pointRefVertical', 'curveDistance', 'offset', 'offsetDistance']);
     if (exactKinds.has(c.kind)) {
       const aExact = key(c);
       return sketch.constraints.some(ex => ex.kind === c.kind && key(ex) === aExact);
@@ -4995,6 +5354,11 @@ class App {
         const dx2=L(c.l2.b,'x')-L(c.l2.a,'x'), dy2=L(c.l2.b,'y')-L(c.l2.a,'y');
         if (Math.hypot(dx1, dy1) <= EPS || Math.hypot(dx2, dy2) <= EPS) return false;
         if (dx1 * dx2 + dy1 * dy2 <= EPS) return false;
+      } else if (c.kind === 'offset' && c.offsetKind === 'circle') {
+        const source = this._lookupAny(c.sourceEntityId);
+        const target = this._lookupAny(c.targetEntityId);
+        if ((source instanceof Circle || source instanceof Arc) && source.r <= EPS) return false;
+        if ((target instanceof Circle || target instanceof Arc) && target.r <= EPS) return false;
       } else if (c.kind === 'offsetDistance' && c.pairs) {
         for (const p of c.pairs) {
           if (p.value == null || Math.abs(p.value) <= EPS) continue;
@@ -5016,14 +5380,175 @@ class App {
     return true;
   }
 
+  _lineLengthById(id) {
+    const e = this._lookupAny(id);
+    return e instanceof Line ? dist(e.p1, e.p2) : null;
+  }
+
+  _curveRadiusById(id) {
+    const e = this._lookupAny(id);
+    return (e instanceof Circle || e instanceof Arc) ? e.r : null;
+  }
+
+  _minOffsetDragSize(size) {
+    const zoom = this.view?.zoom || 4;
+    const visualFloor = 4 / zoom;
+    return Math.max(EPS, Math.min(size * 0.1, visualFloor));
+  }
+
+  _signedAreaForPointIds(pointIds) {
+    if (!pointIds || pointIds.length < 3) return 0;
+    let area = 0;
+    for (let i = 0; i < pointIds.length; i++) {
+      const a = this._lookupAny(pointIds[i]);
+      const b = this._lookupAny(pointIds[(i + 1) % pointIds.length]);
+      if (!a || !b) return 0;
+      area += a.x * b.y - b.x * a.y;
+    }
+    return area / 2;
+  }
+
+  _closedLineLoopsFromEntityIds(entityIds) {
+    const lines = [];
+    for (const id of entityIds || []) {
+      const e = this._lookupAny(id);
+      if (e instanceof Line) lines.push(e);
+    }
+    if (lines.length < 3) return [];
+
+    const byPoint = new Map();
+    const lineById = new Map();
+    const addAtPoint = (p, line) => {
+      if (!byPoint.has(p.id)) byPoint.set(p.id, []);
+      byPoint.get(p.id).push(line);
+    };
+    for (const line of lines) {
+      lineById.set(line.id, line);
+      addAtPoint(line.p1, line);
+      addAtPoint(line.p2, line);
+    }
+
+    const unvisited = new Set(lines.map(l => l.id));
+    const loops = [];
+    while (unvisited.size) {
+      const seedId = unvisited.values().next().value;
+      const componentIds = new Set();
+      const stack = [lineById.get(seedId)];
+      while (stack.length) {
+        const line = stack.pop();
+        if (!line || componentIds.has(line.id)) continue;
+        componentIds.add(line.id);
+        unvisited.delete(line.id);
+        for (const p of [line.p1, line.p2]) {
+          for (const next of byPoint.get(p.id) || []) {
+            if (!componentIds.has(next.id)) stack.push(next);
+          }
+        }
+      }
+      if (componentIds.size < 3) continue;
+
+      const componentPoints = new Set();
+      for (const id of componentIds) {
+        const line = lineById.get(id);
+        componentPoints.add(line.p1.id);
+        componentPoints.add(line.p2.id);
+      }
+      let closed = true;
+      for (const pointId of componentPoints) {
+        const degree = (byPoint.get(pointId) || []).filter(l => componentIds.has(l.id)).length;
+        if (degree !== 2) { closed = false; break; }
+      }
+      if (!closed) continue;
+
+      const first = lineById.get(componentIds.values().next().value);
+      const startId = first.p1.id;
+      let currentId = first.p2.id;
+      let previousLineId = first.id;
+      const used = new Set([first.id]);
+      const pointIds = [first.p1.id, first.p2.id];
+      let ok = true;
+      while (currentId !== startId) {
+        const candidates = (byPoint.get(currentId) || [])
+          .filter(l => componentIds.has(l.id) && l.id !== previousLineId && !used.has(l.id));
+        if (candidates.length !== 1) { ok = false; break; }
+        const next = candidates[0];
+        used.add(next.id);
+        const nextPoint = next.p1.id === currentId ? next.p2 : next.p1;
+        pointIds.push(nextPoint.id);
+        previousLineId = next.id;
+        currentId = nextPoint.id;
+        if (used.size > componentIds.size) { ok = false; break; }
+      }
+      if (!ok || used.size !== componentIds.size) continue;
+      if (pointIds[pointIds.length - 1] === startId) pointIds.pop();
+      loops.push({ pointIds });
+    }
+    return loops;
+  }
+
+  _offsetFeatureTouchesIds(feature, seedIds) {
+    if (!seedIds || !seedIds.size) return true;
+    const ids = []
+      .concat(feature.sourceEntityIds || [])
+      .concat(feature.generatedEntityIds || []);
+    for (const id of ids) {
+      if (seedIds.has(id)) return true;
+      const e = this._lookupAny(id);
+      if (!e || !e.children) continue;
+      for (const child of e.children()) {
+        if (seedIds.has(child.id)) return true;
+      }
+    }
+    return false;
+  }
+
+  _captureOffsetDragGuard(sketch, seedIds = null) {
+    const guard = { lines: [], curves: [] };
+    if (!sketch) return guard;
+    const seedSet = seedIds ? new Set(seedIds) : null;
+    const features = sketch.features || [];
+    for (const feature of features) {
+      if (feature.kind !== 'offset') continue;
+      if (!this._offsetFeatureTouchesIds(feature, seedSet)) continue;
+      for (const ids of [feature.sourceEntityIds || [], feature.generatedEntityIds || []]) {
+        for (const id of ids) {
+          const len = this._lineLengthById(id);
+          if (len != null && len > EPS) {
+            guard.lines.push({ id, minLength:this._minOffsetDragSize(len) });
+          }
+          const radius = this._curveRadiusById(id);
+          if (radius != null && radius > EPS) {
+            guard.curves.push({ id, minRadius:this._minOffsetDragSize(radius) });
+          }
+        }
+      }
+    }
+    return guard;
+  }
+
+  _offsetDragGuardValid(guard) {
+    if (!guard) return true;
+    for (const item of guard.lines || []) {
+      const len = this._lineLengthById(item.id);
+      if (len == null) continue;
+      if (len <= item.minLength) return false;
+    }
+    for (const item of guard.curves || []) {
+      const radius = this._curveRadiusById(item.id);
+      if (radius == null) continue;
+      if (radius <= item.minRadius) return false;
+    }
+    return true;
+  }
+
   _finishDragStep(drag, result) {
     const sketch = this.activeSketch();
     if (!sketch) return result;
-    if (sketch && !this._offsetGeometryValid(sketch)) {
+    if (sketch && (!this._offsetGeometryValid(sketch) || !this._offsetDragGuardValid(drag?.offsetGuard))) {
       if (drag?.lastValidValues) this._applyParamValues(drag.state, drag.lastValidValues);
       else if (drag?.state) this._restoreSketchParams(drag.state);
       for (const e of sketch.entities) if (e instanceof Arc) e.syncEnds();
-      return { ...(result || {}), ok:false, state:this._lastSolve?.state || 'under' };
+      return { ...(result || {}), ok:false, rejected:true, state:this._lastSolve?.state || 'under' };
     }
     if (drag?.state) drag.lastValidValues = this._captureParamValues(drag.state);
     for (const e of sketch.entities) if (e instanceof Arc) e.syncEnds();
@@ -5061,6 +5586,49 @@ class App {
       if (c.kind !== 'offsetDistance' || !c.pairs) continue;
       this._setOffsetDistanceValue(c, c.value);
     }
+  }
+
+  _offsetLinkedSnapIgnoreIds(sketch, seedIds) {
+    const ignore = new Set(seedIds || []);
+    let touchesOffset = false;
+    for (const c of sketch.constraints) {
+      if (c.kind === 'offset' && c.refs().some(id => ignore.has(id))) {
+        touchesOffset = true;
+        break;
+      }
+    }
+    if (!touchesOffset) return ignore;
+
+    const addEntity = (id) => {
+      if (!id) return;
+      ignore.add(id);
+      const e = this._lookupAny(id);
+      if (e && e.children) {
+        for (const child of e.children()) ignore.add(child.id);
+      }
+    };
+    const addMany = (ids) => ids.forEach(addEntity);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      const before = ignore.size;
+      for (const c of sketch.constraints) {
+        if (c.kind === 'offset') {
+          const sourceRefs = c.offsetKind === 'line'
+            ? [c.sourceEntityId, c.l1.a, c.l1.b]
+            : [c.sourceEntityId, c.p1];
+          const targetRefs = c.offsetKind === 'line'
+            ? [c.targetEntityId, c.l2.a, c.l2.b]
+            : [c.targetEntityId, c.p2];
+          if (sourceRefs.some(id => ignore.has(id)) || targetRefs.some(id => ignore.has(id))) {
+            addMany(sourceRefs);
+            addMany(targetRefs);
+          }
+        }
+      }
+      changed = ignore.size !== before;
+    }
+    return ignore;
   }
 
   _buildConstraintGraph(sketch) {
@@ -5383,7 +5951,7 @@ class App {
         state:localState,
         distances,
         rigidLines,
-        snapIgnoreIds:new Set(distances.keys())
+        snapIgnoreIds:this._offsetLinkedSnapIgnoreIds(sketch, distances.keys())
       };
     }
     let responsive = false;
@@ -5406,7 +5974,7 @@ class App {
       distances,
       rigidLines,
       lookup,
-      snapIgnoreIds:new Set(distances.keys())
+      snapIgnoreIds:this._offsetLinkedSnapIgnoreIds(sketch, distances.keys())
     };
   }
 
@@ -5496,6 +6064,9 @@ class App {
     const sketch = this.activeSketch();
     this._ensureOffsetPairSigns(sketch);
     const state = this._captureSketchParams(sketch);
+    const initialDragIds = new Set(pts.map(r => r.p.id));
+    if (hit?.id) initialDragIds.add(hit.id);
+    const offsetGuard = this._captureOffsetDragGuard(sketch, initialDragIds);
     // Circle perimeter resize: when the center is fully determined by constraints,
     // dragging the perimeter should resize the circle rather than translate it.
     if (hit instanceof Circle &&
@@ -5507,7 +6078,8 @@ class App {
         snapPts: [],
         state,
         circle: hit,
-        snapIgnoreIds: new Set([hit.id, hit.center.id])
+        offsetGuard,
+        snapIgnoreIds: this._offsetLinkedSnapIgnoreIds(sketch, [hit.id, hit.center.id])
       };
     }
 
@@ -5526,7 +6098,8 @@ class App {
         startAngle:hit.arcEndpoint === 'start' ? hit.arcOwner.a0 : hit.arcOwner.a1,
         referenceAngle:hit.arcEndpoint === 'start' ? hit.arcOwner.a1 : hit.arcOwner.a0,
         unwrappedAngle:hit.arcEndpoint === 'start' ? hit.arcOwner.a0 : hit.arcOwner.a1,
-        snapIgnoreIds:new Set([hit.id, hit.arcOwner.id])
+        offsetGuard,
+        snapIgnoreIds:this._offsetLinkedSnapIgnoreIds(sketch, [hit.id, hit.arcOwner.id])
       };
     }
     const graph = this._buildConstraintGraph(sketch);
@@ -5561,16 +6134,21 @@ class App {
           startWorld,
           pts:rigidPts,
           snapPts:pts,
+          state,
           startIds,
           distances,
           rigidLines,
-          snapIgnoreIds:moveIds
+          offsetGuard,
+          snapIgnoreIds:this._offsetLinkedSnapIgnoreIds(sketch, moveIds)
         };
       }
     }
 
     const dofDrag = this._beginDofDrag(sketch, state, startWorld, pts, hit, distances, rigidLines);
-    if (dofDrag) return dofDrag;
+    if (dofDrag) {
+      dofDrag.offsetGuard = offsetGuard;
+      return dofDrag;
+    }
 
     const solveGraph = this._buildSolvingGraph(sketch);
     const solveComponents = [];
@@ -5589,7 +6167,7 @@ class App {
       const anchor = anchors[0];
       const moveIds = new Set();
       for (const c of solveComponents) for (const id of c) moveIds.add(id);
-      const snapIgnoreIds = new Set(moveIds);
+      const snapIgnoreIds = this._offsetLinkedSnapIgnoreIds(sketch, moveIds);
       for (const c of components) for (const id of c) snapIgnoreIds.add(id);
       const rotatePts = [];
       for (const [id, p] of pointById) {
@@ -5607,11 +6185,13 @@ class App {
           pts:rotatePts,
           transformParams,
           snapPts:pts.filter(r => r.p !== anchor),
+          state,
           startIds,
           distances,
           rigidLines,
           anchor:{ p:anchor, x:anchor.x, y:anchor.y },
           rotateHandle:handle,
+          offsetGuard,
           snapIgnoreIds
         };
       }
@@ -5623,7 +6203,9 @@ class App {
       if (Number.isFinite(d)) depthSet.add(d);
     }
     const depths = [...depthSet].sort((a, b) => a - b);
-    return { startWorld, pts, snapPts:pts, state, startIds, distances, depths, rigidLines, snapIgnoreIds:new Set(distances.keys()) };
+    return { startWorld, pts, snapPts:pts, state, startIds, distances, depths, rigidLines,
+      offsetGuard,
+      snapIgnoreIds:this._offsetLinkedSnapIgnoreIds(sketch, distances.keys()) };
   }
 
   _dragMovableIds(drag, depth) {
@@ -5676,7 +6258,7 @@ class App {
     if (!movableIds.size) return null;
 
     const extra = this._dragTempConstraints(beforeState, movableIds, null);
-    const result = this.solver.solve(sketch, this.project.sketches, extra);
+    const result = this.solver.solve(sketch, this.project.sketches, extra, { diagnostics:false });
     if (result.ok) return result;
 
     this._restoreSketchParams(beforeState);
@@ -5692,6 +6274,12 @@ class App {
     }
     if (!snap.entity || !snap.entity.id) return false;
     return !!(drag.snapIgnoreIds && drag.snapIgnoreIds.has(snap.entity.id));
+  }
+
+  _snapKey(snap) {
+    if (!snap) return '';
+    const entityId = snap.entity?.id || '';
+    return `${snap.kind || ''}:${entityId}:${Math.round((snap.x || 0) * 1e6)}:${Math.round((snap.y || 0) * 1e6)}`;
   }
 
   _rotationDeltaFromDrag(drag, dx, dy) {
@@ -5853,7 +6441,7 @@ class App {
       placeDraggedPoints();
       const movable = this._dragMovableIds(drag, depth);
       const extra = this._dragTempConstraints(drag.state, movable, includeTargets ? targets : null, drag);
-      const result = this.solver.solve(sketch, this.project.sketches, extra);
+      const result = this.solver.solve(sketch, this.project.sketches, extra, { diagnostics:false });
       const values = this._captureParamValues(drag.state);
       if (!best || result.residual < best.result.residual) best = { result, values };
       return result;
@@ -5879,26 +6467,95 @@ class App {
   }
 
   /* ---- Solving ---- */
-  commit() {
+  commit(options = {}) {
+    const diagnostics = options.diagnostics || 'none';
+    const sketch = this.activeSketch();
+    const activeIds = options.activeIds
+      ? new Set(options.activeIds)
+      : (sketch && sketch.dirtyIds && sketch.dirtyIds.size ? new Set(sketch.dirtyIds) : null);
     this.undoStack.push(JSON.stringify(this.project.toJSON()));
     if (this.undoStack.length > 100) this.undoStack.shift();
     this.redoStack.length = 0;
-    this.solveAndRender();
+    if (sketch?.dirtyIds) sketch.dirtyIds.clear();
+    if (diagnostics === 'sync') this.solveAndRender();
+    else this.solveFastAndRender({ diagnostics, activeIds });
   }
 
   solveSoft() {
     const sketch = this.activeSketch(); if (!sketch) return;
-    const r = this.solver.solve(sketch, this.project.sketches);
+    const r = this.solver.solve(sketch, this.project.sketches, [], { diagnostics:true });
     for (const e of sketch.entities) if (e instanceof Arc) e.syncEnds();
     this._updateConstraintStatus(r);
     this._lastSolve = r;
   }
 
-  solveAndRender() {
+  solveFastAndRender(options = {}) {
+    const scheduleDiagnostics = options.diagnostics === 'defer';
+    if (!scheduleDiagnostics) this._cancelPendingDiagnostics();
     const sketch = this.activeSketch();
     if (!sketch) { this.requestRender(); return; }
     const t0 = performance.now();
-    const r = this.solver.solve(sketch, this.project.sketches);
+    const r = this.solver.solve(sketch, this.project.sketches, [], {
+      diagnostics:false,
+      activeIds: options.activeIds || null
+    });
+    const t1 = performance.now();
+    for (const e of sketch.entities) if (e instanceof Arc) e.syncEnds();
+
+    const solvePill = document.getElementById('status-solve');
+    solvePill.classList.remove('ok','warn','error');
+    const totalConstraints = sketch.constraints.filter(c => !c.driven).length;
+    if (totalConstraints === 0) { solvePill.textContent = 'no constraints'; solvePill.classList.add('warn'); }
+    else if (r.ok)            { solvePill.textContent = `solved (${r.iters} it, ${(t1-t0).toFixed(1)} ms)`; solvePill.classList.add('ok'); }
+    else                       { solvePill.textContent = `not solved (res ${r.residual.toExponential(2)})`; solvePill.classList.add('error'); }
+
+    if (r.state === 'over') {
+      const statePill = document.getElementById('status-state');
+      statePill.classList.remove('ok','warn','error');
+      statePill.textContent = 'Over-defined';
+      statePill.classList.add('error');
+    } else if (scheduleDiagnostics) {
+      const statePill = document.getElementById('status-state');
+      statePill.classList.remove('ok','warn','error');
+      statePill.textContent = 'Checking...';
+      statePill.classList.add('warn');
+      document.getElementById('status-dof').textContent = 'DOF: ...';
+    }
+
+    this.updateAffectedConstraintStatus(options.activeIds || null);
+    this.requestRender();
+    if (scheduleDiagnostics) this.requestDiagnostics();
+  }
+
+  updateAffectedConstraintStatus(activeIds) {
+    const sketch = this.activeSketch();
+    if (!sketch || !activeIds || !activeIds.size) return;
+    const r = this.solver.solve(sketch, this.project.sketches, [], {
+      diagnostics:true,
+      activeIds
+    });
+    const overOverall = r.state === 'over';
+    for (const e of sketch.entities) {
+      const status = r.entityStatus?.get(e.id);
+      if (status) e.status = overOverall ? 'over' : status;
+      for (const child of e.children()) {
+        const childStatus = r.entityStatus?.get(child.id);
+        if (childStatus) child.status = overOverall ? 'over' : childStatus;
+      }
+    }
+    this._lastSolve = {
+      ...(this._lastSolve || {}),
+      state: r.state,
+      redundantIds: this._lastSolve?.redundantIds || new Set()
+    };
+  }
+
+  solveAndRender() {
+    this._cancelPendingDiagnostics();
+    const sketch = this.activeSketch();
+    if (!sketch) { this.requestRender(); return; }
+    const t0 = performance.now();
+    const r = this.solver.solve(sketch, this.project.sketches, [], { diagnostics:true });
     const t1 = performance.now();
     for (const e of sketch.entities) if (e instanceof Arc) e.syncEnds();
     this._updateConstraintStatus(r);
@@ -5918,6 +6575,42 @@ class App {
 
     document.getElementById('status-dof').textContent = 'DOF: ' + r.dof;
     this.requestRender();
+  }
+
+  _cancelPendingDiagnostics() {
+    this._diagnosticsToken++;
+    if (this._diagnosticsTimer != null) {
+      clearTimeout(this._diagnosticsTimer);
+      this._diagnosticsTimer = null;
+    }
+    if (this._diagnosticsFrame != null) {
+      cancelAnimationFrame(this._diagnosticsFrame);
+      this._diagnosticsFrame = null;
+    }
+    if (this._diagnosticsIdleId != null && typeof cancelIdleCallback !== 'undefined') {
+      cancelIdleCallback(this._diagnosticsIdleId);
+      this._diagnosticsIdleId = null;
+    }
+  }
+
+  requestDiagnostics() {
+    this._cancelPendingDiagnostics();
+    const token = this._diagnosticsToken;
+    const run = () => {
+      this._diagnosticsTimer = null;
+      this._diagnosticsIdleId = null;
+      this._diagnosticsFrame = null;
+      if (token !== this._diagnosticsToken) return;
+      this.solveAndRender();
+    };
+    this._diagnosticsFrame = requestAnimationFrame(() => {
+      if (token !== this._diagnosticsToken) return;
+      if (typeof requestIdleCallback !== 'undefined') {
+        this._diagnosticsIdleId = requestIdleCallback(run, { timeout: 1000 });
+      } else {
+        this._diagnosticsTimer = setTimeout(run, 120);
+      }
+    });
   }
 
   _updateConstraintStatus(result) {
@@ -6016,14 +6709,69 @@ class App {
   _offsetEntitiesFromSelection() {
     const sketch = this.activeSketch(); if (!sketch) return null;
     const sel = this.selectedEntitiesAndPoints().filter(e => !(e instanceof Constraint));
-    return sel.filter(e => e instanceof Line || e instanceof Circle || e instanceof Arc);
+    const entities = sel.filter(e => e instanceof Line || e instanceof Circle || e instanceof Arc);
+    return this._offsetProfileEntities(entities, sketch);
+  }
+
+  _normalizeOffsetEntityIds() {
+    const sketch = this.activeSketch(); if (!sketch) return;
+    const entities = this.offsetEntityIds
+      .map(id => this._lookupAny(id))
+      .filter(e => e && this.project.sketchOf(e) === sketch && (e instanceof Line || e instanceof Circle || e instanceof Arc));
+    this.offsetEntityIds = this._offsetProfileEntities(entities, sketch).map(e => e.id);
+    if (!this.offsetEntityIds.includes(this.offsetAnchorId)) this.offsetAnchorId = this.offsetEntityIds[0] || null;
   }
 
   _offsetEntities() {
     const sketch = this.activeSketch(); if (!sketch) return [];
-    return this.offsetEntityIds
+    const entities = this.offsetEntityIds
       .map(id => this._lookupAny(id))
       .filter(e => e && this.project.sketchOf(e) === sketch && (e instanceof Line || e instanceof Circle || e instanceof Arc));
+    return this._offsetProfileEntities(entities, sketch);
+  }
+
+  _offsetProfileEntities(entities, sketch) {
+    if (!entities || !entities.length) return [];
+    const real = entities.filter(e => !e.construction);
+    if (!real.length) return entities;
+
+    const realEntityIds = new Set(real.map(e => e.id));
+    const realPointIds = new Set();
+    for (const e of real) {
+      for (const child of e.children()) {
+        if (child instanceof Point) realPointIds.add(child.id);
+      }
+    }
+
+    const isScaffold = (e) => {
+      if (!e.construction) return false;
+      if (e instanceof Line) return true;
+      if (e instanceof Circle || e instanceof Arc) {
+        return this._constructionCurveSupportsOffsetProfile(sketch, e, realEntityIds, realPointIds);
+      }
+      return false;
+    };
+    const filtered = entities.filter(e => !isScaffold(e));
+    return filtered.length ? filtered : entities;
+  }
+
+  _constructionCurveSupportsOffsetProfile(sketch, curve, realEntityIds, realPointIds) {
+    if (!sketch || !(curve instanceof Circle || curve instanceof Arc)) return false;
+    for (const c of sketch.constraints) {
+      if (c.kind === 'pointOnCircle' &&
+          c.circleId === curve.id &&
+          c.centerId === curve.center.id &&
+          realPointIds.has(c.pointId)) {
+        return true;
+      }
+      if (c.kind === 'arcEndpointOnCircle' &&
+          c.circleId === curve.id &&
+          c.centerId === curve.center.id &&
+          c.ref && realEntityIds.has(c.ref.arcId)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   _offsetSignedDistance() {
@@ -6144,6 +6892,7 @@ class App {
       boundaryR = boxR;
     }
     const radialOffset = cursorR - boundaryR;
+    if (this._offsetHasClosedLineComponent(entities)) return radialOffset;
     const anchor = this.offsetAnchorId ? this._lookupAny(this.offsetAnchorId) : null;
     if (anchor instanceof Line) {
       const dx = anchor.p2.x - anchor.p1.x;
@@ -6162,6 +6911,116 @@ class App {
     if (entity instanceof Line) return { a: entity.p1.id, b: entity.p2.id };
     if (entity instanceof Arc) return { a: entity.start.id, b: entity.end.id };
     return null;
+  }
+
+  _offsetTopologyIssue(entities) {
+    if (!entities || !entities.length) return null;
+    const pathEntities = entities.filter(e => e instanceof Line || e instanceof Arc);
+    const endpointOwners = new Map();
+    const entityById = new Map(pathEntities.map(e => [e.id, e]));
+    const neighbors = new Map(pathEntities.map(e => [e.id, new Set()]));
+
+    for (const e of pathEntities) {
+      const pair = this._offsetEndpointPair(e);
+      if (!pair) continue;
+      for (const pointId of [pair.a, pair.b]) {
+        if (!endpointOwners.has(pointId)) endpointOwners.set(pointId, []);
+        endpointOwners.get(pointId).push(e);
+      }
+    }
+
+    for (const [pointId, owners] of endpointOwners.entries()) {
+      if (owners.length > 2) {
+        return `Offset only supports simple path or loop groups. ${owners.length} elements meet at one point; split the branch into separate offsets.`;
+      }
+      if (owners.length === 2) {
+        neighbors.get(owners[0].id).add(owners[1].id);
+        neighbors.get(owners[1].id).add(owners[0].id);
+      }
+    }
+
+    const seen = new Set();
+    for (const e of pathEntities) {
+      if (seen.has(e.id)) continue;
+      const component = [];
+      const queue = [e.id];
+      seen.add(e.id);
+      for (let i = 0; i < queue.length; i++) {
+        const id = queue[i];
+        const entity = entityById.get(id);
+        if (entity) component.push(entity);
+        for (const nb of neighbors.get(id) || []) {
+          if (seen.has(nb)) continue;
+          seen.add(nb);
+          queue.push(nb);
+        }
+      }
+
+      const degrees = new Map();
+      for (const entity of component) {
+        const pair = this._offsetEndpointPair(entity);
+        if (!pair) continue;
+        degrees.set(pair.a, (degrees.get(pair.a) || 0) + 1);
+        degrees.set(pair.b, (degrees.get(pair.b) || 0) + 1);
+      }
+      const values = [...degrees.values()];
+      if (values.some(n => n > 2)) {
+        return 'Offset only supports simple path or loop groups. Remove branches or overlapping endpoints from the selection.';
+      }
+      const openEnds = values.filter(n => n === 1).length;
+      if (!(openEnds === 0 || openEnds === 2)) {
+        return 'Offset only supports groups that form one open chain or one closed loop.';
+      }
+    }
+
+    return null;
+  }
+
+  _offsetHasClosedLineComponent(entities) {
+    const lines = entities.filter(e => e instanceof Line);
+    if (lines.length < 3) return false;
+    const byId = new Map(lines.map(l => [l.id, l]));
+    const neighbors = new Map(lines.map(l => [l.id, []]));
+    const owners = new Map();
+    for (const line of lines) {
+      for (const p of [line.p1, line.p2]) {
+        if (!owners.has(p.id)) owners.set(p.id, []);
+        owners.get(p.id).push(line);
+      }
+    }
+    for (const group of owners.values()) {
+      for (let i = 0; i < group.length; i++) {
+        for (let j = i + 1; j < group.length; j++) {
+          neighbors.get(group[i].id).push(group[j].id);
+          neighbors.get(group[j].id).push(group[i].id);
+        }
+      }
+    }
+    const seen = new Set();
+    for (const line of lines) {
+      if (seen.has(line.id)) continue;
+      const component = [];
+      const q = [line.id];
+      seen.add(line.id);
+      for (let qi = 0; qi < q.length; qi++) {
+        const id = q[qi];
+        const l = byId.get(id);
+        if (l) component.push(l);
+        for (const nb of neighbors.get(id) || []) {
+          if (seen.has(nb)) continue;
+          seen.add(nb);
+          q.push(nb);
+        }
+      }
+      if (component.length < 3) continue;
+      const counts = new Map();
+      for (const l of component) {
+        counts.set(l.p1.id, (counts.get(l.p1.id) || 0) + 1);
+        counts.set(l.p2.id, (counts.get(l.p2.id) || 0) + 1);
+      }
+      if ([...counts.values()].every(n => n === 2)) return true;
+    }
+    return false;
   }
 
   _offsetLocalVector(entity, endpointId) {
@@ -6371,7 +7230,106 @@ class App {
         p2
       });
     }
+    if (!this._offsetLineNetworkPreviewTopologyValid(lines, items)) return null;
     return items;
+  }
+
+  _offsetLineNetworkPreviewTopologyValid(lines, items) {
+    const lineIds = lines.map(l => l.id);
+    const loops = this._closedLineLoopsFromEntityIds(lineIds);
+    if (!loops.length) return true;
+
+    const previewPointBySourcePointId = new Map();
+    const sourceLineById = new Map(lines.map(l => [l.id, l]));
+    for (const item of items) {
+      const line = item.source;
+      if (!(line instanceof Line) || !sourceLineById.has(line.id)) continue;
+      previewPointBySourcePointId.set(line.p1.id, item.p1);
+      previewPointBySourcePointId.set(line.p2.id, item.p2);
+    }
+
+    const previewArea = (pointIds) => {
+      let area = 0;
+      for (let i = 0; i < pointIds.length; i++) {
+        const a = previewPointBySourcePointId.get(pointIds[i]);
+        const b = previewPointBySourcePointId.get(pointIds[(i + 1) % pointIds.length]);
+        if (!a || !b) return 0;
+        area += a.x * b.y - b.x * a.y;
+      }
+      return area / 2;
+    };
+
+    for (const loop of loops) {
+      const sourceArea = this._signedAreaForPointIds(loop.pointIds);
+      if (Math.abs(sourceArea) <= EPS) continue;
+      const targetArea = previewArea(loop.pointIds);
+      if (Math.abs(targetArea) <= Math.max(EPS, Math.abs(sourceArea) * 1e-3)) return false;
+      if (Math.sign(targetArea) !== Math.sign(sourceArea)) return false;
+      for (let i = 0; i < loop.pointIds.length; i++) {
+        const sourceA = this._lookupAny(loop.pointIds[i]);
+        const sourceB = this._lookupAny(loop.pointIds[(i + 1) % loop.pointIds.length]);
+        const targetA = previewPointBySourcePointId.get(loop.pointIds[i]);
+        const targetB = previewPointBySourcePointId.get(loop.pointIds[(i + 1) % loop.pointIds.length]);
+        if (!sourceA || !sourceB || !targetA || !targetB) return false;
+        const sourceLen = dist(sourceA, sourceB);
+        const targetLen = dist(targetA, targetB);
+        if (targetLen <= Math.max(EPS, sourceLen * 1e-3)) return false;
+      }
+    }
+    return true;
+  }
+
+  _applyOffsetPreviewConstraintRadii(preview, sketch) {
+    if (!preview || !sketch) return preview;
+    const itemBySourceId = new Map();
+    const previewPointBySourceId = new Map();
+    for (const item of preview.items) {
+      const source = item.source;
+      if (!source) continue;
+      itemBySourceId.set(source.id, item);
+      if (source instanceof Line && item.kind === 'line') {
+        previewPointBySourceId.set(source.p1.id, item.p1);
+        previewPointBySourceId.set(source.p2.id, item.p2);
+      } else if ((source instanceof Circle || source instanceof Arc) && (item.kind === 'circle' || item.kind === 'arc')) {
+        previewPointBySourceId.set(source.center.id, item.center);
+        if (source instanceof Arc) {
+          previewPointBySourceId.set(source.start.id, {
+            x: item.center.x + item.r * Math.cos(item.a0),
+            y: item.center.y + item.r * Math.sin(item.a0)
+          });
+          previewPointBySourceId.set(source.end.id, {
+            x: item.center.x + item.r * Math.cos(item.a1),
+            y: item.center.y + item.r * Math.sin(item.a1)
+          });
+        }
+      }
+    }
+
+    const hasPreviewRef = (id) => itemBySourceId.has(id) || previewPointBySourceId.has(id);
+    const setRadiusFromPoint = (curveId, centerId, pointId) => {
+      const item = itemBySourceId.get(curveId);
+      const center = previewPointBySourceId.get(centerId);
+      const point = previewPointBySourceId.get(pointId);
+      if (!item || !center || !point) return;
+      const r = dist(center, point);
+      if (r > EPS) item.r = r;
+    };
+
+    for (const c of sketch.constraints) {
+      if (c.kind === 'pointOnCircle') {
+        if ([c.pointId, c.circleId, c.centerId].every(hasPreviewRef)) {
+          setRadiusFromPoint(c.circleId, c.centerId, c.pointId);
+        }
+      } else if (c.kind === 'arcEndpointOnCircle') {
+        if ([c.ref.arcId, c.ref.centerId, c.circleId, c.centerId].every(hasPreviewRef)) {
+          const refPointId = c.ref.which === 'start'
+            ? this._lookupAny(c.ref.arcId)?.start?.id
+            : this._lookupAny(c.ref.arcId)?.end?.id;
+          if (refPointId) setRadiusFromPoint(c.circleId, c.centerId, refPointId);
+        }
+      }
+    }
+    return preview;
   }
 
   _offsetPreviewDataForSignedDistance(entities, signs, signedDistance) {
@@ -6394,7 +7352,7 @@ class App {
       shifted.offsetValue = entityDistance;
       items.push(shifted);
     }
-    return { items };
+    return this._applyOffsetPreviewConstraintRadii({ items }, this.activeSketch());
   }
 
   _clampOffsetDistanceToValidRange(entities, signs, signedDistance) {
@@ -6418,6 +7376,7 @@ class App {
   _offsetPreviewData() {
     const entities = this._offsetEntities();
     if (!entities.length) return null;
+    if (this._offsetTopologyIssue(entities)) return null;
     const signedDistance = this._offsetSignedDistance();
     if (Math.abs(signedDistance) < EPS) return null;
     const signs = this._offsetEntitySigns(entities);
@@ -6427,6 +7386,7 @@ class App {
 
   _syncOffsetSelection() {
     const sketch = this.activeSketch(); if (!sketch) return;
+    this._normalizeOffsetEntityIds();
     this.clearSelection();
     const ids = new Set(this.offsetEntityIds);
     for (const e of sketch.entities) {
@@ -6684,6 +7644,7 @@ class App {
   _refreshOffsetOptions(section, body) {
     section.hidden = false;
     const entities = this._offsetEntities();
+    const topologyIssue = this._offsetTopologyIssue(entities);
     const preview = this._offsetPreviewData();
     document.getElementById('status-hint').textContent =
       this.offsetPhase === 'typing'
@@ -6705,9 +7666,10 @@ class App {
         <label>side</label>
         <button class="rel-btn" id="offset-flip" ${entities.length ? '' : 'disabled'}>Flip</button>
       </div>
-      ${entities.length && !preview ? '<div class="empty">Offset distance is invalid for one or more selected entities.</div>' : ''}
+      ${topologyIssue ? `<div class="empty">${topologyIssue}</div>` : ''}
+      ${entities.length && !topologyIssue && !preview ? '<div class="empty">Offset distance is invalid for one or more selected entities.</div>' : ''}
       <div class="rel-grid">
-        <button class="rel-btn" id="offset-create" ${(!entities.length || !preview) ? 'disabled' : ''}><span class="glyph">+</span>Create Offset</button>
+        <button class="rel-btn" id="offset-create" ${(!entities.length || topologyIssue || !preview) ? 'disabled' : ''}><span class="glyph">+</span>Create Offset</button>
         <button class="rel-btn" id="offset-cancel"><span class="glyph">Ã—</span>Cancel</button>
       </div>
     `;
@@ -6798,7 +7760,6 @@ class App {
     document.getElementById('status-hint').textContent = (this.tool.hint && this.tool.hint()) || '';
     this.commit();
     this.refreshUI();
-    this.solveAndRender();
   }
 
   getMirrorPreview() {
@@ -6829,12 +7790,177 @@ class App {
     return { paths, points, circles, dashed: true };
   }
 
+  _mapOffsetEntityIds(source, target, idMap) {
+    if (!source || !target) return;
+    idMap.set(source.id, target.id);
+    const sourceChildren = source.children ? source.children() : [];
+    const targetChildren = target.children ? target.children() : [];
+    for (let i = 0; i < sourceChildren.length && i < targetChildren.length; i++) {
+      idMap.set(sourceChildren[i].id, targetChildren[i].id);
+    }
+  }
+
+  _cloneOffsetGroupConstraint(c, idMap) {
+    if (!c || !c.refs().every(id => idMap.has(id))) return null;
+
+    const mid = (id) => idMap.get(id);
+    const lineRef = (l) => l ? { a: mid(l.a), b: mid(l.b) } : null;
+    const arcRef = (r) => r ? { arcId: mid(r.arcId), centerId: mid(r.centerId), which: r.which } : null;
+    const pointRef = (r) => r?.pointId ? { pointId: mid(r.pointId) } : arcRef(r);
+    const copyMeta = (clone) => {
+      if (!clone) return null;
+      for (const key of ['labelOffset', 'labelParallel', 'labelAngle', 'labelDist', 'labelMidAngle']) {
+        if (c[key] != null) clone[key] = c[key];
+      }
+      if (c.driven) clone.driven = true;
+      if (c.isDiameter) clone.isDiameter = true;
+      return clone;
+    };
+
+    let clone = null;
+    switch (c.kind) {
+      case 'coincident':
+        clone = new CoincidentConstraint(mid(c.p1), mid(c.p2));
+        break;
+      case 'horizontal':
+        clone = new HorizontalConstraint(mid(c.lineId), mid(c.p1), mid(c.p2));
+        break;
+      case 'vertical':
+        clone = new VerticalConstraint(mid(c.lineId), mid(c.p1), mid(c.p2));
+        break;
+      case 'pointRefHorizontal':
+        clone = new PointRefHorizontalConstraint(pointRef(c.ref1), pointRef(c.ref2));
+        break;
+      case 'pointRefVertical':
+        clone = new PointRefVerticalConstraint(pointRef(c.ref1), pointRef(c.ref2));
+        break;
+      case 'symmetric':
+        clone = new SymmetricConstraint(mid(c.p1), mid(c.p2), lineRef(c.axis));
+        break;
+      case 'parallel':
+        clone = new ParallelConstraint(lineRef(c.l1), lineRef(c.l2));
+        break;
+      case 'perpendicular':
+        clone = new PerpendicularConstraint(lineRef(c.l1), lineRef(c.l2));
+        break;
+      case 'collinear':
+        clone = new CollinearConstraint(lineRef(c.l1), lineRef(c.l2));
+        break;
+      case 'equalLength':
+        clone = new EqualLengthConstraint(lineRef(c.l1), lineRef(c.l2));
+        break;
+      case 'equalRadius':
+        clone = new EqualRadiusConstraint(mid(c.c1), mid(c.c2));
+        break;
+      case 'concentric':
+        clone = new ConcentricConstraint(mid(c.p1), mid(c.p2));
+        break;
+      case 'tangent':
+        clone = c.c1 != null
+          ? new TangentCircleCircleConstraint(mid(c.c1), mid(c.p1), mid(c.c2), mid(c.p2), !!c.internal)
+          : new TangentLineCircleConstraint(lineRef(c.l), mid(c.circleId), mid(c.centerId));
+        break;
+      case 'midpoint':
+        clone = new MidpointConstraint(mid(c.pointId), lineRef(c.l));
+        break;
+      case 'angle':
+        clone = new AngleConstraint(lineRef(c.l1), lineRef(c.l2), c.value);
+        break;
+      case 'directedAngle':
+        clone = new DirectedAngleConstraint(lineRef(c.l1), lineRef(c.l2), c.value);
+        break;
+      case 'pointOnLine':
+        clone = new PointOnLineConstraint(mid(c.pointId), lineRef(c.l));
+        break;
+      case 'pointOnCircle':
+        clone = new PointOnCircleConstraint(mid(c.pointId), mid(c.circleId), mid(c.centerId));
+        break;
+      case 'arcEndpointCoincident':
+        clone = new ArcEndpointCoincidentConstraint(arcRef(c.ref), mid(c.pointId));
+        break;
+      case 'arcEndpointArcEndpointCoincident':
+        clone = new ArcEndpointArcEndpointCoincidentConstraint(arcRef(c.ref1), arcRef(c.ref2));
+        break;
+      case 'arcEndpointMidpoint':
+        clone = new ArcEndpointMidpointConstraint(arcRef(c.ref), lineRef(c.l));
+        break;
+      case 'arcEndpointOnLine':
+        clone = new ArcEndpointOnLineConstraint(arcRef(c.ref), lineRef(c.l));
+        break;
+      case 'arcEndpointOnCircle':
+        clone = new ArcEndpointOnCircleConstraint(arcRef(c.ref), mid(c.circleId), mid(c.centerId));
+        break;
+      case 'offset':
+        clone = new OffsetConstraint(
+          mid(c.sourceEntityId), mid(c.targetEntityId), c.offsetKind,
+          c.offsetKind === 'line'
+            ? { l1: lineRef(c.l1), l2: lineRef(c.l2) }
+            : { p1: mid(c.p1), p2: mid(c.p2) }
+        );
+        break;
+    }
+    return copyMeta(clone);
+  }
+
+  _offsetGroupConstraintClones(sketch, idMap) {
+    const clones = [];
+    for (const c of sketch.constraints) {
+      if (!this._isOffsetTransferableConstraint(c, idMap)) continue;
+      const clone = this._cloneOffsetGroupConstraint(c, idMap);
+      if (!clone) continue;
+      if (this._isInvalidConstraint(sketch, clone)) continue;
+      if (this._isDuplicateConstraint(sketch, clone)) continue;
+      clones.push(clone);
+    }
+    return clones;
+  }
+
+  _isOffsetTransferableConstraint(c, idMap) {
+    if (!c || !c.refs().every(id => idMap.has(id))) return false;
+
+    // Offset is a derived feature, not a raw copy. Most source constraints
+    // either already flow through source->target offset constraints
+    // (horizontal, vertical, equal lengths, central angles) or are build
+    // scaffolding (midpoints on construction centerlines). Copying them
+    // over-constrains generated geometry. Transfer only constraints whose
+    // geometric meaning remains true after offsetting both referenced shapes.
+    switch (c.kind) {
+      case 'pointOnCircle':
+        return true;
+      case 'arcEndpointOnCircle':
+        return true;
+      case 'concentric':
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  _offsetSourcesWithInternalCirclePointConstraints(sketch, sourceIds) {
+    const blocked = new Set();
+    for (const c of sketch.constraints) {
+      if (c.kind === 'pointOnCircle' && sourceIds.has(c.pointId) && sourceIds.has(c.circleId) && sourceIds.has(c.centerId)) {
+        blocked.add(c.circleId);
+      } else if (c.kind === 'arcEndpointOnCircle'
+          && sourceIds.has(c.ref.arcId) && sourceIds.has(c.ref.centerId)
+          && sourceIds.has(c.circleId) && sourceIds.has(c.centerId)) {
+        blocked.add(c.circleId);
+      }
+    }
+    return blocked;
+  }
+
   offsetSelection() {
     const sketch = this.activeSketch(); if (!sketch) return;
     const preview = this._offsetPreviewData();
     const entities = this._offsetEntities();
     if (!entities.length) {
       alert('Select one or more lines, circles, or arcs to offset.');
+      return;
+    }
+    const topologyIssue = this._offsetTopologyIssue(entities);
+    if (topologyIssue) {
+      alert(topologyIssue);
       return;
     }
     if (!preview) {
@@ -6844,6 +7970,7 @@ class App {
 
     const made = [];
     const madeBySourceId = new Map();
+    const sourceToTargetId = new Map();
     const pointMap = new Map();
     const getPoint = (p) => {
       if (!p) return null;
@@ -6868,7 +7995,13 @@ class App {
       sketch.addEntity(entity);
       made.push(entity);
       madeBySourceId.set(item.source.id, { source: item.source, entity, item });
+      this._mapOffsetEntityIds(item.source, entity, sourceToTargetId);
     }
+    const constrainedCircleSources = this._offsetSourcesWithInternalCirclePointConstraints(
+      sketch,
+      new Set(sourceToTargetId.keys())
+    );
+    const clonedConstraints = this._offsetGroupConstraintClones(sketch, sourceToTargetId);
     const distPairs = [];
     for (const { source, entity, item } of madeBySourceId.values()) {
       if (source instanceof Line && entity instanceof Line) {
@@ -6887,17 +8020,29 @@ class App {
           source.id, entity.id, 'circle',
           { p1: source.center.id, p2: entity.center.id }
         ));
-        distPairs.push({ kind: 'circle', c1: entity.id, c2: source.id, value: item.offsetValue });
+        if (!constrainedCircleSources.has(source.id)) {
+          distPairs.push({ kind: 'circle', c1: entity.id, c2: source.id, value: item.offsetValue });
+        }
         if (source instanceof Arc && entity instanceof Arc) {
           sketch.constraints.push(new ParamFixConstraint(entity.id, 'a0', entity.a0));
           sketch.constraints.push(new ParamFixConstraint(entity.id, 'a1', entity.a1));
         }
       }
     }
+    for (const c of clonedConstraints) sketch.constraints.push(c);
     if (distPairs.length > 0) {
       sketch.constraints.push(new OffsetDistanceConstraint(distPairs, Math.abs(preview.items[0].offsetValue)));
     }
     if (!made.length) return;
+    sketch.features.push({
+      id:newId('f'),
+      kind:'offset',
+      sourceEntityIds:[...madeBySourceId.values()].map(v => v.source.id),
+      generatedEntityIds:made.map(e => e.id),
+      distance:Math.abs(preview.items[0].offsetValue),
+      policy:'derived',
+      transferredConstraintKinds:[...new Set(clonedConstraints.map(c => c.kind))]
+    });
 
     this.clearSelection();
     for (const entity of made) this.setSelected(entity, true);
@@ -6905,7 +8050,6 @@ class App {
     document.getElementById('status-hint').textContent = (this.tool.hint && this.tool.hint()) || '';
     this.commit();
     this.refreshUI();
-    this.solveAndRender();
   }
 
   getOffsetPreview() {
@@ -6940,22 +8084,24 @@ class App {
     let added = false;
     switch (kind) {
       case 'fix':
-        for (const p of points) { tryAdd(new FixConstraint(p.id, p.x, p.y)); p.fixed = true; added = true; }
+        for (const p of points) {
+          tryAdd(this._fixConstraintForPoint(p));
+          if (!this.arcEndpointRef(p)) p.fixed = true;
+          added = true;
+        }
         for (const e of lines)  for (const p of [e.p1,e.p2]) { tryAdd(new FixConstraint(p.id, p.x, p.y)); p.fixed = true; added = true; }
         for (const c of circles){ tryAdd(new FixConstraint(c.center.id, c.center.x, c.center.y)); c.center.fixed = true; added = true; }
         for (const a of arcs)   { tryAdd(new FixConstraint(a.center.id, a.center.x, a.center.y)); a.center.fixed = true; added = true; }
         break;
       case 'coincident':
-        for (let i = 1; i < points.length; i++) { tryAdd(new CoincidentConstraint(points[0].id, points[i].id)); added = true; }
+        for (let i = 1; i < points.length; i++) { tryAdd(this._coincidentConstraintForPoints(points[0], points[i])); added = true; }
         break;
       case 'horizontal':
       case 'vertical': {
         const C = kind === 'horizontal' ? HorizontalConstraint : VerticalConstraint;
         for (const l of lines) { tryAdd(new C(l.id, l.p1.id, l.p2.id)); added = true; }
         if (points.length === 2) {
-          // synthesise a line-id reference between them
-          const fakeId = newId('virt');
-          tryAdd(new C(fakeId, points[0].id, points[1].id)); added = true;
+          tryAdd(this._axisConstraintForPoints(kind, points[0], points[1])); added = true;
         }
         break;
       }
@@ -7055,14 +8201,14 @@ class App {
       }
       case 'midpoint': {
         if (lines.length === 1 && points.length === 1) {
-          tryAdd(new MidpointConstraint(points[0].id, { a: lines[0].p1.id, b: lines[0].p2.id }));
+          tryAdd(this._midpointConstraintForPoint(points[0], lines[0]));
           added = true;
         }
         break;
       }
       case 'pointOnLine': {
         if (lines.length === 1 && points.length >= 1) {
-          for (const p of points) tryAdd(new PointOnLineConstraint(p.id, { a: lines[0].p1.id, b: lines[0].p2.id }));
+          for (const p of points) tryAdd(this._pointOnLineConstraintForPoint(p, lines[0]));
           added = true;
         }
         break;
@@ -7070,7 +8216,7 @@ class App {
       case 'pointOnCircle': {
         if ((circles.length + arcs.length) === 1 && points.length >= 1) {
           const c = circles[0] || arcs[0];
-          for (const p of points) tryAdd(new PointOnCircleConstraint(p.id, c.id, c.center.id));
+          for (const p of points) tryAdd(this._pointOnCircleConstraintForPoint(p, c));
           added = true;
         }
         break;
@@ -7081,9 +8227,18 @@ class App {
       if (kind !== 'fix' && sel.length >= 2) {
         this._solveWithFirstSelectionMoving(sketch, sel, beforeState, beforeGraph);
       }
-      this.commit();
+      const affectedIds = new Set();
+      for (const item of sel) {
+        if (!item?.id) continue;
+        affectedIds.add(item.id);
+        if (item.children) for (const child of item.children()) affectedIds.add(child.id);
+      }
+      this.commit({ activeIds: affectedIds });
       // If the new constraint(s) made things impossible to solve, warn.
-      const solver = this.solver.solve(sketch, this.project.sketches);
+      const solver = this.solver.solve(sketch, this.project.sketches, [], {
+        diagnostics:true,
+        activeIds:affectedIds
+      });
       if (solver.state === 'over' && solver.residual > 1e-2) {
         const msg = `This relation makes the sketch over-defined (residual ${solver.residual.toExponential(2)}). Keep it anyway?`;
         if (!confirm(msg)) {
@@ -7253,7 +8408,7 @@ class App {
       this.lastSnap = snap;
       this.tool.onPointerMove(world, snap, ev);
       const hint = document.getElementById('cursor-hint');
-      if (snap) {
+      if (snap && !snap.rejected) {
         hint.textContent = snap.kind;
         hint.style.left = screen.x + 'px';
         hint.style.top  = screen.y + 'px';
