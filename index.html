@@ -10,18 +10,21 @@
      OnSketch — light, professional, utilitarian.
      ============================================================ */
   :root {
-    --bg:            #eef0f3;
-    --panel:         #f7f8fa;
+    --bg:            #eef1f4;
+    --panel:         #f6f7f9;
     --panel-2:       #ffffff;
-    --border:        #d4d8de;
-    --border-soft:   #e3e6ea;
-    --text:          #1c2026;
-    --text-soft:     #5a626c;
-    --text-muted:    #8a929c;
+    --panel-3:       #fbfcfd;
+    --border:        #cfd5dd;
+    --border-soft:   #e4e8ee;
+    --text:          #1b2028;
+    --text-soft:     #58616d;
+    --text-muted:    #858f9b;
     --accent:        #2563a5;
-    --accent-soft:   #d6e3f1;
+    --accent-strong: #174f87;
+    --accent-soft:   #dce9f7;
+    --accent-softer: #edf5fd;
     --selected:      #ff8a1e;
-    --hover:         #ecf2f8;
+    --hover:         #eef4fa;
     --construction:  #c44b8a;
     --underc:        #1f7ad6;
     --fullyc:        #111418;
@@ -30,6 +33,7 @@
     --grid-major:    #c8ced6;
     --canvas-a:      #fbfcfd;
     --canvas-b:      #e3e8ef;
+    --shadow-soft:   0 1px 2px rgba(18, 25, 38, 0.06);
   }
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; }
@@ -41,12 +45,12 @@
     user-select: none;
     -webkit-user-select: none;
   }
-  button, input, select { font: inherit; color: inherit; }
+  button, input, select, textarea { font: inherit; color: inherit; }
 
   #app {
     display: grid;
-    grid-template-columns: 260px 1fr;
-    grid-template-rows: 44px 1fr 24px;
+    grid-template-columns: 292px minmax(0, 1fr);
+    grid-template-rows: 52px minmax(0, 1fr) 28px;
     grid-template-areas:
       "topbar   topbar"
       "sidebar  workspace"
@@ -59,53 +63,75 @@
     grid-area: topbar;
     display: flex;
     align-items: center;
-    gap: 2px;
-    padding: 0 8px;
+    gap: 8px;
+    padding: 6px 10px;
     background: var(--panel-2);
     border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+    overflow-y: hidden;
+    box-shadow: var(--shadow-soft);
   }
   #topbar .group {
     display: flex;
     align-items: center;
-    gap: 2px;
-    padding: 0 6px;
+    gap: 4px;
+    padding: 0 10px 0 0;
     border-right: 1px solid var(--border-soft);
-    height: 100%;
+    height: 38px;
+    flex: 0 0 auto;
   }
   #topbar .group:last-child { border-right: 0; }
   #topbar .label {
-    font-size: 10px;
+    font-size: 9px;
     color: var(--text-muted);
     text-transform: uppercase;
-    letter-spacing: 0.06em;
-    margin-right: 4px;
+    letter-spacing: 0.08em;
+    margin: 0 2px 0 0;
+    min-width: 36px;
   }
   .tbtn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    height: 30px;
-    min-width: 30px;
-    padding: 0 8px;
+    height: 32px;
+    min-width: 32px;
+    padding: 0 9px;
     border: 1px solid transparent;
     background: transparent;
-    border-radius: 3px;
+    border-radius: 6px;
     cursor: pointer;
     color: var(--text);
     gap: 6px;
     font-size: 12px;
+    white-space: nowrap;
   }
-  .tbtn:hover { background: var(--hover); }
+  .tbtn:hover { background: var(--hover); border-color: var(--border-soft); }
   .tbtn.active {
-    background: var(--accent-soft);
-    border-color: #b6cce4;
-    color: var(--accent);
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+    box-shadow: 0 1px 2px rgba(37, 99, 165, 0.22);
   }
   .tbtn.toggle.on {
     background: var(--accent-soft);
     color: var(--accent);
+    border-color: #bdd5ee;
   }
-  .tbtn svg { width: 16px; height: 16px; flex: 0 0 auto; }
+  .tbtn.tool {
+    width: 34px;
+    padding: 0;
+  }
+  .tbtn svg, .ui-icon { width: 16px; height: 16px; flex: 0 0 auto; }
+  .tbtn .btn-label { line-height: 1; }
+  .tbtn:focus-visible,
+  .icon-btn:focus-visible,
+  .rel-btn:focus-visible,
+  .context-menu-item:focus-visible,
+  input:focus-visible,
+  textarea:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--accent) 55%, white);
+    outline-offset: 1px;
+  }
   .sep { width: 1px; height: 22px; background: var(--border-soft); margin: 0 4px; }
 
   /* ---------- Left sidebar ---------- */
@@ -117,6 +143,7 @@
     flex-direction: column;
     min-height: 0;
     overflow: hidden;
+    box-shadow: 1px 0 0 rgba(255,255,255,0.55) inset;
   }
   .sb-section {
     display: flex;
@@ -125,8 +152,12 @@
     border-bottom: 1px solid var(--border);
   }
   .sb-section:last-child { border-bottom: 0; }
-  .sb-layers   { flex: 0 1 auto; min-height: 80px; max-height: 35%; }
-  .sb-tool-options { flex: 0 0 auto; }
+  .sb-layers   { flex: 0 1 auto; min-height: 88px; max-height: 34%; }
+  .sb-tool-options {
+    flex: 0 0 auto;
+    background: var(--panel-3);
+    border-left: 3px solid var(--accent);
+  }
   .sb-tool-options .sb-body { flex: 0 0 auto; min-height: auto; overflow: visible; }
   .sb-selection{ flex: 1 1 auto; min-height: 200px; }
   .sb-meta     { flex: 0 0 auto; }
@@ -135,14 +166,15 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 7px 10px;
+    padding: 8px 11px;
     font-size: 11px;
     text-transform: uppercase;
-    color: var(--text-muted);
+    color: var(--text-soft);
     letter-spacing: 0.08em;
     border-bottom: 1px solid var(--border-soft);
-    background: var(--panel-2);
+    background: linear-gradient(#fff, #fafbfc);
     flex: 0 0 auto;
+    font-weight: 700;
   }
   .panel-header .actions { display: flex; gap: 2px; }
   .panel-header .badge {
@@ -150,23 +182,23 @@
     letter-spacing: 0;
     background: var(--panel);
     border: 1px solid var(--border-soft);
-    border-radius: 9px;
+    border-radius: 999px;
     padding: 0 6px;
     font-size: 10px;
     color: var(--text-soft);
   }
   .icon-btn {
-    width: 22px; height: 22px;
+    width: 24px; height: 24px;
     display: inline-flex; align-items: center; justify-content: center;
     border: 1px solid transparent;
     background: transparent;
-    border-radius: 3px;
+    border-radius: 5px;
     cursor: pointer;
     color: var(--text-soft);
-    font-size: 13px;
+    font-size: 12px;
   }
   .icon-btn:hover { background: var(--hover); color: var(--text); }
-  .icon-btn svg { width: 13px; height: 13px; }
+  .icon-btn svg { width: 14px; height: 14px; }
 
   #layers-list {
     flex: 1;
@@ -175,31 +207,32 @@
   }
   .layer-row {
     display: grid;
-    grid-template-columns: 22px 1fr 22px;
+    grid-template-columns: 26px minmax(0, 1fr) 26px;
     align-items: center;
-    gap: 2px;
-    padding: 2px 6px;
-    margin: 1px 4px;
-    border-radius: 3px;
+    gap: 4px;
+    padding: 3px 6px;
+    margin: 2px 6px;
+    border-radius: 6px;
     cursor: pointer;
     border: 1px solid transparent;
   }
-  .layer-row:hover { background: var(--hover); }
+  .layer-row:hover { background: var(--hover); border-color: var(--border-soft); }
   .layer-row.active {
-    background: var(--accent-soft);
-    border-color: #b6cce4;
+    background: var(--accent-softer);
+    border-color: #bfd6ee;
   }
   .layer-row .name {
     font-size: 13px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    padding: 4px 4px;
+    padding: 4px 2px;
+    min-width: 0;
   }
   .layer-row .name[contenteditable="true"] {
     background: white;
     border: 1px solid var(--accent);
-    border-radius: 2px;
+    border-radius: 4px;
     outline: none;
   }
   .layer-row .name .badge {
@@ -215,7 +248,7 @@
   .sb-body {
     flex: 1 1 auto;
     overflow-y: auto;
-    padding: 8px 10px;
+    padding: 10px 11px 12px;
     min-height: 0;
   }
   .sb-subhead {
@@ -223,15 +256,14 @@
     text-transform: uppercase;
     color: var(--text-muted);
     letter-spacing: 0.06em;
-    margin: 10px 0 4px;
+    margin: 12px 0 6px;
     font-weight: 600;
   }
   .sb-subhead:first-child { margin-top: 0; }
   .muted { color: var(--text-muted); }
   .empty {
     color: var(--text-muted);
-    font-style: italic;
-    padding: 4px 0;
+    padding: 6px 0;
     font-size: 11px;
   }
 
@@ -240,15 +272,18 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 2px 4px;
+    padding: 5px 6px;
     font-size: 12px;
     color: var(--text);
-    border-radius: 2px;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    min-width: 0;
   }
-  .sel-item:hover { background: var(--hover); }
+  .sel-item:hover { background: var(--hover); border-color: var(--border-soft); }
   .sel-item.active {
-    background: #e8f1fb;
-    outline: 1px solid var(--accent);
+    background: var(--accent-softer);
+    border-color: #bdd5ee;
+    color: var(--accent-strong);
   }
   .sel-item .glyph {
     width: 14px;
@@ -257,13 +292,20 @@
     color: var(--text-soft);
     font-weight: 600;
   }
+  .sel-item > span:not(.glyph):not(.layer-tag) {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+  }
   .sel-item .layer-tag {
     margin-left: auto;
     font-size: 10px;
     color: var(--text-muted);
     padding: 0 4px;
     border: 1px solid var(--border-soft);
-    border-radius: 8px;
+    border-radius: 999px;
+    flex: 0 0 auto;
   }
   .sel-item.cross-layer .layer-tag {
     color: var(--accent);
@@ -273,15 +315,16 @@
   /* Relation buttons grid */
   .rel-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 4px;
-    margin: 2px 0;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    margin: 4px 0;
   }
   .rel-btn {
-    padding: 5px 7px;
+    min-height: 32px;
+    padding: 6px 8px;
     border: 1px solid var(--border);
     background: white;
-    border-radius: 3px;
+    border-radius: 6px;
     cursor: pointer;
     font-size: 11px;
     text-align: left;
@@ -289,12 +332,26 @@
     align-items: center;
     gap: 6px;
     color: var(--text);
+    min-width: 0;
   }
   .rel-btn:hover {
-    background: var(--accent-soft);
+    background: var(--accent-softer);
     border-color: var(--accent);
     color: var(--accent);
   }
+  .rel-btn.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+    justify-content: center;
+  }
+  .rel-btn.primary:hover { background: var(--accent-strong); color: white; }
+  .rel-btn.danger:hover {
+    background: #fff0f0;
+    border-color: var(--overc);
+    color: var(--overc);
+  }
+  .rel-btn.full { grid-column: 1 / -1; justify-content: center; }
   .rel-btn:disabled {
     background: var(--panel);
     color: var(--text-muted);
@@ -309,6 +366,102 @@
     font-weight: 600;
   }
   .rel-btn:hover .glyph { color: var(--accent); }
+  .rel-btn.primary .glyph,
+  .rel-btn.primary:hover .glyph { color: white; }
+
+  .tool-summary {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+  .tool-metric {
+    border: 1px solid var(--border-soft);
+    border-radius: 6px;
+    background: white;
+    padding: 7px 8px;
+    min-width: 0;
+  }
+  .tool-metric strong {
+    display: block;
+    font-size: 16px;
+    line-height: 1;
+    color: var(--text);
+    margin-bottom: 2px;
+  }
+  .tool-metric span {
+    color: var(--text-muted);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .choice-row {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 24px minmax(0, 1fr);
+    gap: 7px;
+    align-items: center;
+    padding: 8px;
+    border: 1px solid var(--border-soft);
+    border-radius: 6px;
+    background: white;
+    cursor: pointer;
+    margin-bottom: 6px;
+    text-align: left;
+  }
+  .choice-row:hover {
+    border-color: #bfd6ee;
+    background: var(--accent-softer);
+  }
+  .choice-row.active {
+    border-color: var(--accent);
+    background: var(--accent-softer);
+    box-shadow: inset 3px 0 0 var(--accent);
+  }
+  .choice-row .glyph {
+    width: 24px;
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 5px;
+    background: var(--panel);
+    color: var(--accent);
+    font-weight: 700;
+  }
+  .choice-row strong {
+    display: block;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text);
+  }
+  .choice-row.active strong { color: var(--accent-strong); }
+  .choice-row span:not(.glyph) {
+    display: block;
+    color: var(--text-muted);
+    font-size: 11px;
+    line-height: 1.3;
+    margin-top: 1px;
+  }
+  .stack-list {
+    display: grid;
+    gap: 3px;
+  }
+  .tool-note {
+    border-left: 3px solid var(--border);
+    padding: 6px 7px;
+    margin: 6px 0;
+    background: var(--panel);
+    color: var(--text-soft);
+    font-size: 11px;
+    border-radius: 0 5px 5px 0;
+  }
+  .tool-note.warn {
+    border-left-color: #d28a18;
+    background: #fff7e8;
+    color: #7b5317;
+  }
+  .op-actions { margin-top: 10px; }
 
   /* Existing constraint pills */
   .constraint-pill {
@@ -318,7 +471,7 @@
     padding: 2px 6px;
     background: var(--panel);
     border: 1px solid var(--border-soft);
-    border-radius: 10px;
+    border-radius: 999px;
     font-size: 11px;
     margin: 2px 2px 2px 0;
     color: var(--text-soft);
@@ -331,23 +484,24 @@
 
   /* Property rows */
   .prop-row {
-    display: flex;
+    display: grid;
+    grid-template-columns: 82px minmax(0, 1fr);
     align-items: center;
     gap: 6px;
-    padding: 2px 0;
+    padding: 4px 0;
     font-size: 12px;
   }
   .prop-row label {
-    width: 70px;
     color: var(--text-soft);
     font-size: 11px;
+    text-transform: capitalize;
   }
   .prop-row input[type=number],
   .prop-row input[type=text] {
     flex: 1;
-    padding: 3px 5px;
+    padding: 5px 7px;
     border: 1px solid var(--border);
-    border-radius: 3px;
+    border-radius: 5px;
     background: white;
     min-width: 0;
   }
@@ -355,19 +509,20 @@
     outline: 1px solid var(--accent);
     border-color: var(--accent);
   }
+  .prop-row .rel-btn { width: 100%; justify-content: center; }
 
   /* Project meta */
   #project-meta {
-    padding: 8px 10px;
+    padding: 10px 11px;
     font-size: 11px;
     color: var(--text-soft);
     background: var(--panel-2);
   }
   #project-meta input[type=text] {
     width: 100%;
-    padding: 4px 6px;
+    padding: 6px 7px;
     border: 1px solid var(--border);
-    border-radius: 3px;
+    border-radius: 5px;
     background: white;
     margin-top: 4px;
     font-size: 12px;
@@ -379,7 +534,7 @@
     grid-area: workspace;
     position: relative;
     overflow: hidden;
-    background: linear-gradient(135deg, var(--canvas-a) 0%, var(--canvas-b) 100%);
+    background: radial-gradient(circle at 50% 35%, var(--canvas-a) 0%, #f5f8fb 38%, var(--canvas-b) 100%);
   }
   #canvas {
     position: absolute;
@@ -401,13 +556,21 @@
     color: var(--text-soft);
     font-size: 11px;
     font-variant-numeric: tabular-nums;
+    min-width: 0;
   }
   #statusbar .spacer { flex: 1; }
   #statusbar .pill {
     padding: 1px 7px;
     border: 1px solid var(--border-soft);
-    border-radius: 10px;
+    border-radius: 999px;
     background: var(--panel);
+  }
+  #status-hint {
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 160px;
   }
   #statusbar .pill.ok    { border-color: #cbe1cc; background: #ecf6ed; color: #2c6b34; }
   #statusbar .pill.warn  { border-color: #f0d9b5; background: #fbf2e2; color: #8a5a16; }
@@ -424,7 +587,7 @@
   .modal-backdrop.show { display: flex; }
   .modal {
     background: white;
-    border-radius: 5px;
+    border-radius: 8px;
     box-shadow: 0 10px 40px rgba(0,0,0,0.18);
     width: 460px;
     max-width: 90vw;
@@ -455,7 +618,7 @@
     padding: 6px 14px;
     border: 1px solid var(--border);
     background: white;
-    border-radius: 3px;
+    border-radius: 6px;
     cursor: pointer;
   }
   .btn:hover { background: var(--hover); }
@@ -487,11 +650,11 @@
     max-width: 260px;
     max-height: 260px;
     overflow-y: auto;
-    padding: 4px;
+    padding: 5px;
     background: white;
     border: 1px solid var(--border);
-    border-radius: 4px;
-    box-shadow: 0 8px 22px rgba(15, 23, 42, 0.18);
+    border-radius: 8px;
+    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.18);
     z-index: 40;
   }
   .context-menu-item {
@@ -502,14 +665,14 @@
     display: flex;
     align-items: center;
     gap: 7px;
-    padding: 5px 7px;
-    border-radius: 3px;
+    padding: 7px 8px;
+    border-radius: 6px;
     font: 12px ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif;
     text-align: left;
     cursor: pointer;
   }
   .context-menu-item:hover {
-    background: var(--accent-soft);
+    background: var(--accent-softer);
     color: var(--accent);
   }
   .context-menu-item .glyph {
@@ -536,13 +699,23 @@
        ============================================================ -->
   <header id="topbar">
     <div class="group">
-      <button class="tbtn" data-action="new"      title="New project">New</button>
-      <button class="tbtn" data-action="save"     title="Save to browser">Save</button>
-      <button class="tbtn" data-action="export"   title="Export JSON">Export</button>
-      <button class="tbtn" data-action="import"   title="Import JSON">Import</button>
+      <span class="label">File</span>
+      <button class="tbtn" data-action="new" title="New project" aria-label="New project">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v5h4"/><path d="M9 14h6M12 11v6"/></svg>
+      </button>
+      <button class="tbtn" data-action="save" title="Save to browser" aria-label="Save to browser">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h12l2 2v14H5z"/><path d="M8 4v6h8V4"/><path d="M8 20v-6h8v6"/></svg>
+      </button>
+      <button class="tbtn" data-action="export" title="Export JSON" aria-label="Export JSON">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4"/><path d="M8 8l4-4 4 4"/><path d="M5 14v5h14v-5"/></svg>
+      </button>
+      <button class="tbtn" data-action="import" title="Import JSON" aria-label="Import JSON">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="M8 11l4 4 4-4"/><path d="M5 14v5h14v-5"/></svg>
+      </button>
     </div>
 
     <div class="group">
+      <span class="label">Edit</span>
       <button class="tbtn" data-action="undo" title="Undo (Ctrl+Z)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-15-6.7L3 13"/></svg>
       </button>
@@ -552,7 +725,7 @@
     </div>
 
     <div class="group">
-      <span class="label">Tools</span>
+      <span class="label">Draw</span>
       <button class="tbtn tool" data-tool="select" title="Select (S)">
         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 3l13 8-5 1 3 7-2 1-3-7-4 4z"/></svg>
       </button>
@@ -589,17 +762,39 @@
     </div>
 
     <div class="group">
-      <button class="tbtn toggle" data-action="construction" title="Construction (toggle)">⌐ dashed</button>
-      <button class="tbtn toggle on" data-action="grid"      title="Grid">▦ grid</button>
-      <button class="tbtn toggle on" data-action="snap"      title="Snap">⊹ snap</button>
-      <button class="tbtn"          data-action="mirror"    title="Mirror selected entities about selected line">Mirror</button>
-      <button class="tbtn"          data-action="offset"    title="Offset selected line, circle, or arc">Offset</button>
-      <button class="tbtn"          data-action="solve"      title="Solve now (F5)">Solve</button>
+      <span class="label">Modes</span>
+      <button class="tbtn toggle" data-action="construction" title="Construction geometry">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 17h16" stroke-dasharray="3 3"/><path d="M6 7h12"/></svg><span class="btn-label">Constr</span>
+      </button>
+      <button class="tbtn toggle on" data-action="grid" title="Show grid">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 4h16v16H4z"/><path d="M4 10h16M4 16h16M10 4v16M16 4v16"/></svg><span class="btn-label">Grid</span>
+      </button>
+      <button class="tbtn toggle on" data-action="snap" title="Snap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v4M12 16v4M4 12h4M16 12h4"/><circle cx="12" cy="12" r="3"/></svg><span class="btn-label">Snap</span>
+      </button>
     </div>
 
     <div class="group">
-      <button class="tbtn" data-action="zoom-fit"   title="Zoom to fit (F)">Fit</button>
-      <button class="tbtn" data-action="zoom-reset" title="Reset view">1:1</button>
+      <span class="label">Modify</span>
+      <button class="tbtn" data-action="mirror" title="Mirror selected entities about selected line">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v16"/><path d="M5 7l5 5-5 5z"/><path d="M19 7l-5 5 5 5z"/></svg><span class="btn-label">Mirror</span>
+      </button>
+      <button class="tbtn" data-action="offset" title="Offset selected line, circle, or arc">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17c4-8 10-8 14 0"/><path d="M7 12c3-5 7-5 10 0"/><path d="M5 17h14"/></svg><span class="btn-label">Offset</span>
+      </button>
+      <button class="tbtn" data-action="solve" title="Solve now (F5)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg><span class="btn-label">Solve</span>
+      </button>
+    </div>
+
+    <div class="group">
+      <span class="label">View</span>
+      <button class="tbtn" data-action="zoom-fit" title="Zoom to fit (F)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4H4v4M16 4h4v4M8 20H4v-4M16 20h4v-4"/><path d="M9 9h6v6H9z"/></svg><span class="btn-label">Fit</span>
+      </button>
+      <button class="tbtn" data-action="zoom-reset" title="Reset view">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6"/><path d="M16 16l4 4"/><path d="M11 8v6"/></svg><span class="btn-label">1:1</span>
+      </button>
     </div>
   </header>
 
@@ -613,7 +808,9 @@
       <div class="panel-header">
         <span>Sketches / Layers</span>
         <div class="actions">
-          <button class="icon-btn" id="add-layer" title="Add sketch">＋</button>
+          <button class="icon-btn" id="add-layer" title="Add sketch" aria-label="Add sketch">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          </button>
         </div>
       </div>
       <div id="layers-list"></div>
@@ -622,7 +819,7 @@
     <!-- Tool options -->
     <div class="sb-section sb-tool-options" id="tool-options-section" hidden>
       <div class="panel-header">
-        <span>Tool Options</span>
+        <span id="tool-options-title">Tool Options</span>
       </div>
       <div class="sb-body" id="tool-options-body"></div>
     </div>
@@ -669,7 +866,7 @@
     <span class="pill" id="status-state">—</span>
     <span class="pill" id="status-dof">DOF: 0</span>
     <span class="pill" id="status-solve">solver idle</span>
-    <span id="status-hint" style="color:var(--text-muted)"></span>
+    <span id="status-hint"></span>
   </footer>
 </div>
 
@@ -711,6 +908,20 @@ const dist  = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 const dist2 = (a, b) => (a.x-b.x)**2 + (a.y-b.y)**2;
 const lerp  = (a, b, t) => a + (b - a) * t;
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+
+const UI_ICONS = {
+  eye: '<path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z"/><circle cx="12" cy="12" r="2.5"/>',
+  eyeOff: '<path d="M3 3l18 18"/><path d="M7.4 7.4C4.3 9.1 2.5 12 2.5 12s3.5 6 9.5 6c1.8 0 3.3-.5 4.6-1.2"/><path d="M10.2 6.2c.6-.1 1.2-.2 1.8-.2 6 0 9.5 6 9.5 6s-.8 1.4-2.3 2.8"/>',
+  trash: '<path d="M4 7h16"/><path d="M9 7V5h6v2"/><path d="M7 7l1 13h8l1-13"/><path d="M10 11v5M14 11v5"/>',
+  mirror: '<path d="M12 4v16"/><path d="M5 7l5 5-5 5z"/><path d="M19 7l-5 5 5 5z"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  x: '<path d="M6 6l12 12M18 6L6 18"/>',
+  check: '<path d="M20 6L9 17l-5-5"/>',
+  flip: '<path d="M7 7h10l-3-3M17 17H7l3 3"/><path d="M7 7l10 10"/>'
+};
+function uiIcon(name) {
+  return `<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${UI_ICONS[name] || ''}</svg>`;
+}
 
 /** Solve A x = b where A is square (n×n). Naive Gaussian elimination
  *  with partial pivoting. Returns x or null if singular. */
@@ -5067,10 +5278,10 @@ class App {
   }
 
   _contextMenuGlyph(e) {
-    if (e instanceof Point) return '•';
-    if (e instanceof Line) return '╱';
-    if (e instanceof Circle) return '○';
-    if (e instanceof Arc) return '◜';
+    if (e instanceof Point) return 'P';
+    if (e instanceof Line) return 'L';
+    if (e instanceof Circle) return 'C';
+    if (e instanceof Arc) return 'A';
     return '?';
   }
 
@@ -7949,6 +8160,7 @@ class App {
   _refreshMirrorOptions(section, body) {
     const data = this._mirrorOperationData();
     section.hidden = false;
+    document.getElementById('tool-options-title').textContent = 'Mirror';
     if (!data) {
       body.innerHTML = '<div class="empty">No active sketch.</div>';
       return;
@@ -7956,30 +8168,37 @@ class App {
     const sources = data.sources;
     const axis = data.axis;
     const sourceHtml = sources.length
-      ? sources.map(e => `<div class="sel-item"><span class="glyph">${e instanceof Point ? '•' : e instanceof Line ? '╱' : '○'}</span><span>${this._entityLabel(e)}</span></div>`).join('')
-      : '<div class="empty">Click here, then click points, lines, or circles.</div>';
+      ? `<div class="stack-list">${sources.map(e => `<div class="sel-item"><span class="glyph">${e instanceof Point ? 'P' : e instanceof Line ? 'L' : 'C'}</span><span>${this._entityLabel(e)}</span></div>`).join('')}</div>`
+      : '<div class="tool-note">Click or drag a box in the canvas to collect source entities.</div>';
     const axisHtml = axis
-      ? `<div class="sel-item"><span class="glyph">━</span><span>${this._entityLabel(axis)}${axis.construction ? ' construction' : ''}</span></div>`
-      : '<div class="empty">Click here, then click a line.</div>';
+      ? `<div class="stack-list"><div class="sel-item"><span class="glyph">L</span><span>${this._entityLabel(axis)}${axis.construction ? ' construction' : ''}</span></div></div>`
+      : '<div class="tool-note">Pick one line to use as the mirror axis.</div>';
     const entitiesActive = this.mirrorPickMode === 'entities';
     const axisActive = this.mirrorPickMode === 'axis';
     document.getElementById('status-hint').textContent = entitiesActive
       ? 'Mirror: click or box-select points, lines, or circles to add/remove them.'
       : 'Mirror: click a line to set the mirror axis.';
     body.innerHTML = `
-      <div class="sb-subhead">Mirrored Entities</div>
-      <div class="sel-item ${entitiesActive ? 'active' : ''}" id="mirror-pick-entities">
-        <span class="glyph">${entitiesActive ? '▶' : '+'}</span><span>${entitiesActive ? 'Picking entities' : 'Pick entities'}</span>
+      <div class="tool-summary">
+        <div class="tool-metric"><strong>${sources.length}</strong><span>Sources</span></div>
+        <div class="tool-metric"><strong>${axis ? 'Set' : 'None'}</strong><span>Axis</span></div>
       </div>
+      <div class="sb-subhead">Pick Mode</div>
+      <button class="choice-row ${entitiesActive ? 'active' : ''}" id="mirror-pick-entities">
+        <span class="glyph">${entitiesActive ? '>' : '+'}</span>
+        <span><strong>Entities</strong><span>Click or box-select points, lines, or circles.</span></span>
+      </button>
+      <button class="choice-row ${axisActive ? 'active' : ''}" id="mirror-pick-axis">
+        <span class="glyph">${axisActive ? '>' : '+'}</span>
+        <span><strong>Axis</strong><span>Click a line to define the reflection axis.</span></span>
+      </button>
+      <div class="sb-subhead">Sources</div>
       ${sourceHtml}
       <div class="sb-subhead">Mirror Axis</div>
-      <div class="sel-item ${axisActive ? 'active' : ''}" id="mirror-pick-axis">
-        <span class="glyph">${axisActive ? '▶' : '+'}</span><span>${axisActive ? 'Picking axis' : 'Pick axis'}</span>
-      </div>
       ${axisHtml}
-      <div class="rel-grid">
-        <button class="rel-btn" id="mirror-create" ${(!axis || !sources.length) ? 'disabled' : ''}><span class="glyph">⇋</span>Create Mirror</button>
-        <button class="rel-btn" id="mirror-cancel"><span class="glyph">×</span>Cancel</button>
+      <div class="rel-grid op-actions">
+        <button class="rel-btn primary" id="mirror-create" ${(!axis || !sources.length) ? 'disabled' : ''}>${uiIcon('mirror')}Create</button>
+        <button class="rel-btn danger" id="mirror-cancel">${uiIcon('x')}Cancel</button>
       </div>
     `;
     body.querySelector('#mirror-pick-entities')?.addEventListener('click', () => {
@@ -7998,6 +8217,7 @@ class App {
 
   _refreshOffsetOptions(section, body) {
     section.hidden = false;
+    document.getElementById('tool-options-title').textContent = 'Offset';
     const entities = this._offsetEntities();
     const topologyIssue = this._offsetTopologyIssue(entities);
     const preview = this._offsetPreviewData();
@@ -8008,9 +8228,13 @@ class App {
         ? 'Offset: move the mouse to place. Click in space to type a value, or use Create below.'
         : 'Offset: click one or more lines, circles, or arcs to select them.';
     const entityHtml = entities.length
-      ? entities.map(entity => `<div class="sel-item"><span class="glyph">${entity instanceof Line ? 'L' : entity instanceof Circle ? 'C' : 'A'}</span><span>${this._entityLabel(entity)}${entity.id === this.offsetAnchorId ? ' anchor' : ''}</span></div>`).join('')
-      : '<div class="empty">Click one or more lines, circles, or arcs.</div>';
+      ? `<div class="stack-list">${entities.map(entity => `<div class="sel-item"><span class="glyph">${entity instanceof Line ? 'L' : entity instanceof Circle ? 'C' : 'A'}</span><span>${this._entityLabel(entity)}${entity.id === this.offsetAnchorId ? ' anchor' : ''}</span></div>`).join('')}</div>`
+      : '<div class="tool-note">Click lines, circles, arcs, or box-select a path to offset.</div>';
     body.innerHTML = `
+      <div class="tool-summary">
+        <div class="tool-metric"><strong>${entities.length}</strong><span>Entities</span></div>
+        <div class="tool-metric"><strong>${this.offsetSide > 0 ? 'A' : 'B'}</strong><span>Side</span></div>
+      </div>
       <div class="sb-subhead">Offset Entities</div>
       ${entityHtml}
       <div class="prop-row">
@@ -8019,13 +8243,13 @@ class App {
       </div>
       <div class="prop-row">
         <label>side</label>
-        <button class="rel-btn" id="offset-flip" ${entities.length ? '' : 'disabled'}>Flip</button>
+        <button class="rel-btn" id="offset-flip" ${entities.length ? '' : 'disabled'}>${uiIcon('flip')}Flip side</button>
       </div>
-      ${topologyIssue ? `<div class="empty">${topologyIssue}</div>` : ''}
-      ${entities.length && !topologyIssue && !preview ? '<div class="empty">Offset distance is invalid for one or more selected entities.</div>' : ''}
-      <div class="rel-grid">
-        <button class="rel-btn" id="offset-create" ${(!entities.length || topologyIssue || !preview) ? 'disabled' : ''}><span class="glyph">+</span>Create Offset</button>
-        <button class="rel-btn" id="offset-cancel"><span class="glyph">Ã—</span>Cancel</button>
+      ${topologyIssue ? `<div class="tool-note warn">${topologyIssue}</div>` : ''}
+      ${entities.length && !topologyIssue && !preview ? '<div class="tool-note warn">Offset distance is invalid for one or more selected entities.</div>' : ''}
+      <div class="rel-grid op-actions">
+        <button class="rel-btn primary" id="offset-create" ${(!entities.length || topologyIssue || !preview) ? 'disabled' : ''}>${uiIcon('plus')}Create</button>
+        <button class="rel-btn danger" id="offset-cancel">${uiIcon('x')}Cancel</button>
       </div>
     `;
     const input = body.querySelector('#offset-distance');
@@ -8908,10 +9132,16 @@ class App {
     if (this.toolName !== 'hexagon') {
       section.hidden = true;
       body.innerHTML = '';
+      document.getElementById('tool-options-title').textContent = 'Tool Options';
       return;
     }
     section.hidden = false;
+    document.getElementById('tool-options-title').textContent = 'Polygon';
     body.innerHTML = `
+      <div class="tool-summary">
+        <div class="tool-metric"><strong id="polygon-sides-summary">${this.polygonSides}</strong><span>Sides</span></div>
+        <div class="tool-metric"><strong>2</strong><span>Clicks</span></div>
+      </div>
       <div class="prop-row">
         <label for="polygon-sides">sides</label>
         <input id="polygon-sides" type="number" min="3" max="64" step="1" value="${this.polygonSides}">
@@ -8923,6 +9153,7 @@ class App {
       if (!Number.isFinite(n)) return;
       this.polygonSides = clamp(n, 3, 64);
       input.value = this.polygonSides;
+      body.querySelector('#polygon-sides-summary').textContent = this.polygonSides;
       this.requestRender();
       document.getElementById('status-hint').textContent = (this.tool.hint && this.tool.hint()) || '';
     });
@@ -8935,9 +9166,9 @@ class App {
       const row = document.createElement('div');
       row.className = 'layer-row' + (s.id === this.project.activeSketchId ? ' active' : '');
       row.innerHTML = `
-        <button class="icon-btn" title="Toggle visibility">${s.visible ? '👁' : '◌'}</button>
+        <button class="icon-btn" title="Toggle visibility" aria-label="Toggle visibility">${uiIcon(s.visible ? 'eye' : 'eyeOff')}</button>
         <span class="name" title="${s.name}">${s.name}<span class="badge">${s.entities.length}</span></span>
-        <button class="icon-btn" title="Delete">✕</button>
+        <button class="icon-btn" title="Delete" aria-label="Delete sketch">${uiIcon('trash')}</button>
       `;
       const [vis, name, del] = row.querySelectorAll(':scope > *');
       vis.addEventListener('click', (e) => { e.stopPropagation(); s.visible = !s.visible; this.refreshUI(); this.requestRender(); });
@@ -8994,7 +9225,7 @@ class App {
     for (const e of sel) {
       const owner = this.project.sketchOf(e);
       const cross = owner && owner.id !== activeId;
-      const glyph = e instanceof Point ? '•' : e instanceof Line ? '╱' : e instanceof Circle ? '○' : e instanceof Arc ? '◜' : '?';
+      const glyph = e instanceof Point ? 'P' : e instanceof Line ? 'L' : e instanceof Circle ? 'C' : e instanceof Arc ? 'A' : '?';
       const kind  = e instanceof Constraint ? (CONSTRAINT_LABELS[e.kind] || e.kind) : e.constructor.kind;
       html += `<div class="sel-item${cross ? ' cross-layer' : ''}">
                  <span class="glyph">${glyph}</span>
