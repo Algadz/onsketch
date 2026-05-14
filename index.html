@@ -480,6 +480,51 @@
     z-index: 20;
     display: none;
   }
+
+  #context-menu {
+    position: fixed;
+    min-width: 170px;
+    max-width: 260px;
+    max-height: 260px;
+    overflow-y: auto;
+    padding: 4px;
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    box-shadow: 0 8px 22px rgba(15, 23, 42, 0.18);
+    z-index: 40;
+  }
+  .context-menu-item {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 7px;
+    border-radius: 3px;
+    font: 12px ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif;
+    text-align: left;
+    cursor: pointer;
+  }
+  .context-menu-item:hover {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  .context-menu-item .glyph {
+    width: 16px;
+    flex: 0 0 16px;
+    color: var(--text-soft);
+    text-align: center;
+    font-weight: 700;
+  }
+  .context-menu-item:hover .glyph { color: var(--accent); }
+  .context-menu-item .meta {
+    margin-left: auto;
+    color: var(--text-muted);
+    font-size: 10px;
+  }
 </style>
 </head>
 <body>
@@ -958,6 +1003,23 @@ function angleSectorForCursor(l1, l2, world) {
   return sector;
 }
 
+function angleSectorForValue(l1, l2, value, preferredMidAngle = null) {
+  const candidates = angleSectorCandidates(l1, l2);
+  if (!candidates.length) return null;
+  const target = normalizeAngleValue(value);
+  return candidates
+    .map(c => ({
+      ...c,
+      valueScore: Math.abs(c.value - target),
+      midScore: preferredMidAngle == null ? 0 : angleSeparation(c.midAngle, preferredMidAngle)
+    }))
+    .sort((a, b) => {
+      const dv = a.valueScore - b.valueScore;
+      if (Math.abs(dv) > 1e-7) return dv;
+      return a.midScore - b.midScore;
+    })[0];
+}
+
 function regularPolygonFromCenterEdge(center, edgeMid, sides) {
   const n = Math.max(3, Math.round(sides || 6));
   const apothem = dist(center, edgeMid);
@@ -1229,11 +1291,12 @@ class VerticalConstraint extends Constraint {
 }
 
 class SymmetricConstraint extends Constraint {
-  constructor(p1Id, p2Id, axis) {
+  constructor(p1Id, p2Id, axis, sourceSide = null) {
     super('symmetric');
     this.p1 = p1Id;
     this.p2 = p2Id;
     this.axis = axis;
+    this.sourceSide = sourceSide;
   }
   refs() { return [this.p1, this.p2, this.axis.a, this.axis.b]; }
   residuals(L) {
@@ -1250,7 +1313,11 @@ class SymmetricConstraint extends Constraint {
       (dx*(qx-px) + dy*(qy-py)) / len
     ];
   }
-  toJSON() { return { id:this.id, kind:'symmetric', p1:this.p1, p2:this.p2, axis:this.axis }; }
+  toJSON() {
+    const o = { id:this.id, kind:'symmetric', p1:this.p1, p2:this.p2, axis:this.axis };
+    if (this.sourceSide) o.sourceSide = this.sourceSide;
+    return o;
+  }
 }
 
 class ParallelConstraint extends Constraint {
@@ -1559,9 +1626,10 @@ class OffsetDistanceConstraint extends Constraint {
 }
 
 class AngleConstraint extends Constraint {
-  /** Absolute angle between two lines, in radians (0 .. π). The sector
-   *  is encoded by oriented endpoint refs, so the drawn
-   *  wedge and the solver enforce the same acute/obtuse choice. */
+  /** Angle between two line entities, in radians (0 .. π). The solver
+   *  constrains the undirected line pair so dragging an endpoint through
+   *  the opposite endpoint does not mirror the line to preserve a directed
+   *  segment vector. The stored value still selects the displayed sector. */
   constructor(l1Pts, l2Pts, value) {
     super('angle'); this.l1=l1Pts; this.l2=l2Pts; this.value=normalizeAngleValue(value);
     this.labelDist=null; this.labelMidAngle=null; this.driven=false;
@@ -1573,12 +1641,12 @@ class AngleConstraint extends Constraint {
     const dx2=L(this.l2.b,'x')-L(this.l2.a,'x'), dy2=L(this.l2.b,'y')-L(this.l2.a,'y');
     const len1 = Math.hypot(dx1, dy1), len2 = Math.hypot(dx2, dy2);
     if (len1 < EPS || len2 < EPS) return [0];
-    // cos of the angle between the two direction vectors. Using cos
-    // (rather than the signed difference) makes the constraint enforce
-    // the *absolute* angle: cos(θ) = cos(-θ), so rotational sense is
-    // free, but cos(θ) ≠ cos(π-θ), so acute / obtuse stays distinct.
     const cosAng = (dx1*dx2 + dy1*dy2) / (len1 * len2);
-    return [ cosAng - Math.cos(this.value) ];
+    const target = Math.cos(this.value);
+    if (Math.abs(target) < 1e-9) return [ cosAng ];
+    return [ Math.sign(cosAng || target) === Math.sign(target)
+      ? cosAng - target
+      : -cosAng - target ];
   }
   toJSON() {
     const o = { id:this.id, kind:'angle', l1:this.l1, l2:this.l2, value:this.value };
@@ -1901,7 +1969,7 @@ class Solver {
   _solveComponents(activeSketch, allVisibleSketches, constraints, options) {
     const groups = this._componentGroups(activeSketch, constraints);
     if (groups.length <= 1) {
-      return this.solve(activeSketch, allVisibleSketches, [], { ...options, componentize:false });
+      return this.solve({ entities:activeSketch.entities, constraints }, allVisibleSketches, [], { ...options, componentize:false });
     }
     const activeIds = options.activeIds instanceof Set
       ? options.activeIds
@@ -1966,7 +2034,7 @@ class Solver {
     const constraints = extraConstraints.length
       ? activeSketch.constraints.concat(extraConstraints)
       : activeSketch.constraints;
-    if (options.componentize !== false && !extraConstraints.length && activeSketch.entities?.length > 1) {
+    if (options.componentize !== false && activeSketch.entities?.length > 1) {
       return this._solveComponents(activeSketch, allVisibleSketches, constraints, options);
     }
     const params = this._collectParams(activeSketch);
@@ -2251,7 +2319,7 @@ class Project {
           case 'vertical':      c = new VerticalConstraint(cj.lineId, cj.p1, cj.p2); break;
           case 'pointRefHorizontal': c = new PointRefHorizontalConstraint(cj.ref1, cj.ref2); break;
           case 'pointRefVertical': c = new PointRefVerticalConstraint(cj.ref1, cj.ref2); break;
-          case 'symmetric':     c = new SymmetricConstraint(cj.p1, cj.p2, cj.axis); break;
+          case 'symmetric':     c = new SymmetricConstraint(cj.p1, cj.p2, cj.axis, cj.sourceSide || null); break;
           case 'parallel':      c = new ParallelConstraint(cj.l1, cj.l2); break;
           case 'perpendicular': c = new PerpendicularConstraint(cj.l1, cj.l2); break;
           case 'collinear':     c = new CollinearConstraint(cj.l1, cj.l2); break;
@@ -2898,7 +2966,17 @@ class Renderer {
 
     const v = this.view, ctx = this.ctx;
     const cols = this._dimColors(grey, !!c.selected);
-    const arc = angleArcFromPoints(a1, b1, a2, b2);
+    const sector = angleSectorForValue(
+      { p1:a1, p2:b1 },
+      { p1:a2, p2:b2 },
+      c.value ?? angleArcFromPoints(a1, b1, a2, b2).span,
+      c.labelMidAngle
+    );
+    if (!sector) return;
+    const arc = sector;
+    const e1a = entMap.get(sector.l1Ref.a), e1b = entMap.get(sector.l1Ref.b);
+    const e2a = entMap.get(sector.l2Ref.a), e2b = entMap.get(sector.l2Ref.b);
+    if (!e1a || !e1b || !e2a || !e2b) return;
     const pinter = v.worldToScreen(inter);
     const radPx = Math.max(10, (c.labelDist != null) ? c.labelDist * v.zoom : 32);
     const labelDistWorld = radPx / v.zoom;
@@ -2957,8 +3035,8 @@ class Renderer {
       ctx.stroke();
       ctx.restore();
     };
-    drawAngleExtension(a1, b1);
-    drawAngleExtension(a2, b2);
+    drawAngleExtension(e1a, e1b);
+    drawAngleExtension(e2a, e2b);
 
     const midAng = arc.midAngle;
     const value = normalizeAngleValue(c.value ?? arc.span);
@@ -3101,6 +3179,17 @@ class SelectTool extends Tool {
     const isToggle = ev.ctrlKey || ev.metaKey;
     const isAdd    = ev.shiftKey;
     if (this.app.operationName === 'mirror') {
+      if (!hit && this.app.mirrorPickMode === 'entities') {
+        this.boxMode = 'mirror';
+        this.box = {
+          x0: world.x, y0: world.y, x1: world.x, y1: world.y,
+          replace: !isAdd && !isToggle,
+          toggle: isToggle,
+          sx0: sx, sy0: sy
+        };
+        this.app.requestRender();
+        return;
+      }
       this.app.handleMirrorPick(hit);
       return;
     }
@@ -3240,6 +3329,7 @@ class SelectTool extends Tool {
     }
     if (this.box) {
       const wasOffsetBox = this.boxMode === 'offset';
+      const wasMirrorBox = this.boxMode === 'mirror';
       const box = this.box;
       const x0 = Math.min(this.box.x0, this.box.x1);
       const y0 = Math.min(this.box.y0, this.box.y1);
@@ -3256,10 +3346,12 @@ class SelectTool extends Tool {
         }
         return;
       }
+      if (wasMirrorBox && movedPx <= 3) return;
 
       if (wasOffsetBox && box.replace) this.app.offsetEntityIds = [];
-      else if (!wasOffsetBox && box.replace) this.app.clearSelection();
+      else if (!wasMirrorBox && box.replace) this.app.clearSelection();
 
+      const mirrorHits = [];
       for (const s of this.app.activeVisibleSketches()) {
         for (const e of s.entities) {
           const inBox = (p) => p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1;
@@ -3273,6 +3365,8 @@ class SelectTool extends Tool {
             if (e instanceof Line || e instanceof Circle || e instanceof Arc) {
               if (!this.app.offsetEntityIds.includes(e.id)) this.app.offsetEntityIds.push(e.id);
             }
+          } else if (wasMirrorBox) {
+            if (e instanceof Point || e instanceof Line || e instanceof Circle) mirrorHits.push(e);
           } else {
             this.app.setSelected(e, true);
           }
@@ -3282,8 +3376,11 @@ class SelectTool extends Tool {
         this.app.offsetAnchorId = this.app.offsetEntityIds[0] || null;
         this.app.offsetPhase = this.app.offsetEntityIds.length ? 'placing' : 'selecting';
         this.app._syncOffsetSelection();
+      } else if (wasMirrorBox) {
+        this.app.handleMirrorBoxPick(mirrorHits, { replace: box.replace, toggle: box.toggle });
+      } else {
+        this.app.refreshUI();
       }
-      this.app.refreshUI();
     }
     if (this.dragging) {
       // Promote every snap that was active at release into a real
@@ -3313,8 +3410,7 @@ class SelectTool extends Tool {
   onKey(ev) {
     if (ev.key === 'Delete' || ev.key === 'Backspace') { this.app.deleteSelection(); ev.preventDefault(); }
     else if (ev.key === 'Escape') {
-      if (this.app.operationName === 'offset') {
-        this.app.cancelOffsetOperation();
+      if (this.app.cancelOperation()) {
         ev.preventDefault();
       } else {
         this.app.clearSelection();
@@ -4715,6 +4811,8 @@ class App {
     this._diagnosticsFrame = null;
     this._diagnosticsTimer = null;
     this._diagnosticsIdleId = null;
+    this.contextMenuEl = null;
+    this.contextMenuDocPointerDown = null;
 
     this._setupCanvasEvents();
     this._setupKeyboard();
@@ -4924,10 +5022,123 @@ class App {
     return null;
   }
 
+  hitTestAllSketches(world, sketches) {
+    const v = this.view;
+    const out = [];
+    const seen = new Set();
+    const add = (e) => {
+      if (!e || seen.has(e)) return;
+      seen.add(e);
+      out.push(e);
+    };
+    for (const s of sketches) {
+      for (const e of s.entities) {
+        for (const c of e.children()) if (c.hit(world, v)) add(c);
+        if (e instanceof Point && e.hit(world, v)) add(e);
+      }
+    }
+    for (const s of sketches) {
+      for (const e of s.entities) {
+        if (!(e instanceof Point) && e.hit(world, v)) add(e);
+      }
+    }
+    return out;
+  }
+
   hitTestForDimension(world) {
     // Smart Dimension picks any visible entity. Whether the constraint
     // can actually be added is checked downstream.
     return this.hitTestAcrossLayers(world);
+  }
+
+  _setHoverTarget(target) {
+    let changed = false;
+    for (const s of this.project.visibleSketches()) {
+      for (const e of s.entities) {
+        const hov = e === target;
+        if (e.hover !== hov) { e.hover = hov; changed = true; }
+        for (const c of e.children()) {
+          const childHov = c === target;
+          if (c.hover !== childHov) { c.hover = childHov; changed = true; }
+        }
+      }
+    }
+    if (changed) this.requestRender();
+  }
+
+  _contextMenuGlyph(e) {
+    if (e instanceof Point) return '•';
+    if (e instanceof Line) return '╱';
+    if (e instanceof Circle) return '○';
+    if (e instanceof Arc) return '◜';
+    return '?';
+  }
+
+  _selectFromContextMenu(item, ev) {
+    const toggle = ev.ctrlKey || ev.metaKey;
+    const add = ev.shiftKey;
+    if (toggle) {
+      this.setSelected(item, !item.selected);
+    } else {
+      if (!add) this.clearSelection();
+      this.setSelected(item, true);
+    }
+    this.hideContextMenu();
+    this.refreshUI();
+    this.requestRender();
+  }
+
+  showContextMenu(screen, world, ev) {
+    this.hideContextMenu();
+    const items = this.hitTestAllSketches(world, this.activeVisibleSketches());
+    if (!items.length) return false;
+
+    const menu = document.createElement('div');
+    menu.id = 'context-menu';
+    menu.addEventListener('pointerdown', e => e.stopPropagation());
+    menu.addEventListener('mouseleave', () => this._setHoverTarget(null));
+
+    for (const item of items) {
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.className = 'context-menu-item';
+      row.innerHTML = `
+        <span class="glyph">${this._contextMenuGlyph(item)}</span>
+        <span>${this._entityLabel(item)}</span>
+        <span class="meta">${item.construction ? 'construction' : item.fixed ? 'fixed' : ''}</span>
+      `;
+      row.addEventListener('mouseenter', () => this._setHoverTarget(item));
+      row.addEventListener('click', e => this._selectFromContextMenu(item, e));
+      menu.appendChild(row);
+    }
+
+    document.body.appendChild(menu);
+    const margin = 8;
+    const rect = menu.getBoundingClientRect();
+    const left = Math.min(ev.clientX, window.innerWidth - rect.width - margin);
+    const top = Math.min(ev.clientY, window.innerHeight - rect.height - margin);
+    menu.style.left = Math.max(margin, left) + 'px';
+    menu.style.top = Math.max(margin, top) + 'px';
+    this.contextMenuEl = menu;
+    this._setHoverTarget(items[0]);
+
+    this.contextMenuDocPointerDown = (e) => {
+      if (this.contextMenuEl && !this.contextMenuEl.contains(e.target)) this.hideContextMenu();
+    };
+    setTimeout(() => document.addEventListener('pointerdown', this.contextMenuDocPointerDown), 0);
+    return true;
+  }
+
+  hideContextMenu() {
+    if (this.contextMenuDocPointerDown) {
+      document.removeEventListener('pointerdown', this.contextMenuDocPointerDown);
+      this.contextMenuDocPointerDown = null;
+    }
+    if (this.contextMenuEl) {
+      this.contextMenuEl.remove();
+      this.contextMenuEl = null;
+    }
+    this._setHoverTarget(null);
   }
 
   /** Snap is only meaningful while you're actively placing or moving
@@ -5631,7 +5842,12 @@ class App {
     return ignore;
   }
 
-  _buildConstraintGraph(sketch) {
+  _dragJointConstraintKinds() {
+    return new Set(['coincident', 'arcEndpointCoincident', 'arcEndpointArcEndpointCoincident']);
+  }
+
+  _buildConstraintGraph(sketch, options = {}) {
+    const skipKinds = options.skipKinds || null;
     const graph = new Map();
     const add = (id) => {
       if (!id) return;
@@ -5653,6 +5869,7 @@ class App {
     for (const c of sketch.constraints) {
       const refs = c.refs().filter(Boolean);
       for (const id of refs) add(id);
+      if (skipKinds && skipKinds.has(c.kind)) continue;
       for (let i = 0; i < refs.length; i++) {
         for (let j = i + 1; j < refs.length; j++) link(refs[i], refs[j]);
       }
@@ -5742,6 +5959,17 @@ class App {
     }
     for (const c of sketch.constraints) {
       if (c.kind === 'fix' && component.has(c.pointId)) return true;
+    }
+    return false;
+  }
+
+  _componentHasExternalJoint(sketch, component, jointKinds = this._dragJointConstraintKinds()) {
+    for (const c of sketch.constraints) {
+      if (!jointKinds.has(c.kind)) continue;
+      const refs = c.refs().filter(Boolean);
+      const inside = refs.some(id => component.has(id));
+      const outside = refs.some(id => !component.has(id));
+      if (inside && outside) return true;
     }
     return false;
   }
@@ -5928,13 +6156,67 @@ class App {
     });
   }
 
-  _beginDofDrag(sketch, state, startWorld, pts, hit, distances, rigidLines = []) {
+  _mirrorAxisSourceLocks(sketch, axisLine, draggedPointIds = new Set()) {
+    if (!sketch || !(axisLine instanceof Line)) return [];
+    const axisIds = new Set([axisLine.p1.id, axisLine.p2.id]);
+    const dragged = draggedPointIds instanceof Set ? draggedPointIds : new Set(draggedPointIds || []);
+    const symmetric = sketch.constraints.filter(c =>
+      c.kind === 'symmetric' && sameLineRefs(axisLine, c.axis));
+    if (!symmetric.length) return [];
+
+    const hasSourceMetadata = symmetric.some(c => c.sourceSide === 'p1' || c.sourceSide === 'p2');
+    const allowLegacyMirrorIntent = !hasSourceMetadata && symmetric.length > 1;
+    const locks = [];
+    const seen = new Set();
+    for (const c of symmetric) {
+      const side = c.sourceSide || (allowLegacyMirrorIntent ? 'p1' : null);
+      if (side !== 'p1' && side !== 'p2') continue;
+      const sourceId = side === 'p2' ? c.p2 : c.p1;
+      if (!sourceId || axisIds.has(sourceId) || dragged.has(sourceId) || seen.has(sourceId)) continue;
+      const p = this._lookupAny(sourceId);
+      if (!(p instanceof Point)) continue;
+      locks.push(new FixConstraint(p.id, p.x, p.y));
+      seen.add(sourceId);
+    }
+    return locks;
+  }
+
+  _mirrorAxisSourceLocksForDrag(sketch, hit, draggedPointIds = new Set()) {
+    if (!sketch) return [];
+    const dragged = draggedPointIds instanceof Set ? draggedPointIds : new Set(draggedPointIds || []);
+    const axes = [];
+    const addAxis = (line) => {
+      if (!(line instanceof Line)) return;
+      if (!sketch.constraints.some(c => c.kind === 'symmetric' && sameLineRefs(line, c.axis))) return;
+      if (!axes.includes(line)) axes.push(line);
+    };
+    if (hit instanceof Line) addAxis(hit);
+    if (hit instanceof Point) {
+      for (const e of sketch.entities) {
+        if (e instanceof Line && (e.p1 === hit || e.p2 === hit || dragged.has(e.p1.id) || dragged.has(e.p2.id))) {
+          addAxis(e);
+        }
+      }
+    }
+    const locks = [];
+    const seen = new Set();
+    for (const axis of axes) {
+      for (const lock of this._mirrorAxisSourceLocks(sketch, axis, dragged)) {
+        if (seen.has(lock.pointId)) continue;
+        seen.add(lock.pointId);
+        locks.push(lock);
+      }
+    }
+    return locks;
+  }
+
+  _beginDofDrag(sketch, state, startWorld, pts, hit, distances, rigidLines = [], mirrorAxisLocks = []) {
     const componentIds = new Set(distances.keys());
     const localState = state.filter(r => componentIds.has(r.id));
     if (!localState.length) return null;
     const constraints = sketch.constraints
       .filter(c => !c.driven && c.refs().some(id => componentIds.has(id)))
-      .concat(this._dragRigidLineConstraints(rigidLines));
+      .concat(this._dragRigidLineConstraints(rigidLines), mirrorAxisLocks);
     const lookup = this._lookupFn(this.project.sketches);
     const sys = this._constraintSystem(localState, constraints, lookup);
     if (sys.residual > 1e-4) return null;
@@ -5951,7 +6233,8 @@ class App {
         state:localState,
         distances,
         rigidLines,
-        snapIgnoreIds:this._offsetLinkedSnapIgnoreIds(sketch, distances.keys())
+        mirrorAxisLocks,
+        snapIgnoreIds:this._offsetLinkedSnapIgnoreIds(sketch, pts.map(r => r.p.id))
       };
     }
     let responsive = false;
@@ -5973,8 +6256,11 @@ class App {
       intent,
       distances,
       rigidLines,
+      mirrorAxisLocks,
       lookup,
-      snapIgnoreIds:this._offsetLinkedSnapIgnoreIds(sketch, distances.keys())
+      // A DOF drag moves the selected handle through an existing constrained
+      // component. Other points in that component are legitimate targets.
+      snapIgnoreIds:this._offsetLinkedSnapIgnoreIds(sketch, pts.map(r => r.p.id))
     };
   }
 
@@ -6078,6 +6364,7 @@ class App {
         snapPts: [],
         state,
         circle: hit,
+        center: { x:hit.center.x, y:hit.center.y },
         offsetGuard,
         snapIgnoreIds: this._offsetLinkedSnapIgnoreIds(sketch, [hit.id, hit.center.id])
       };
@@ -6102,9 +6389,11 @@ class App {
         snapIgnoreIds:this._offsetLinkedSnapIgnoreIds(sketch, [hit.id, hit.arcOwner.id])
       };
     }
-    const graph = this._buildConstraintGraph(sketch);
+    const jointKinds = this._dragJointConstraintKinds();
+    const graph = this._buildConstraintGraph(sketch, { skipKinds: jointKinds });
     const startIds = new Set(pts.map(r => r.p.id));
     const distances = this._graphDistances(graph, startIds);
+    const mirrorAxisLocks = this._mirrorAxisSourceLocksForDrag(sketch, hit, startIds);
 
     const { ids: activeIds, points: pointById } = this._activeIdsAndPoints(sketch);
     const isPointOnCircleHandleDrag = hit instanceof Point && pts.length === 1 &&
@@ -6120,8 +6409,11 @@ class App {
       }
     }
 
-    if (!isPointOnCircleHandleDrag &&
-        components.length && components.every(c => !this._componentIsAnchored(sketch, c, activeIds, pointById))) {
+    if (!mirrorAxisLocks.length &&
+        !isPointOnCircleHandleDrag &&
+        components.length && components.every(c =>
+          !this._componentIsAnchored(sketch, c, activeIds, pointById) &&
+          !this._componentHasExternalJoint(sketch, c, jointKinds))) {
       const moveIds = new Set();
       for (const c of components) for (const id of c) moveIds.add(id);
       const rigidPts = [];
@@ -6138,14 +6430,16 @@ class App {
           startIds,
           distances,
           rigidLines,
+          mirrorAxisLocks,
           offsetGuard,
           snapIgnoreIds:this._offsetLinkedSnapIgnoreIds(sketch, moveIds)
         };
       }
     }
 
-    const dofDrag = this._beginDofDrag(sketch, state, startWorld, pts, hit, distances, rigidLines);
-    if (dofDrag) {
+    const dofDrag = this._beginDofDrag(sketch, state, startWorld, pts, hit, distances, rigidLines, mirrorAxisLocks);
+    let lockedDofDrag = dofDrag?.mode === 'locked' ? dofDrag : null;
+    if (dofDrag && !lockedDofDrag) {
       dofDrag.offsetGuard = offsetGuard;
       return dofDrag;
     }
@@ -6162,8 +6456,22 @@ class App {
       }
     }
 
+    if (!dofDrag || lockedDofDrag) {
+      const fullDistances = this._graphDistances(solveGraph, startIds);
+      const expandsThroughJoints = [...fullDistances.keys()].some(id => !distances.has(id));
+      if (expandsThroughJoints) {
+        const joinedDofDrag = this._beginDofDrag(sketch, state, startWorld, pts, hit, fullDistances, rigidLines, mirrorAxisLocks);
+        if (joinedDofDrag && joinedDofDrag.mode !== 'locked') {
+          joinedDofDrag.offsetGuard = offsetGuard;
+          return joinedDofDrag;
+        }
+        if (!lockedDofDrag && joinedDofDrag?.mode === 'locked') lockedDofDrag = joinedDofDrag;
+      }
+    }
+
     const anchors = solveComponents.map(c => this._componentAnchorPoint(sketch, c, activeIds, pointById));
-    if (solveComponents.length && anchors.every(a => a) && new Set(anchors.map(a => a.id)).size === 1) {
+    if (!mirrorAxisLocks.length &&
+        solveComponents.length && anchors.every(a => a) && new Set(anchors.map(a => a.id)).size === 1) {
       const anchor = anchors[0];
       const moveIds = new Set();
       for (const c of solveComponents) for (const id of c) moveIds.add(id);
@@ -6189,6 +6497,7 @@ class App {
           startIds,
           distances,
           rigidLines,
+          mirrorAxisLocks,
           anchor:{ p:anchor, x:anchor.x, y:anchor.y },
           rotateHandle:handle,
           offsetGuard,
@@ -6197,13 +6506,18 @@ class App {
       }
     }
 
+    if (lockedDofDrag) {
+      lockedDofDrag.offsetGuard = offsetGuard;
+      return lockedDofDrag;
+    }
+
     const depthSet = new Set([0]);
     for (const r of state) {
       const d = distances.get(r.id);
       if (Number.isFinite(d)) depthSet.add(d);
     }
     const depths = [...depthSet].sort((a, b) => a - b);
-    return { startWorld, pts, snapPts:pts, state, startIds, distances, depths, rigidLines,
+    return { startWorld, pts, snapPts:pts, state, startIds, distances, depths, rigidLines, mirrorAxisLocks,
       offsetGuard,
       snapIgnoreIds:this._offsetLinkedSnapIgnoreIds(sketch, distances.keys()) };
   }
@@ -6232,7 +6546,8 @@ class App {
     if (targetById) {
       for (const [id, t] of targetById) extra.push(new FixConstraint(id, t.x, t.y));
     }
-    extra.push(...this._dragLengthConstraints(drag));
+    extra.push(...this._dragRigidLineConstraints(drag));
+    if (drag?.mirrorAxisLocks) extra.push(...drag.mirrorAxisLocks);
     return extra;
   }
 
@@ -6353,9 +6668,25 @@ class App {
     if (!sketch || !drag) return null;
 
     if (drag.mode === 'circleResize') {
-      const cx = drag.circle.center.x, cy = drag.circle.center.y;
-      drag.circle.r = Math.max(EPS, Math.hypot(drag.startWorld.x + dx - cx, drag.startWorld.y + dy - cy));
-      return this._finishDragStep(drag, { ok:true, iters:0, residual:0, state:'under' });
+      if (!drag.warmStarted) {
+        this._restoreSketchParams(drag.state || []);
+        drag.warmStarted = true;
+      }
+      const cx = drag.center?.x ?? drag.circle.center.x;
+      const cy = drag.center?.y ?? drag.circle.center.y;
+      const radius = Math.max(EPS, Math.hypot(drag.startWorld.x + dx - cx, drag.startWorld.y + dy - cy));
+      drag.circle.center.x = cx;
+      drag.circle.center.y = cy;
+      drag.circle.r = radius;
+      const extra = [
+        new FixConstraint(drag.circle.center.id, cx, cy),
+        new ParamFixConstraint(drag.circle.id, 'r', radius)
+      ];
+      const result = this.solver.solve(sketch, this.project.sketches, extra, {
+        diagnostics:false,
+        activeIds:[drag.circle.id, drag.circle.center.id]
+      });
+      return this._finishDragStep(drag, result);
     }
 
     if (!drag.pts.length) return null;
@@ -6468,7 +6799,7 @@ class App {
 
   /* ---- Solving ---- */
   commit(options = {}) {
-    const diagnostics = options.diagnostics || 'none';
+    const diagnostics = options.diagnostics || 'defer';
     const sketch = this.activeSketch();
     const activeIds = options.activeIds
       ? new Set(options.activeIds)
@@ -6654,12 +6985,18 @@ class App {
     this.offsetSide = 1;
   }
 
-  cancelOffsetOperation() {
-    if (this.operationName !== 'offset') return;
+  cancelOperation() {
+    if (!this.operationName) return false;
     this._clearOperationState();
     document.getElementById('status-hint').textContent = (this.tool.hint && this.tool.hint()) || '';
     this.refreshToolOptions();
     this.requestRender();
+    return true;
+  }
+
+  cancelOffsetOperation() {
+    if (this.operationName !== 'offset') return;
+    this.cancelOperation();
   }
 
   _switchToSelectToolForOperation() {
@@ -7510,6 +7847,27 @@ class App {
     return true;
   }
 
+  handleMirrorBoxPick(hits, opts = {}) {
+    if (this.operationName !== 'mirror' || this.mirrorPickMode !== 'entities') return false;
+    const sketch = this.activeSketch();
+    if (!sketch) return true;
+    if (opts.replace) this.mirrorEntityIds = [];
+    for (const hit of hits || []) {
+      if (!(hit instanceof Point || hit instanceof Line || hit instanceof Circle)) continue;
+      if (this.project.sketchOf(hit) !== sketch) continue;
+      if (hit.id === this.mirrorAxisId) continue;
+      const i = this.mirrorEntityIds.indexOf(hit.id);
+      if (opts.toggle) {
+        if (i >= 0) this.mirrorEntityIds.splice(i, 1);
+        else this.mirrorEntityIds.push(hit.id);
+      } else if (i < 0) {
+        this.mirrorEntityIds.push(hit.id);
+      }
+    }
+    this._syncMirrorSelection();
+    return true;
+  }
+
   handleOffsetPick(hit, world) {
     if (this.operationName !== 'offset') return false;
     if (this.offsetPhase === 'typing') return true;
@@ -7606,7 +7964,7 @@ class App {
     const entitiesActive = this.mirrorPickMode === 'entities';
     const axisActive = this.mirrorPickMode === 'axis';
     document.getElementById('status-hint').textContent = entitiesActive
-      ? 'Mirror: click points, lines, or circles to add/remove them.'
+      ? 'Mirror: click or box-select points, lines, or circles to add/remove them.'
       : 'Mirror: click a line to set the mirror axis.';
     body.innerHTML = `
       <div class="sb-subhead">Mirrored Entities</div>
@@ -7634,10 +7992,7 @@ class App {
     });
     body.querySelector('#mirror-create')?.addEventListener('click', () => this.mirrorSelection());
     body.querySelector('#mirror-cancel')?.addEventListener('click', () => {
-      this._clearOperationState();
-      document.getElementById('status-hint').textContent = (this.tool.hint && this.tool.hint()) || '';
-      this.refreshToolOptions();
-      this.requestRender();
+      this.cancelOperation();
     });
   }
 
@@ -7687,10 +8042,7 @@ class App {
     });
     body.querySelector('#offset-create')?.addEventListener('click', () => this.offsetSelection());
     body.querySelector('#offset-cancel')?.addEventListener('click', () => {
-      this._clearOperationState();
-      document.getElementById('status-hint').textContent = (this.tool.hint && this.tool.hint()) || '';
-      this.refreshToolOptions();
-      this.requestRender();
+      this.cancelOperation();
     });
   }
 
@@ -7722,7 +8074,7 @@ class App {
     const linkPoint = (p) => {
       const q = mirroredPoint(p);
       if (!linkedPoints.has(p.id)) {
-        sketch.constraints.push(new SymmetricConstraint(p.id, q.id, axisRef));
+        sketch.constraints.push(new SymmetricConstraint(p.id, q.id, axisRef, 'p1'));
         linkedPoints.add(p.id);
       }
       return q;
@@ -7812,6 +8164,7 @@ class App {
       for (const key of ['labelOffset', 'labelParallel', 'labelAngle', 'labelDist', 'labelMidAngle']) {
         if (c[key] != null) clone[key] = c[key];
       }
+      if (c.sourceSide) clone.sourceSide = c.sourceSide;
       if (c.driven) clone.driven = true;
       if (c.isDiameter) clone.isDiameter = true;
       return clone;
@@ -8073,7 +8426,7 @@ class App {
 
     const beforeJSON = JSON.stringify(this.project.toJSON());
     const beforeState = this._captureSketchParams(sketch);
-    const beforeGraph = this._buildConstraintGraph(sketch);
+    const beforeGraph = this._buildConstraintGraph(sketch, { skipKinds: this._dragJointConstraintKinds() });
     const tryAdd = (cons) => {
       const list = Array.isArray(cons) ? cons : [cons];
       for (const c of list) {
@@ -8330,6 +8683,7 @@ class App {
 
   /* ---- Tool selection ---- */
   setTool(name) {
+    this.hideContextMenu();
     this._clearOperationState();
     if (this.tool && this.tool.deactivate) this.tool.deactivate();
     this.toolName = name;
@@ -8381,9 +8735,15 @@ class App {
     });
 
     c.addEventListener('pointerdown', (ev) => {
-      c.setPointerCapture(ev.pointerId);
       const { screen, world } = getWorld(ev);
-      if (ev.button === 1 || ev.button === 2 || (ev.button === 0 && ev.altKey)) {
+      if (ev.button === 2) {
+        ev.preventDefault();
+        this.showContextMenu(screen, world, ev);
+        return;
+      }
+      this.hideContextMenu();
+      c.setPointerCapture(ev.pointerId);
+      if (ev.button === 1 || (ev.button === 0 && ev.altKey)) {
         panning = true;
         panStart = { x: ev.clientX, y: ev.clientY, panX: this.view.panX, panY: this.view.panY };
         c.style.cursor = 'grabbing';
@@ -8404,6 +8764,11 @@ class App {
         this.requestRender();
         return;
       }
+      if (this.contextMenuEl) {
+        this.lastSnap = null;
+        document.getElementById('cursor-hint').style.display = 'none';
+        return;
+      }
       const snap = this._snapForCurrentTool(world);
       this.lastSnap = snap;
       this.tool.onPointerMove(world, snap, ev);
@@ -8418,6 +8783,7 @@ class App {
     });
 
     c.addEventListener('pointerup', (ev) => {
+      if (ev.button === 2) return;
       const { world } = getWorld(ev);
       if (panning) { panning = false; c.style.cursor = this.toolName === 'select' ? 'default' : 'crosshair'; return; }
       const snap = this._snapForCurrentTool(world);
@@ -8426,6 +8792,7 @@ class App {
 
     c.addEventListener('wheel', (ev) => {
       ev.preventDefault();
+      this.hideContextMenu();
       const r = c.getBoundingClientRect();
       const sp = { x: ev.clientX - r.left, y: ev.clientY - r.top };
       const factor = Math.exp(-ev.deltaY * 0.0015);
@@ -8438,6 +8805,15 @@ class App {
   _setupKeyboard() {
     window.addEventListener('keydown', (ev) => {
       if (ev.target.matches('input,textarea,[contenteditable="true"]')) return;
+      if (ev.key === 'Escape' && this.contextMenuEl) {
+        ev.preventDefault();
+        this.hideContextMenu();
+        return;
+      }
+      if (ev.key === 'Escape' && this.operationName && this.cancelOperation()) {
+        ev.preventDefault();
+        return;
+      }
       const k = ev.key.toLowerCase();
       if ((ev.ctrlKey || ev.metaKey) && k === 'z') { ev.preventDefault(); this.undo(); return; }
       if ((ev.ctrlKey || ev.metaKey) && (k === 'y' || (ev.shiftKey && k === 'z'))) { ev.preventDefault(); this.redo(); return; }
@@ -8791,7 +9167,8 @@ class App {
       try {
         this.project = Project.fromJSON(JSON.parse(text));
         this.selectionOrder = [];
-        this.commit(); this.refreshUI();
+        this.commit({ diagnostics:'sync' });
+        this.refreshUI();
       } catch (e) { alert('Failed to parse: ' + e.message); }
     });
   }
