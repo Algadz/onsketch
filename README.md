@@ -42,8 +42,8 @@ cached modules after a deploy. `npm test` fails if the stamp is out of date.
 
 | Path | Contents |
 |---|---|
-| `app/src/core/` | DOM-free model: math, entities, constraints, solver, sketch/project, layers and styles |
-| `app/src/render/` | view transform, canvas renderer, themes, closed-profile detection for fills |
+| `app/src/core/` | DOM-free model: math, entities, constraints, solver, sketch/project, layers and styles, regions (planar arrangement for fills) |
+| `app/src/render/` | view transform, canvas renderer, themes |
 | `app/src/editor/` | snap engine, selection-aware relation/dimension lists |
 | `app/src/tools/` | select, draw tools, smart dimension |
 | `app/src/app/` | `App` shell plus mixins grouped by concern (drag, solve, operations, chrome, panels, layers, fills, …) |
@@ -60,12 +60,14 @@ Project
    ├─ entities[]   Point / Line / Circle / Arc, each with layerId and style
    │               (stroke colour, weight, line type, optional fill)
    ├─ constraints[]
-   └─ fills[]      fill-tool regions: colour + boundary entity ids (outer, holes)
+   └─ fills[]      fill-tool regions: colour, boundary entity ids, a point inside
 ```
 
-New geometry takes the current drawing style (Style panel, saved per
-browser). Fill-tool regions store their boundary entities, so they follow the
-geometry; deleting a boundary edge removes the fill.
+New geometry takes the current drawing style (saved per browser). Regions are
+found on a planar arrangement of the geometry (segments split where they touch
+or cross, overlaps merged), so shapes sharing or crossing edges fill correctly.
+A fill-tool fill is re-found each time from its boundary entities around its
+inside point, so it follows the geometry.
 
 Picking only sees the active layer. Locked layers never move: the solver
 treats their geometry as constant.

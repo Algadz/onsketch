@@ -275,14 +275,14 @@ export class SmartDimensionTool extends Tool {
       transform: 'translate(-50%, -50%)',
       zIndex: '30',
       padding: '2px 5px',
-      border: '1.5px solid #2563a5',
+      border: '1.5px solid var(--accent)',
       borderRadius: '3px',
-      background: 'white',
+      background: 'var(--field)', color: 'var(--text)', caretColor: 'var(--accent)',
       font: '12px ui-sans-serif, system-ui, -apple-system',
       width: '72px',
       textAlign: 'right',
       outline: 'none',
-      boxShadow: '0 1px 4px rgba(0,0,0,0.15)'
+      boxShadow: '0 1px 4px rgba(0,0,0,0.25)'
     });
 
     const p = this.preview;

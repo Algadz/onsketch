@@ -270,9 +270,9 @@ await page.keyboard.press('b');
 await page.mouse.click(cx - 120, cy - 20);
 const bucket = await page.evaluate(() => {
   const a = window._app, s = a.activeSketch();
-  return { fills: s.fills.map(f => ({ layer: f.layerId === a.project.activeLayerId, color: f.color, n: f.outer.length })) };
+  return { fills: s.fills.map(f => ({ layer: f.layerId === a.project.activeLayerId, color: f.color, n: f.ids.length })) };
 });
-check(bucket.fills.length === 1 && bucket.fills[0].layer && bucket.fills[0].color === '#8a4fd1' && bucket.fills[0].n === 4,
+check(bucket.fills.length === 1 && bucket.fills[0].layer && bucket.fills[0].color === '#8a4fd1' && bucket.fills[0].n >= 4,
   `fill tool fills the clicked region (${JSON.stringify(bucket)})`);
 const bucketPx = await pixel(cx - 120, cy - 20);
 check(bucketPx[3] > 0 && bucketPx[2] > bucketPx[1], `region fill painted (rgba ${bucketPx.join(',')})`);
@@ -308,12 +308,48 @@ await page.click('#menubar [data-window="layers"]');
 const reopened = await page.evaluate(() => !document.querySelector('.fwin[data-win="layers"]').hidden);
 check(closed && reopened, 'floating window close / reopen');
 
+// Fill tool on two rectangles drawn to share a side (B starts on A's corner).
+await page.click('#layer-add');
+await page.keyboard.press('r');
+await page.mouse.click(cx - 330, cy + 150);
+await page.mouse.click(cx - 250, cy + 230);
+await page.mouse.move(cx - 250, cy + 150, { steps: 3 });
+await page.mouse.click(cx - 250, cy + 150);
+await page.mouse.click(cx - 170, cy + 230);
+await page.keyboard.press('Escape');
+await page.click('.palette .sw[data-c="#14946b"]', { button: 'right' });
+await page.keyboard.press('b');
+await page.mouse.click(cx - 290, cy + 190);
+await page.click('.palette .sw[data-c="#c2307a"]', { button: 'right' });
+await page.mouse.click(cx - 210, cy + 190);
+await page.keyboard.press('s');
+const shared = await page.evaluate(() => {
+  const a = window._app, s = a.activeSketch(), ly = a.project.activeLayerId;
+  return { fills: s.fills.filter(f => f.layerId === ly).map(f => f.color), ents: a.project.entitiesOnLayer(ly).length };
+});
+const pa = await pixel(cx - 295, cy + 185), pb = await pixel(cx - 205, cy + 185);
+check(shared.fills.length === 2 && pa[3] > 0 && pb[3] > 0 && pa[1] > pa[0] && pb[0] > pb[1],
+  `fill tool on shapes sharing a side (${JSON.stringify(shared)} left ${pa.join(',')} right ${pb.join(',')})`);
+
 // Colour mode + theme toggles (end in Colors mode for the screenshot).
 await page.click('#menubar [data-action="color-mode"]');
 await page.click('#menubar [data-action="theme"]');
 const prefs = await page.evaluate(() => ({ mode: window._app.renderer.colorMode, theme: document.documentElement.dataset.theme }));
 check(prefs.mode === 'status' && prefs.theme === 'dark', `colour mode + theme (${JSON.stringify(prefs)})`);
 await page.click('#menubar [data-action="color-mode"]');
+// Editing a dimension in dark mode: the input text must be readable.
+await page.keyboard.press('s');
+const dimRect = await page.evaluate(() => { const r = window._app.renderer.lastDimRects[0]; return r && { x: r.x + r.w / 2, y: r.y + r.h / 2 }; });
+let dimInput = null;
+if (dimRect) {
+  await page.mouse.dblclick(box.x + dimRect.x, box.y + dimRect.y);
+  const inp = page.locator('#workspace > input');
+  if (await inp.count()) {
+    dimInput = await inp.evaluate(el => { const cs = getComputedStyle(el); return { color: cs.color, bg: cs.backgroundColor }; });
+    await inp.press('Escape');
+  }
+}
+check(dimInput && dimInput.color !== dimInput.bg && !/255, 255, 255/.test(dimInput.bg), `dimension edit box readable in dark mode (${JSON.stringify(dimInput)})`);
 
 await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
 if (shot) await page.screenshot({ path: shot });

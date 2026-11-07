@@ -1,16 +1,35 @@
 import { newId } from '../core/entities.js';
-import { findFaceAt, fillOutline, pointInPolygon } from '../render/regions.js';
+import { findFaceAt, regionContains } from '../core/regions.js';
 
-/* =============== PAINT-BUCKET FILLS ============================
-   Fills reference their boundary entities by id, so they follow the
-   geometry when it is dragged or re-dimensioned. Boundaries come from
-   every visible, non-construction line / arc / circle; the fill itself
-   lives on the active layer.
+/* =============== FILL TOOL =====================================
+   Click inside any closed region made by existing geometry, including
+   regions bounded by several shapes that share or cross edges. The
+   fill stores the entities around the region and a point inside it,
+   so it follows the geometry when it moves. Boundaries come from every
+   visible, non-construction line / arc / circle; the fill itself lives
+   on the active layer.
    ============================================================ */
 export class FillsMixin {
   _fillBoundaryEntities(sketch) {
     return sketch.entities.filter(e => !e.construction && this.isEntityVisible(e)
       && (e.constructor.kind === 'line' || e.constructor.kind === 'arc' || e.constructor.kind === 'circle'));
+  }
+
+  /** Current region of a stored fill, or null if it no longer closes. */
+  _fillRegion(sketch, f) {
+    const byId = new Map(sketch.entities.map(e => [e.id, e]));
+    return findFaceAt(f.ids.map(id => byId.get(id)).filter(Boolean), f.seed);
+  }
+
+  /** Topmost fill on the active layer covering the point. */
+  _fillAt(sketch, world) {
+    for (let i = sketch.fills.length - 1; i >= 0; i--) {
+      const f = sketch.fills[i];
+      if (f.layerId !== this.project.activeLayerId) continue;
+      const r = this._fillRegion(sketch, f);
+      if (r && regionContains(r, world)) return f;
+    }
+    return null;
   }
 
   bucketFillAt(world) {
@@ -20,33 +39,18 @@ export class FillsMixin {
     if (!region) {
       this.project.background = pen.fillColor;
     } else {
-      const layerId = this.project.activeLayerId;
-      const same = (a, b) => a.length === b.length && a.every(id => b.includes(id));
-      // Refilling the same region on this layer recolours it.
-      const existing = sketch.fills.find(f => f.layerId === layerId && same(f.outer, region.outer));
+      // Refilling a region already filled on this layer recolours it.
+      const existing = this._fillAt(sketch, world);
       if (existing) {
-        existing.color = pen.fillColor; existing.opacity = pen.fillOpacity; existing.holes = region.holes;
+        existing.color = pen.fillColor;
+        existing.opacity = pen.fillOpacity;
       } else {
-        sketch.fills.push({ id: newId('f'), layerId, color: pen.fillColor, opacity: pen.fillOpacity,
-          outer: region.outer, holes: region.holes });
+        sketch.fills.push({ id: newId('f'), layerId: this.project.activeLayerId,
+          color: pen.fillColor, opacity: pen.fillOpacity, ids: region.ids, seed: { x: world.x, y: world.y } });
       }
     }
     this.commit();
     this.refreshUI();
-  }
-
-  /** Topmost fill on the active layer whose region contains the point. */
-  _fillAt(sketch, world) {
-    const byId = new Map(sketch.entities.map(e => [e.id, e]));
-    const pick = (ids) => ids.map(id => byId.get(id)).filter(Boolean);
-    for (let i = sketch.fills.length - 1; i >= 0; i--) {
-      const f = sketch.fills[i];
-      if (f.layerId !== this.project.activeLayerId) continue;
-      const inOuter = fillOutline(pick(f.outer)).some(l => pointInPolygon(world, l));
-      const inHole = f.holes.some(h => fillOutline(pick(h)).some(l => pointInPolygon(world, l)));
-      if (inOuter && !inHole) return f;
-    }
-    return null;
   }
 
   eraseFillAt(world) {

@@ -1,5 +1,30 @@
 import { Arc, Circle, Line, Point, ensureIdAbove, newId } from './entities.js';
 import { Layer, cleanStyle } from './style.js';
+import { findClosedProfiles, interiorPoint } from './regions.js';
+
+/** Fill from a file. Fills saved before seeds existed stored their
+ *  outline as {outer:[ids], holes:[[ids]]}; an inside point is worked
+ *  out from that outline. */
+function reviveFill(f, sketch) {
+  if (!f || typeof f !== 'object') return null;
+  if (Array.isArray(f.ids) && f.seed && Number.isFinite(f.seed.x)) return { ...f, ids: [...f.ids] };
+  if (!Array.isArray(f.outer)) return null;
+  const byId = new Map(sketch.entities.map(e => [e.id, e]));
+  const loop = (ids) => {
+    const { loops, circles } = findClosedProfiles(ids.map(id => byId.get(id)).filter(Boolean));
+    if (loops.length) return loops[0];
+    const c = circles[0];
+    if (!c) return null;
+    return Array.from({ length: 64 }, (_, i) => ({ x: c.center.x + c.r * Math.cos(i / 32 * Math.PI), y: c.center.y + c.r * Math.sin(i / 32 * Math.PI) }));
+  };
+  const outer = loop(f.outer);
+  if (!outer) return null;
+  const holes = (f.holes || []).map(loop).filter(Boolean);
+  const seed = interiorPoint({ outer, holes });
+  if (!seed) return null;
+  const { outer: o, holes: h, ...rest } = f;
+  return { ...rest, ids: [...new Set([...o, ...(h || []).flat()])], seed };
+}
 import { AngleConstraint, ArcEndpointArcEndpointCoincidentConstraint, ArcEndpointCoincidentConstraint, ArcEndpointFixConstraint, ArcEndpointMidpointConstraint, ArcEndpointOnCircleConstraint, ArcEndpointOnLineConstraint, CoincidentConstraint, CollinearConstraint, ConcentricConstraint, CurveDistanceConstraint, DirectedAngleConstraint, DistanceConstraint, EqualLengthConstraint, EqualRadiusConstraint, FixConstraint, HorizontalConstraint, MidpointConstraint, OffsetConstraint, OffsetDistanceConstraint, ParallelConstraint, PerpendicularConstraint, PointLineDistanceConstraint, PointOnCircleConstraint, PointOnLineConstraint, PointRefHorizontalConstraint, PointRefVerticalConstraint, RadiusConstraint, SymmetricConstraint, TangentCircleCircleConstraint, TangentLineCircleConstraint, VerticalConstraint } from './constraints.js';
 
 /* =============== 5. SKETCH / PROJECT MODEL ==================== */
@@ -11,8 +36,9 @@ export class Sketch {
     this.entities = [];
     this.constraints = [];
     this.features = [];
-    // Paint-bucket fills: { id, layerId, color, opacity, outer:[ids], holes:[[ids]] }.
-    // Boundaries are entity ids, so a fill follows its geometry.
+    // Fill-tool fills: { id, layerId, color, opacity, ids:[boundary entity ids], seed:{x,y} }.
+    // The region is re-found from its boundary entities around the seed
+    // (a point inside it), so a fill follows its geometry.
     this.fills = [];
     this.dirtyIds = new Set();
     this.project = null;          // back-reference, set by Project; not serialised
@@ -49,10 +75,11 @@ export class Sketch {
         .concat(f.generatedEntityIds || []);
       return !refs.some(id => staleIds.has(id));
     });
-    // A fill whose outline lost an edge is dropped; a lost hole just goes.
+    // Deleted boundary entities leave the fill's list; if the region no
+    // longer closes, the fill simply isn't drawn.
     this.fills = this.fills
-      .filter(f => !f.outer.some(id => staleIds.has(id)))
-      .map(f => ({ ...f, holes: f.holes.filter(h => !h.some(id => staleIds.has(id))) }));
+      .map(f => ({ ...f, ids: f.ids.filter(id => !staleIds.has(id)) }))
+      .filter(f => f.ids.length);
   }
   toJSON() {
     const o = {
@@ -192,7 +219,7 @@ export class Project {
       s.project = p;
       s.id = sj.id; s.visible = sj.visible !== false;
       s.features = Array.isArray(sj.features) ? sj.features.map(f => ({ ...f })) : [];
-      s.fills = Array.isArray(sj.fills) ? sj.fills.filter(f => Array.isArray(f.outer)).map(f => ({ ...f, holes: f.holes || [] })) : [];
+      s.fills = Array.isArray(sj.fills) ? sj.fills : [];
       // CRITICAL — shared point identity must be preserved across revival.
       // Without this map, a corner that was a single Point shared by two
       // lines comes back as TWO Points carrying the same id. The solver's
@@ -224,6 +251,7 @@ export class Project {
         if (e) s.addEntity(e);
       }
       s.dirtyIds.clear();
+      s.fills = s.fills.map(f => reviveFill(f, s)).filter(Boolean);
       for (const cj of (sj.constraints || [])) {
         let c = null;
         switch (cj.kind) {

@@ -178,18 +178,33 @@ test('new entities take the drawing style; loaded ones keep their own', () => {
   assert.equal(q.sketches[0].entities[0].style, null);
 });
 
-test('bucket fills and background survive save/load; deleting a boundary edge drops the fill', () => {
+test('fill-tool fills and background survive save/load; fills drop only when all boundary entities go', () => {
   const p = new Project(); const s = p.addSketch('A');
   const a = new Line(new Point(0, 0), new Point(4, 0)), b = new Line(a.p2, new Point(0, 3)), c = new Line(b.p2, a.p1);
   for (const e of [a, b, c]) s.addEntity(e);
-  const hole = new Circle(new Point(1, 1), 0.3); s.addEntity(hole);
-  s.fills.push({ id: 'f900', layerId: p.layers[0].id, color: '#8a4fd1', opacity: 0.5, outer: [a.id, b.id, c.id], holes: [[hole.id]] });
+  s.fills.push({ id: 'f900', layerId: p.layers[0].id, color: '#8a4fd1', opacity: 0.5, ids: [a.id, b.id, c.id], seed: { x: 1, y: 1 } });
   p.background = '#e5e7eb';
   const q = Project.fromJSON(JSON.parse(JSON.stringify(p.toJSON())));
   assert.equal(q.background, '#e5e7eb');
-  assert.equal(q.sketches[0].fills.length, 1);
-  s.removeEntity(hole);
-  assert.deepEqual(s.fills[0].holes, []);
+  assert.deepEqual(q.sketches[0].fills[0].seed, { x: 1, y: 1 });
   s.removeEntity(b);
+  assert.deepEqual(s.fills[0].ids, [a.id, c.id]);
+  s.removeEntity(a); s.removeEntity(c);
   assert.equal(s.fills.length, 0);
+});
+
+test('fills saved in the older outline format get an inside point on load', () => {
+  const pt = (id, x, y) => ({ type: 'point', id, x, y });
+  const old = { version: 3, layers: [{ id: 'ly1', name: 'L' }], sketches: [{ id: 's1', name: 'S', entities: [
+    { type: 'line', id: 'e3', layerId: 'ly1', p1: pt('e1', 0, 0), p2: pt('e2', 10, 0) },
+    { type: 'line', id: 'e5', layerId: 'ly1', p1: pt('e2', 10, 0), p2: pt('e4', 10, 10) },
+    { type: 'line', id: 'e7', layerId: 'ly1', p1: pt('e4', 10, 10), p2: pt('e6', 0, 10) },
+    { type: 'line', id: 'e8', layerId: 'ly1', p1: pt('e6', 0, 10), p2: pt('e1', 0, 0) },
+    { type: 'circle', id: 'e10', layerId: 'ly1', center: pt('e9', 5, 5), r: 2 }],
+    constraints: [], fills: [{ id: 'f11', layerId: 'ly1', color: '#8a4fd1', opacity: 0.5, outer: ['e3', 'e5', 'e7', 'e8'], holes: [['e10']] }] }] };
+  const f = Project.fromJSON(old).sketches[0].fills[0];
+  assert.deepEqual(new Set(f.ids), new Set(['e3', 'e5', 'e7', 'e8', 'e10']));
+  assert.ok(f.seed.x > 0 && f.seed.x < 10 && f.seed.y > 0 && f.seed.y < 10);
+  assert.ok(Math.hypot(f.seed.x - 5, f.seed.y - 5) > 2, 'seed is outside the hole');
+  assert.equal(f.outer, undefined);
 });

@@ -2,7 +2,7 @@ import { EPS, TAU, angleArcFromPoints, angleSectorForValue, drawDirectedArcPath,
 import { Arc, Circle, Line, Point } from '../core/entities.js';
 import { resolveStyle, dashFor, withAlpha } from '../core/style.js';
 import { getTheme, INK } from './theme.js';
-import { findClosedProfiles, fillOutline } from './regions.js';
+import { boundedFaces, findFaceAt, geometryKey, interiorPoint } from '../core/regions.js';
 
 export class Renderer {
   constructor(canvas, view) {
@@ -11,6 +11,8 @@ export class Renderer {
     this.view = view;
     this.dpr = window.devicePixelRatio || 1;
     this.lastDimRects = [];
+    this._regionCache = new Map();   // fill id → { key, region }
+    this._faceCache = new Map();     // fill group + geometry → faces
     this.theme = getTheme('light');
     this.colorMode = 'style';      // 'style' (own colours) | 'status' (SolidWorks scheme)
   }
@@ -145,16 +147,27 @@ export class Renderer {
     }
   }
 
-  /** A paint-bucket fill: outline and holes rebuilt from their boundary
-   *  entities every frame, drawn even-odd. Skipped if the outline broke. */
+  /** A Fill-tool fill: its region is re-found from its boundary entities
+   *  around its seed point, drawn even-odd (inner pieces are holes), and
+   *  the seed is re-centred so it keeps tracking the region as the
+   *  geometry moves. Not drawn if the region no longer closes. */
   _drawRegionFill(f, byId) {
-    const pick = (ids) => ids.map(id => byId.get(id)).filter(Boolean);
-    const outer = fillOutline(pick(f.outer));
-    if (!outer.length) return;
+    const ents = f.ids.map(id => byId.get(id)).filter(Boolean);
+    const gk = geometryKey(ents);
+    let hit = this._regionCache.get(f.id);
+    if (!hit || hit.key !== gk + '|' + f.seed.x + ',' + f.seed.y) {
+      const region = findFaceAt(ents, f.seed);
+      const seed = region ? interiorPoint(region) : null;
+      if (seed) f.seed = seed;
+      hit = { key: gk + '|' + f.seed.x + ',' + f.seed.y, region };
+      this._regionCache.set(f.id, hit);
+    }
+    const region = hit.region;
+    if (!region) return;
     const ctx = this.ctx, v = this.view;
     ctx.save();
     ctx.beginPath();
-    for (const loop of [...outer, ...f.holes.flatMap(h => fillOutline(pick(h)))]) {
+    for (const loop of [region.outer, ...region.holes]) {
       loop.forEach((p, i) => { const q = v.worldToScreen(p); if (i) ctx.lineTo(q.x, q.y); else ctx.moveTo(q.x, q.y); });
       ctx.closePath();
     }
@@ -163,8 +176,9 @@ export class Renderer {
     ctx.restore();
   }
 
-  /** Fill closed profiles. Entities are grouped by resolved fill so a
-   *  profile nested in another with the same fill becomes a hole. */
+  /** Shape fills: entities with the same fill colour are grouped, and
+   *  every closed region they form (shared edges, crossings and all) is
+   *  filled as a union, so overlaps stay coloured. */
   _drawFills(ents) {
     const groups = new Map();
     for (const e of ents) {
@@ -172,12 +186,18 @@ export class Renderer {
       const st = resolveStyle(e);
       if (!st.fill) continue;
       const key = st.fill + '|' + st.fillOpacity;
-      if (!groups.has(key)) groups.set(key, { fill: st.fill, opacity: st.fillOpacity, ents: [] });
+      if (!groups.has(key)) groups.set(key, { key, fill: st.fill, opacity: st.fillOpacity, ents: [] });
       groups.get(key).ents.push(e);
     }
     for (const g of groups.values()) {
-      const { loops, circles } = findClosedProfiles(g.ents);
-      this._fillUnion(loops, circles.map(c => ({ center: c.center, r: c.r })), g.fill, g.opacity);
+      const gk = g.key + '|' + geometryKey(g.ents);
+      let faces = this._faceCache.get(gk);
+      if (!faces) {
+        faces = boundedFaces(g.ents);
+        if (this._faceCache.size > 200) this._faceCache.clear();
+        this._faceCache.set(gk, faces);
+      }
+      this._fillUnion(faces, [], g.fill, g.opacity);
     }
   }
 
