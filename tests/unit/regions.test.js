@@ -40,3 +40,40 @@ test('circles are returned for even-odd filling', () => {
   const { loops, circles } = findClosedProfiles([...rect(0, 0, 10, 10), new Circle(new Point(5, 5), 2)]);
   assert.equal(loops.length, 1); assert.equal(circles.length, 1);
 });
+
+import { findFaceAt, fillOutline } from '../../app/src/render/regions.js';
+
+test('fill picks the smallest enclosing face, with inner shapes as holes', () => {
+  const outer = rect(0, 0, 10, 10);
+  const inner = rect(2, 2, 2, 2);
+  const hole = new Circle(new Point(7, 7), 1);
+  const ents = [...outer, ...inner, hole];
+  const f = findFaceAt(ents, { x: 5, y: 1 });
+  assert.deepEqual(new Set(f.outer), new Set(outer.map(e => e.id)));
+  assert.equal(f.holes.length, 2);
+  const g = findFaceAt(ents, { x: 3, y: 3 });
+  assert.deepEqual(new Set(g.outer), new Set(inner.map(e => e.id)));
+  assert.equal(g.holes.length, 0);
+  assert.equal(findFaceAt(ents, { x: 20, y: 20 }), null);
+});
+
+test('fill works on a rectangle split by a line (branching graph)', () => {
+  const r = rect(0, 0, 10, 4);
+  const mid1 = new Point(5, 0), mid2 = new Point(5, 4);
+  // rebuild bottom and top as two segments each so the splitter shares nodes
+  const ents = [new Line(r[0].p1, mid1), new Line(mid1, r[0].p2), r[1],
+    new Line(r[2].p1, mid2), new Line(mid2, r[2].p2), r[3], new Line(mid1, mid2)];
+  const left = findFaceAt(ents, { x: 2, y: 2 });
+  const right = findFaceAt(ents, { x: 8, y: 2 });
+  assert.equal(left.outer.length, 4); assert.equal(right.outer.length, 4);
+  assert.ok(Math.abs(left.area - 20) < 1e-9);
+  assert.equal(fillOutline(ents.filter(e => left.outer.includes(e.id))).length, 1);
+});
+
+test('a spike inside a face is not part of its boundary', () => {
+  const r = rect(0, 0, 10, 10);
+  const spike = new Line(r[0].p1, new Point(4, 4));
+  const f = findFaceAt([...r, spike], { x: 8, y: 2 });
+  assert.equal(f.outer.length, 4);
+  assert.ok(!f.outer.includes(spike.id));
+});

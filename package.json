@@ -5,9 +5,10 @@
   "description": "Browser-based parametric 2D sketcher. No build step: app/ is served as static ES modules.",
   "scripts": {
     "serve": "python3 -m http.server 8080",
-    "test": "node --test \"tests/unit/*.test.js\"",
+    "test": "node scripts/stamp.mjs --check && node --test \"tests/unit/*.test.js\"",
     "test:e2e": "node tests/smoke.e2e.mjs",
-    "lint": "eslint app/src tests"
+    "lint": "eslint app/src tests",
+    "stamp": "node scripts/stamp.mjs"
   },
   "devDependencies": {
     "eslint": "^9.39.0",

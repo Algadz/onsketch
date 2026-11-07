@@ -11,12 +11,18 @@ export class Sketch {
     this.entities = [];
     this.constraints = [];
     this.features = [];
+    // Paint-bucket fills: { id, layerId, color, opacity, outer:[ids], holes:[[ids]] }.
+    // Boundaries are entity ids, so a fill follows its geometry.
+    this.fills = [];
     this.dirtyIds = new Set();
     this.project = null;          // back-reference, set by Project; not serialised
   }
   addEntity(e) {
     e.sketchId = this.id;
-    if (this.project) this.project.assignLayer(e);
+    if (this.project) {
+      this.project.assignLayer(e);
+      if (!e.style && this.project.drawStyle) e.style = { ...this.project.drawStyle };
+    }
     this.entities.push(e);
     const mark = (x) => {
       this.dirtyIds.add(x.id);
@@ -43,6 +49,10 @@ export class Sketch {
         .concat(f.generatedEntityIds || []);
       return !refs.some(id => staleIds.has(id));
     });
+    // A fill whose outline lost an edge is dropped; a lost hole just goes.
+    this.fills = this.fills
+      .filter(f => !f.outer.some(id => staleIds.has(id)))
+      .map(f => ({ ...f, holes: f.holes.filter(h => !h.some(id => staleIds.has(id))) }));
   }
   toJSON() {
     const o = {
@@ -51,6 +61,7 @@ export class Sketch {
       constraints:this.constraints.map(c => c.toJSON())
     };
     if (this.features && this.features.length) o.features = this.features;
+    if (this.fills.length) o.fills = this.fills.map(f => ({ ...f }));
     return o;
   }
 }
@@ -58,6 +69,8 @@ export class Sketch {
 export class Project {
   constructor() {
     this.name = 'Untitled';
+    this.background = null;       // canvas fill colour set by the fill tool, or null
+    this.drawStyle = null;        // style given to new entities (set by the editor; not saved)
     this.units = 'mm';
     this.sketches = [];
     this.activeSketchId = null;
@@ -101,6 +114,7 @@ export class Project {
     if (this.layers.length <= 1) return false;
     const i = this.layers.findIndex(l => l.id === id);
     if (i < 0) return false;
+    for (const s of this.sketches) s.fills = s.fills.filter(f => f.layerId !== id);
     for (const s of this.sketches) {
       for (const e of s.entities.filter(e => e.layerId === id)) s.removeEntity(e);
     }
@@ -147,6 +161,7 @@ export class Project {
   toJSON() {
     return {
       version: 3, name:this.name, units:this.units,
+      ...(this.background ? { background: this.background } : {}),
       activeSketchId:this.activeSketchId,
       activeLayerId:this.activeLayerId,
       layers:this.layers.map(l => l.toJSON()),
@@ -157,6 +172,7 @@ export class Project {
     const p = new Project();
     p.name  = o.name || 'Untitled';
     p.units = o.units || 'mm';
+    p.background = /^#[0-9a-f]{6}$/i.test(o.background || '') ? o.background : null;
     // Layers arrived in v3. Older files get the single default layer and
     // every entity lands on it (assignLayer below).
     if (Array.isArray(o.layers) && o.layers.length) {
@@ -168,6 +184,7 @@ export class Project {
       s.project = p;
       s.id = sj.id; s.visible = sj.visible !== false;
       s.features = Array.isArray(sj.features) ? sj.features.map(f => ({ ...f })) : [];
+      s.fills = Array.isArray(sj.fills) ? sj.fills.filter(f => Array.isArray(f.outer)).map(f => ({ ...f, holes: f.holes || [] })) : [];
       // CRITICAL — shared point identity must be preserved across revival.
       // Without this map, a corner that was a single Point shared by two
       // lines comes back as TWO Points carrying the same id. The solver's
@@ -261,6 +278,7 @@ export class Project {
       noteId(s.id);
       const walk = (e) => { noteId(e.id); for (const c of e.children()) walk(c); };
       for (const l of p.layers) noteId(l.id);
+      for (const f of s.fills) noteId(f.id);
       for (const e of s.entities) walk(e);
       for (const c of s.constraints) noteId(c.id);
     }
@@ -290,6 +308,7 @@ export class Project {
         }
         if (s !== base) base.constraints.push(...s.constraints);
         if (s !== base) base.features.push(...(s.features || []));
+        if (s !== base) base.fills.push(...(s.fills || []));
       });
       this.sketches = [base];
     }

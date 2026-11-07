@@ -15,6 +15,7 @@ import { ConstraintActionsMixin } from './constraint-actions.js';
 import { RenderEventsMixin } from './render-events.js';
 import { PanelsMixin } from './panels.js';
 import { LayersPanelMixin } from './layers-panel.js';
+import { FillsMixin } from './fills.js';
 import { PersistenceMixin } from './persistence.js';
 
 /* =============== 10. APP ====================================== */
@@ -68,6 +69,15 @@ export class App {
     this.refreshUI();
     this.solveAndRender();
     this._loop();
+  }
+
+  /* ---- Project ---- */
+  /** Every project swap (new, import, undo/redo) goes through here so
+   *  new geometry keeps getting the current drawing style. */
+  get project() { return this._project; }
+  set project(p) {
+    this._project = p;
+    if (p) p.drawStyle = this.pen ? this._penStyle() : null;
   }
 
   /* ---- Sketch helpers ---- */
@@ -502,7 +512,7 @@ export class App {
 }
 
 /* Methods are grouped into mixins by concern; see src/app/*.js. */
-for (const Mixin of [LayersPanelMixin, DimensionLabelsMixin, SelectionMixin, DragMixin, SolveMixin, OperationsMixin, ConstraintActionsMixin, RenderEventsMixin, PanelsMixin, PersistenceMixin]) {
+for (const Mixin of [LayersPanelMixin, FillsMixin, DimensionLabelsMixin, SelectionMixin, DragMixin, SolveMixin, OperationsMixin, ConstraintActionsMixin, RenderEventsMixin, PanelsMixin, PersistenceMixin]) {
   for (const key of Object.getOwnPropertyNames(Mixin.prototype)) {
     if (key === 'constructor') continue;
     Object.defineProperty(App.prototype, key, Object.getOwnPropertyDescriptor(Mixin.prototype, key));

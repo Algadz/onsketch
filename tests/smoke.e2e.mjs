@@ -35,7 +35,7 @@ page.route(/umami/, r => r.abort());
 let failed = 0;
 const check = (cond, msg) => { console.log((cond ? 'ok   ' : 'FAIL ') + msg); if (!cond) failed++; };
 
-await page.addInitScript(() => { try { localStorage.setItem('onsketch:prefs', JSON.stringify({ theme: 'light', colorMode: 'status' })); } catch {} });
+await page.addInitScript(() => { try { localStorage.setItem('onsketch:prefs', JSON.stringify({ theme: 'light', colorMode: 'style' })); } catch {} });
 await page.goto(`http://localhost:${port}/app/`);
 await page.waitForFunction(() => window._app);
 const box = await page.locator('#canvas').boundingBox();
@@ -132,28 +132,33 @@ const layerInfo = await page.evaluate(() => {
 });
 check(layerInfo.n === 2 && layerInfo.rows === 2 && layerInfo.active === 'Layer 2', `add layer (${JSON.stringify(layerInfo)})`);
 
-// A rectangle drawn now goes on Layer 2; give the layer a fill from the panel.
+// Drawing style: pick a stroke colour and turn on shape fill, then draw.
+await page.evaluate(() => window._app.clearSelection());
+await page.click('#style-body .swatches[data-key="color"] .sw[data-v="#14946b"]');
+await page.click('#style-body .swatches[data-key="fill"] .sw[data-v="#e07b00"]');
+await page.check('#style-body input[data-key="fillShapes"]');
 await page.keyboard.press('r');
 await page.mouse.click(cx + 60, cy + 60);
 await page.mouse.click(cx + 200, cy + 160);
 await page.keyboard.press('Escape');
 await page.keyboard.press('s');
-await page.evaluate(() => window._app.clearSelection());
-await page.click('#style-body .swatches[data-key="fill"] .sw[data-v="#e07b00"]');
 const onLayer2 = await page.evaluate(() => {
   const a = window._app, ly = a.project.activeLayer();
-  return { count: a.project.entitiesOnLayer(ly.id).length, fill: ly.fill };
+  const ents = a.project.entitiesOnLayer(ly.id);
+  return { count: ents.length, style: ents[0]?.style };
 });
-check(onLayer2.count === 4 && onLayer2.fill === '#e07b00', `new geometry on active layer, layer fill set (${JSON.stringify(onLayer2)})`);
+check(onLayer2.count === 4 && onLayer2.style?.color === '#14946b' && onLayer2.style?.fill === '#e07b00',
+  `new shapes use the drawing style (${JSON.stringify(onLayer2)})`);
+await page.uncheck('#style-body input[data-key="fillShapes"]');
 
-// Fill pixels actually painted inside the rectangle.
-await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
-const filled = await page.evaluate(([x, y]) => {
+const pixel = (x, y) => page.evaluate(async ([x, y]) => {
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
   const c = document.getElementById('canvas'), r = c.getBoundingClientRect(), d = window.devicePixelRatio || 1;
-  const px = c.getContext('2d').getImageData((x - r.left) * d, (y - r.top) * d, 1, 1).data;
-  return Array.from(px);
-}, [cx + 130, cy + 110]);
-check(filled[3] > 0 && filled[0] > filled[2], `fill painted (rgba ${filled.join(',')})`);
+  return Array.from(c.getContext('2d').getImageData((x - r.left) * d, (y - r.top) * d, 1, 1).data);
+}, [x, y]);
+// Fill pixels actually painted inside the rectangle.
+const filled = await pixel(cx + 130, cy + 110);
+check(filled[3] > 0 && filled[0] > filled[2], `shape fill painted (rgba ${filled.join(',')})`);
 
 // Per-entity override through the selection style panel.
 await page.evaluate(() => {
@@ -174,7 +179,7 @@ const undoStyle = await page.evaluate(() => {
   const ly = a.project.activeLayer();
   return a.project.entitiesOnLayer(ly.id)[0].style;
 });
-check(undoStyle && undoStyle.lineStyle === undefined && undoStyle.color === '#d63a3a', `style change is undoable (${JSON.stringify(undoStyle)})`);
+check(undoStyle && undoStyle.lineStyle !== 'center' && undoStyle.color === '#d63a3a', `style change is undoable (${JSON.stringify(undoStyle)})`);
 
 // Only the active layer is pickable.
 const activeOnly = await page.evaluate(() => {
@@ -235,11 +240,41 @@ const after2 = await page.evaluate((id) => {
 check(after2.p[0] === lockDrag.p[0] && after2.p[1] === lockDrag.p[1], `locked layer did not move during drag (${JSON.stringify({ before: lockDrag.p, after: after2 })})`);
 await page.evaluate(() => { const a = window._app; a.project.layers[0].locked = false; a.commit(); a.refreshUI(); });
 
-// Colour mode + theme toggles.
+// Fill tool: fill the Layer 1 rectangle (boundary on another layer), then the background, then erase.
+await page.click('#style-body .swatches[data-key="fill"] .sw[data-v="#8a4fd1"]');
+await page.keyboard.press('b');
+await page.mouse.click(cx - 120, cy - 20);
+const bucket = await page.evaluate(() => {
+  const a = window._app, s = a.activeSketch();
+  return { fills: s.fills.map(f => ({ layer: f.layerId === a.project.activeLayerId, color: f.color, n: f.outer.length })) };
+});
+check(bucket.fills.length === 1 && bucket.fills[0].layer && bucket.fills[0].color === '#8a4fd1' && bucket.fills[0].n === 4,
+  `fill tool fills the clicked region (${JSON.stringify(bucket)})`);
+const bucketPx = await pixel(cx - 120, cy - 20);
+check(bucketPx[3] > 0 && bucketPx[2] > bucketPx[1], `region fill painted (rgba ${bucketPx.join(',')})`);
+const holePx = await pixel(cx + 200, cy - 220);
+await page.mouse.click(cx + 200, cy - 220);
+const bg = await page.evaluate(() => window._app.project.background);
+check(bg === '#8a4fd1', `click outside regions fills the background (${bg})`);
+const bgUndo = await page.evaluate(() => { const a = window._app; a.undo(); return a.project.background; });
+check(bgUndo === null, 'background fill is undoable');
+await page.evaluate(() => window._app.redo());
+await page.click('#tool-options-body [data-mode="erase"]');
+await page.mouse.click(cx - 120, cy - 20);
+await page.mouse.click(cx + 200, cy - 220);
+const erased = await page.evaluate(() => ({ fills: window._app.activeSketch().fills.length, bg: window._app.project.background }));
+check(erased.fills === 0 && erased.bg === null, `erase removes fills and background (${JSON.stringify(erased)})`);
+await page.click('#tool-options-body [data-mode="fill"]');
+await page.mouse.click(cx - 120, cy - 20);
+await page.keyboard.press('s');
+void holePx;
+
+// Colour mode + theme toggles (end in Colors mode for the screenshot).
 await page.click('#topbar [data-action="color-mode"]');
 await page.click('#topbar [data-action="theme"]');
 const prefs = await page.evaluate(() => ({ mode: window._app.renderer.colorMode, theme: document.documentElement.dataset.theme }));
-check(prefs.mode === 'layer' && prefs.theme === 'dark', `colour mode + theme (${JSON.stringify(prefs)})`);
+check(prefs.mode === 'status' && prefs.theme === 'dark', `colour mode + theme (${JSON.stringify(prefs)})`);
+await page.click('#topbar [data-action="color-mode"]');
 
 await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
 if (shot) await page.screenshot({ path: shot });

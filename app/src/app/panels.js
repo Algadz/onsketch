@@ -34,6 +34,10 @@ export class PanelsMixin {
       this._refreshOffsetOptions(section, body);
       return;
     }
+    if (this.toolName === 'fill') {
+      this._refreshFillOptions(section, body);
+      return;
+    }
     if (this.toolName !== 'hexagon') {
       section.hidden = true;
       body.innerHTML = '';

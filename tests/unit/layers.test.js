@@ -152,3 +152,29 @@ test('geometry on a locked layer does not move when other layers are solved', ()
   new Solver().solve(s, [s], [], { diagnostics: true });
   assert.ok(Math.abs(Math.hypot(a.p2.x - a.p1.x, a.p2.y - a.p1.y) - 20) < 1e-6);
 });
+
+test('new entities take the drawing style; loaded ones keep their own', () => {
+  const p = new Project(); const s = p.addSketch('A');
+  p.drawStyle = { color: '#14946b', lineWidth: 2 };
+  const c = new Circle(new Point(0, 0), 1); s.addEntity(c);
+  assert.deepEqual(c.style, { color: '#14946b', lineWidth: 2 });
+  c.style = null;
+  const q = Project.fromJSON(JSON.parse(JSON.stringify(p.toJSON())));
+  assert.equal(q.sketches[0].entities[0].style, null);
+});
+
+test('bucket fills and background survive save/load; deleting a boundary edge drops the fill', () => {
+  const p = new Project(); const s = p.addSketch('A');
+  const a = new Line(new Point(0, 0), new Point(4, 0)), b = new Line(a.p2, new Point(0, 3)), c = new Line(b.p2, a.p1);
+  for (const e of [a, b, c]) s.addEntity(e);
+  const hole = new Circle(new Point(1, 1), 0.3); s.addEntity(hole);
+  s.fills.push({ id: 'f900', layerId: p.layers[0].id, color: '#8a4fd1', opacity: 0.5, outer: [a.id, b.id, c.id], holes: [[hole.id]] });
+  p.background = '#e5e7eb';
+  const q = Project.fromJSON(JSON.parse(JSON.stringify(p.toJSON())));
+  assert.equal(q.background, '#e5e7eb');
+  assert.equal(q.sketches[0].fills.length, 1);
+  s.removeEntity(hole);
+  assert.deepEqual(s.fills[0].holes, []);
+  s.removeEntity(b);
+  assert.equal(s.fills.length, 0);
+});

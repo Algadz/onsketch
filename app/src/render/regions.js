@@ -114,3 +114,124 @@ export function findClosedProfiles(entities) {
   }
   return { loops, circles };
 }
+
+/* ---------------- Planar faces (fill tool) ----------------------
+   Treats lines and arcs as a planar graph (joined at endpoints, no
+   intersection splitting) and traces its faces: at every node, leave
+   by the edge immediately clockwise from the one you arrived on.
+   Bounded faces come out counter-clockwise (positive area); the outer
+   boundary of each connected piece comes out clockwise. Circles are
+   closed curves on their own. */
+
+function signedArea(pts) {
+  let a = 0;
+  for (let i = 0, n = pts.length; i < n; i++) {
+    const p = pts[i], q = pts[(i + 1) % n];
+    a += p.x * q.y - q.x * p.y;
+  }
+  return a / 2;
+}
+
+export function pointInPolygon(pt, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const a = poly[i], b = poly[j];
+    if ((a.y > pt.y) !== (b.y > pt.y) && pt.x < (b.x - a.x) * (pt.y - a.y) / (b.y - a.y) + a.x) inside = !inside;
+  }
+  return inside;
+}
+
+function circlePoints(c, n = 72) {
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    out.push({ x: c.center.x + c.r * Math.cos(a), y: c.center.y + c.r * Math.sin(a) });
+  }
+  return out;
+}
+
+/** All face cycles: { pts, area, ids } where ids are the entities on the
+ *  boundary (edges walked both ways, i.e. spikes, are left out). */
+export function planarCycles(entities) {
+  const nodeOf = makeNodeIndex();
+  const half = [];
+  const cycles = [];
+  for (const e of entities) {
+    if (e instanceof Circle) {
+      if (e.r > 0) {
+        const pts = circlePoints(e);
+        cycles.push({ pts, area: signedArea(pts), ids: [e.id] });
+        cycles.push({ pts: pts.slice().reverse(), area: -signedArea(pts), ids: [e.id] });
+      }
+      continue;
+    }
+    let pts;
+    if (e instanceof Line) pts = [{ x: e.p1.x, y: e.p1.y }, { x: e.p2.x, y: e.p2.y }];
+    else if (e instanceof Arc) { e.syncEnds(); pts = arcPoints(e); }
+    else continue;
+    const a = nodeOf(pts[0]), b = nodeOf(pts[pts.length - 1]);
+    if (a === b) continue;
+    const h0 = { e, from: a, to: b, pts };
+    const h1 = { e, from: b, to: a, pts: pts.slice().reverse() };
+    h0.twin = h1; h1.twin = h0;
+    for (const h of [h0, h1]) h.angle = Math.atan2(h.pts[1].y - h.pts[0].y, h.pts[1].x - h.pts[0].x);
+    half.push(h0, h1);
+  }
+  const out = new Map();
+  for (const h of half) {
+    if (!out.has(h.from)) out.set(h.from, []);
+    out.get(h.from).push(h);
+  }
+  for (const list of out.values()) list.sort((p, q) => p.angle - q.angle);
+  const next = (h) => {
+    const list = out.get(h.to);
+    const i = list.indexOf(h.twin);
+    return list[(i - 1 + list.length) % list.length];
+  };
+
+  const visited = new Set();
+  for (const start of half) {
+    if (visited.has(start)) continue;
+    const walk = [];
+    let h = start, guard = 0;
+    while (!visited.has(h) && guard++ < half.length + 1) {
+      visited.add(h); walk.push(h); h = next(h);
+    }
+    if (h !== start) continue;          // malformed; shouldn't happen
+    const pts = [];
+    for (const w of walk) for (let k = 0; k < w.pts.length - 1; k++) pts.push(w.pts[k]);
+    const both = new Set(walk.filter(w => walk.includes(w.twin)).map(w => w.e.id));
+    const ids = [...new Set(walk.map(w => w.e.id))].filter(id => !both.has(id));
+    cycles.push({ pts, area: signedArea(pts), ids });
+  }
+  return cycles;
+}
+
+/** Region under `pt`: the smallest bounded face containing it, plus the
+ *  pieces sitting directly inside it as holes. Returns null when the
+ *  point is outside every closed region. */
+export function findFaceAt(entities, pt) {
+  const cycles = planarCycles(entities);
+  const EPSA = 1e-9;
+  let face = null;
+  for (const c of cycles) {
+    if (c.area <= EPSA || !c.ids.length) continue;
+    if (!pointInPolygon(pt, c.pts)) continue;
+    if (!face || c.area < face.area) face = c;
+  }
+  if (!face) return null;
+  // Outer boundaries of other pieces that lie inside the face and do not
+  // contain the point. Keep only the outermost of nested ones.
+  const inner = cycles.filter(c => c.area < -EPSA && c.ids.length
+    && !c.ids.every(id => face.ids.includes(id))
+    && pointInPolygon(c.pts[0], face.pts) && !pointInPolygon(pt, c.pts));
+  const holes = inner.filter(c => !inner.some(o => o !== c && pointInPolygon(c.pts[0], o.pts)));
+  return { outer: face.ids, holes: holes.map(h => h.ids), area: face.area };
+}
+
+/** Closed outline(s) for a stored fill, rebuilt from its boundary
+ *  entities so the fill follows the geometry. */
+export function fillOutline(entities) {
+  const { loops, circles } = findClosedProfiles(entities);
+  return [...loops, ...circles.map(c => circlePoints(c))];
+}

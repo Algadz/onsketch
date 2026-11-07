@@ -1,6 +1,7 @@
 import { Arc, Circle, Line, Point } from '../core/entities.js';
 import { SelectTool } from '../tools/select.js';
 import { ArcTool, CenterLineTool, CenterRectangleTool, CircleTool, HexagonTool, LineTool, PointTool, RectangleTool, ThreePointCircleTool } from '../tools/draw.js';
+import { FillTool } from '../tools/fill.js';
 import { SmartDimensionTool } from '../tools/smartdim.js';
 
 export class RenderEventsMixin {
@@ -12,7 +13,7 @@ export class RenderEventsMixin {
     requestAnimationFrame(tick);
   }
   _render() {
-    this.renderer.drawGrid(this.gridOn);
+    this.renderer.drawGrid(this.gridOn, this.project.background);
     this.renderer.drawEntities(this.project);
 
     // Build a project-wide id → entity lookup for dimension drawing.
@@ -74,6 +75,7 @@ export class RenderEventsMixin {
       case 'arc':       this.tool = new ArcTool(this); break;
       case 'point':     this.tool = new PointTool(this); break;
       case 'smartdim':  this.tool = new SmartDimensionTool(this); break;
+      case 'fill':      this.tool = new FillTool(this); break;
     }
     if (this.tool.activate) this.tool.activate();
     document.querySelectorAll('#topbar .tool').forEach(b => b.classList.toggle('active', b.dataset.tool === name));
@@ -84,7 +86,7 @@ export class RenderEventsMixin {
       name[0].toUpperCase() + name.slice(1)
     );
     document.getElementById('status-hint').textContent = (this.tool.hint && this.tool.hint()) || '';
-    this.canvas.style.cursor = name === 'select' ? 'default' : 'crosshair';
+    this.canvas.style.cursor = name === 'select' ? 'default' : name === 'fill' ? 'cell' : 'crosshair';
     this.refreshToolOptions();
     this.requestRender();
   }
@@ -200,6 +202,7 @@ export class RenderEventsMixin {
       else if (k === 'a') this.setTool('arc');
       else if (k === 'p') this.setTool('point');
       else if (k === 'd') this.setTool('smartdim');
+      else if (k === 'b') this.setTool('fill');
       else if (k === 'f') this.zoomFit();
       else if (k === 'f5') { ev.preventDefault(); this.solveAndRender(); }
       this.tool.onKey && this.tool.onKey(ev);
@@ -228,7 +231,7 @@ export class RenderEventsMixin {
           case 'grid':         this.gridOn = !this.gridOn; b.classList.toggle('on', this.gridOn); this.requestRender(); break;
           case 'snap':         this.snapOn = !this.snapOn; b.classList.toggle('on', this.snapOn); this.requestRender(); break;
           case 'zoom-fit':     this.zoomFit(); break;
-          case 'color-mode':   this.setColorMode(this.colorMode === 'layer' ? 'status' : 'layer'); this._refreshStylePanel(); break;
+          case 'color-mode':   this.setColorMode(this.colorMode === 'status' ? 'style' : 'status'); this._refreshStylePanel(); break;
           case 'theme':        this.setTheme(this.themeName === 'dark' ? 'light' : 'dark'); break;
           case 'zoom-reset':   this.view.zoom = 4; this.view.panX = 0; this.view.panY = 0; this.requestRender(); break;
         }

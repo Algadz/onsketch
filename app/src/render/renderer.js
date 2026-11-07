@@ -2,7 +2,7 @@ import { EPS, TAU, angleArcFromPoints, angleSectorForValue, drawDirectedArcPath,
 import { Arc, Circle, Line, Point } from '../core/entities.js';
 import { resolveStyle, dashFor, withAlpha } from '../core/style.js';
 import { getTheme, INK } from './theme.js';
-import { findClosedProfiles } from './regions.js';
+import { findClosedProfiles, fillOutline } from './regions.js';
 
 export class Renderer {
   constructor(canvas, view) {
@@ -12,7 +12,7 @@ export class Renderer {
     this.dpr = window.devicePixelRatio || 1;
     this.lastDimRects = [];
     this.theme = getTheme('light');
-    this.colorMode = 'status';     // 'status' | 'layer'
+    this.colorMode = 'style';      // 'style' (own colours) | 'status' (SolidWorks scheme)
   }
   resize() {
     const r = this.canvas.getBoundingClientRect();
@@ -21,9 +21,13 @@ export class Renderer {
     this.canvas.height = Math.floor(r.height * this.dpr);
     this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
   }
-  drawGrid(showGrid) {
+  drawGrid(showGrid, background = null) {
     const ctx = this.ctx, v = this.view;
     ctx.clearRect(0, 0, v.cssW, v.cssH);
+    if (background) {
+      ctx.fillStyle = background === INK ? this.theme.ink : background;
+      ctx.fillRect(0, 0, v.cssW, v.cssH);
+    }
     if (!showGrid) return;
     let unit = 1;
     while (unit * v.zoom < 12) unit *= 10;
@@ -73,14 +77,19 @@ export class Renderer {
 
   /** Stroke style for one entity.
    *  colorMode 'status' is the SolidWorks scheme (blue under-defined,
-   *  black fully defined); 'layer' uses layer / entity colours. Errors,
+   *  black fully defined); 'style' uses each entity's own colour. Errors,
    *  construction, hover and selection read the same in both. */
   styleFor(entity, isActive, layer = null, owner = null) {
     const t = this.theme;
     const st = resolveStyle(owner && !entity.style ? owner : entity, layer);
     const construction = entity.construction || (owner && owner.construction);
     let color;
-    if (this.colorMode === 'layer') {
+    if (this.colorMode === 'style' && owner && entity instanceof Point) {
+      // Vertices keep the status colours so under-defined geometry stays
+      // visible while strokes show their own colour.
+      color = entity.status === 'fully' ? t.fully : entity.status === 'over' ? t.over : t.under;
+      if (!isActive) color = t.inactive;
+    } else if (this.colorMode === 'style') {
       color = st.color === INK ? t.ink : st.color;
       if (entity.status === 'over') color = t.over;
     } else {
@@ -108,20 +117,24 @@ export class Renderer {
     const activeId = project.activeSketchId;
     // One pass to bucket entities by layer, then draw layers bottom → top.
     const buckets = new Map(project.layers.map(l => [l, new Map()]));
+    const slot = (layer, s) => {
+      const bySketch = buckets.get(layer);
+      if (!bySketch.has(s)) bySketch.set(s, { ents: [], fills: [] });
+      return bySketch.get(s);
+    };
+    const byId = new Map();
     for (const s of project.sketches) {
       if (!s.visible) continue;
-      for (const e of s.entities) {
-        const bySketch = buckets.get(project.layerOf(e));
-        if (!bySketch.has(s)) bySketch.set(s, []);
-        bySketch.get(s).push(e);
-      }
+      for (const e of s.entities) { slot(project.layerOf(e), s).ents.push(e); byId.set(e.id, e); }
+      for (const f of s.fills) { const l = project.layer(f.layerId); if (l) slot(l, s).fills.push(f); }
     }
     for (const layer of project.layers) {
       if (!layer.visible) continue;
-      for (const [s, ents] of buckets.get(layer)) {
+      for (const [s, { ents, fills }] of buckets.get(layer)) {
         const isActive = s.id === activeId;
         const alpha = layer.opacity * (isActive ? 1 : 0.55);
         ctx.globalAlpha = alpha;
+        for (const f of fills) this._drawRegionFill(f, byId);
         this._drawFills(ents, layer);
         for (const e of ents) {
           e.draw(ctx, v, this.styleFor(e, isActive, layer));
@@ -130,6 +143,24 @@ export class Renderer {
         ctx.globalAlpha = 1;
       }
     }
+  }
+
+  /** A paint-bucket fill: outline and holes rebuilt from their boundary
+   *  entities every frame, drawn even-odd. Skipped if the outline broke. */
+  _drawRegionFill(f, byId) {
+    const pick = (ids) => ids.map(id => byId.get(id)).filter(Boolean);
+    const outer = fillOutline(pick(f.outer));
+    if (!outer.length) return;
+    const ctx = this.ctx, v = this.view;
+    ctx.save();
+    ctx.beginPath();
+    for (const loop of [...outer, ...f.holes.flatMap(h => fillOutline(pick(h)))]) {
+      loop.forEach((p, i) => { const q = v.worldToScreen(p); if (i) ctx.lineTo(q.x, q.y); else ctx.moveTo(q.x, q.y); });
+      ctx.closePath();
+    }
+    ctx.fillStyle = withAlpha(f.color === INK ? this.theme.ink : f.color, f.opacity ?? 1);
+    ctx.fill('evenodd');
+    ctx.restore();
   }
 
   /** Fill closed profiles. Entities are grouped by resolved fill so a

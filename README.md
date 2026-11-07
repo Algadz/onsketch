@@ -1,7 +1,7 @@
 # OnSketch
 
 Browser-based parametric 2D sketcher: SolidWorks-style geometric constraints
-and dimensions, with Paint.NET-style layers, colours and fills.
+and dimensions, with Paint.NET-style layers, colours and a fill tool.
 
 - `index.html` is the landing page; `app/` is the editor.
 - No build step. `app/index.html` loads `app/src/main.js` as native ES modules,
@@ -15,7 +15,12 @@ npm run serve        # http://localhost:8080/app/
 npm test             # unit tests (node:test, no browser)
 npm run test:e2e     # drives the editor in headless Chromium (needs playwright)
 npm run lint
+npm run stamp        # after changing anything in app/: refresh cache-busting hashes
 ```
+
+`app/index.html` carries an import map that points every module at
+`file.js?v=<content hash>`, so browsers never mix a fresh page with stale
+cached modules after a deploy. `npm test` fails if the stamp is out of date.
 
 ## Source layout
 
@@ -32,12 +37,21 @@ npm run lint
 
 ```
 Project
-├─ layers[]        display groups (bottom → top): colour, line weight,
-│                  line type, fill, opacity, visible, locked
+├─ layers[]        bottom → top: name, opacity, visible, locked
+├─ background      canvas colour from the fill tool, or null
 └─ sketches[0]     the single parametric sketch
-   ├─ entities[]   Point / Line / Circle / Arc, each with layerId and optional style overrides
-   └─ constraints[]
+   ├─ entities[]   Point / Line / Circle / Arc, each with layerId and style
+   │               (stroke colour, weight, line type, optional fill)
+   ├─ constraints[]
+   └─ fills[]      fill-tool regions: colour + boundary entity ids (outer, holes)
 ```
+
+New geometry takes the current drawing style (Style panel, saved per
+browser). Fill-tool regions store their boundary entities, so they follow the
+geometry; deleting a boundary edge removes the fill.
+
+Picking only sees the active layer. Locked layers never move: the solver
+treats their geometry as constant.
 
 The UI exposes layers only. `sketches` stays an array in the file format, but
 files with several sketches are merged into one on load (pre-layer files get
