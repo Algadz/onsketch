@@ -22,6 +22,8 @@ export class PanelsMixin {
     this._refreshLayers();
     this.refreshToolOptions();
     this._refreshSelectionPanel();
+    this._refreshLayerPanel();
+    this._refreshStylePanel();
     document.getElementById('project-name').value = this.project.name;
   }
 
@@ -74,7 +76,7 @@ export class PanelsMixin {
       const row = document.createElement('div');
       row.className = 'layer-row' + (s.id === this.project.activeSketchId ? ' active' : '');
       row.innerHTML = `
-        <button class="icon-btn" title="Toggle visibility" aria-label="Toggle visibility">${uiIcon(s.visible ? 'eye' : 'eyeOff')}</button>
+        <button class="icon-btn" title="Toggle sketch visibility" aria-label="Toggle sketch visibility">${uiIcon(s.visible ? 'eye' : 'eyeOff')}</button>
         <span class="name" title="${s.name}">${s.name}<span class="badge">${s.entities.length}</span></span>
         <button class="icon-btn" title="Delete" aria-label="Delete sketch">${uiIcon('trash')}</button>
       `;

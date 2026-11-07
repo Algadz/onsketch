@@ -1,4 +1,5 @@
 import { Arc, Circle, Line, Point, ensureIdAbove, newId } from './entities.js';
+import { Layer, cleanStyle } from './style.js';
 import { AngleConstraint, ArcEndpointArcEndpointCoincidentConstraint, ArcEndpointCoincidentConstraint, ArcEndpointFixConstraint, ArcEndpointMidpointConstraint, ArcEndpointOnCircleConstraint, ArcEndpointOnLineConstraint, CoincidentConstraint, CollinearConstraint, ConcentricConstraint, CurveDistanceConstraint, DirectedAngleConstraint, DistanceConstraint, EqualLengthConstraint, EqualRadiusConstraint, FixConstraint, HorizontalConstraint, MidpointConstraint, OffsetConstraint, OffsetDistanceConstraint, ParallelConstraint, PerpendicularConstraint, PointLineDistanceConstraint, PointOnCircleConstraint, PointOnLineConstraint, PointRefHorizontalConstraint, PointRefVerticalConstraint, RadiusConstraint, SymmetricConstraint, TangentCircleCircleConstraint, TangentLineCircleConstraint, VerticalConstraint } from './constraints.js';
 
 /* =============== 5. SKETCH / PROJECT MODEL ==================== */
@@ -11,9 +12,11 @@ export class Sketch {
     this.constraints = [];
     this.features = [];
     this.dirtyIds = new Set();
+    this.project = null;          // back-reference, set by Project; not serialised
   }
   addEntity(e) {
-    e.layerId = this.id;
+    e.sketchId = this.id;
+    if (this.project) this.project.assignLayer(e);
     this.entities.push(e);
     const mark = (x) => {
       this.dirtyIds.add(x.id);
@@ -58,9 +61,12 @@ export class Project {
     this.units = 'mm';
     this.sketches = [];
     this.activeSketchId = null;
+    this.layers = [new Layer('Layer 1', { color: Layer.nextColor(0) })];   // bottom → top
+    this.activeLayerId = this.layers[0].id;
   }
   addSketch(name) {
     const s = new Sketch(name || ('Sketch ' + (this.sketches.length + 1)));
+    s.project = this;
     this.sketches.push(s);
     if (!this.activeSketchId) this.activeSketchId = s.id;
     return s;
@@ -70,6 +76,52 @@ export class Project {
     if (this.activeSketchId === id) this.activeSketchId = this.sketches[0]?.id || null;
   }
   active() { return this.sketches.find(s => s.id === this.activeSketchId); }
+
+  /* ---- Layers ---- */
+  activeLayer() { return this.layer(this.activeLayerId) || this.layers[this.layers.length - 1]; }
+  layer(id) { return this.layers.find(l => l.id === id) || null; }
+  /** Layer that governs an entity's display. Child points (line ends,
+   *  centres) follow their owner, which callers pass as `owner`. */
+  layerOf(entity, owner = null) {
+    const e = (owner && !entity.layerId) ? owner : entity;
+    return this.layer(e.layerId) || this.layers[0];
+  }
+  assignLayer(e) {
+    if (!e.layerId || !this.layer(e.layerId)) e.layerId = this.activeLayerId;
+  }
+  addLayer(name) {
+    const l = new Layer(name || ('Layer ' + (this.layers.length + 1)), { color: Layer.nextColor(this.layers.length) });
+    const i = this.layers.indexOf(this.activeLayer());
+    this.layers.splice(i + 1, 0, l);       // just above the active layer
+    this.activeLayerId = l.id;
+    return l;
+  }
+  /** Removes a layer and every entity on it. The last layer can't go. */
+  removeLayer(id) {
+    if (this.layers.length <= 1) return false;
+    const i = this.layers.findIndex(l => l.id === id);
+    if (i < 0) return false;
+    for (const s of this.sketches) {
+      for (const e of s.entities.filter(e => e.layerId === id)) s.removeEntity(e);
+    }
+    this.layers.splice(i, 1);
+    if (this.activeLayerId === id) this.activeLayerId = this.layers[Math.max(0, i - 1)].id;
+    return true;
+  }
+  /** delta > 0 moves the layer up (drawn later, on top). */
+  moveLayer(id, delta) {
+    const i = this.layers.findIndex(l => l.id === id);
+    const j = i + delta;
+    if (i < 0 || j < 0 || j >= this.layers.length) return false;
+    const [l] = this.layers.splice(i, 1);
+    this.layers.splice(j, 0, l);
+    return true;
+  }
+  entitiesOnLayer(id) {
+    const out = [];
+    for (const s of this.sketches) for (const e of s.entities) if (e.layerId === id) out.push(e);
+    return out;
+  }
   visibleSketches() { return this.sketches.filter(s => s.visible); }
   sketchOf(entityOrPoint) {
     for (const s of this.sketches) {
@@ -83,8 +135,10 @@ export class Project {
   }
   toJSON() {
     return {
-      version: 2, name:this.name, units:this.units,
+      version: 3, name:this.name, units:this.units,
       activeSketchId:this.activeSketchId,
+      activeLayerId:this.activeLayerId,
+      layers:this.layers.map(l => l.toJSON()),
       sketches:this.sketches.map(s => s.toJSON())
     };
   }
@@ -92,8 +146,15 @@ export class Project {
     const p = new Project();
     p.name  = o.name || 'Untitled';
     p.units = o.units || 'mm';
+    // Layers arrived in v3. Older files get the single default layer and
+    // every entity lands on it (assignLayer below).
+    if (Array.isArray(o.layers) && o.layers.length) {
+      p.layers = o.layers.map(Layer.fromJSON);
+      p.activeLayerId = p.layer(o.activeLayerId) ? o.activeLayerId : p.layers[p.layers.length - 1].id;
+    }
     p.sketches = (o.sketches || []).map(sj => {
       const s = new Sketch(sj.name);
+      s.project = p;
       s.id = sj.id; s.visible = sj.visible !== false;
       s.features = Array.isArray(sj.features) ? sj.features.map(f => ({ ...f })) : [];
       // CRITICAL — shared point identity must be preserved across revival.
@@ -114,6 +175,8 @@ export class Project {
         if (ej.id) e.id = ej.id;
         e.construction = !!ej.construction;
         e.fixed = !!ej.fixed;
+        if (ej.layerId) e.layerId = ej.layerId;
+        e.style = cleanStyle(ej.style);
         if (e instanceof Arc) e.clockwise = !!ej.clockwise;
         if (ej.id) idMap.set(ej.id, e);
         return e;
@@ -186,6 +249,7 @@ export class Project {
     for (const s of p.sketches) {
       noteId(s.id);
       const walk = (e) => { noteId(e.id); for (const c of e.children()) walk(c); };
+      for (const l of p.layers) noteId(l.id);
       for (const e of s.entities) walk(e);
       for (const c of s.constraints) noteId(c.id);
     }

@@ -9,7 +9,9 @@ export function ensureIdAbove(n) { if (n >= _idSeq) _idSeq = n + 1; }
 export class Entity {
   constructor() {
     this.id = newId();
-    this.layerId = null;
+    this.sketchId = null;         // owning sketch (set by Sketch.addEntity)
+    this.layerId = null;          // display layer (see core/style.js)
+    this.style = null;            // per-entity style overrides, or null
     this.construction = false;
     this.fixed = false;
     this.status = 'under';        // 'under' | 'fully' | 'over'
@@ -24,8 +26,22 @@ export class Entity {
     const o = { type: this.constructor.kind, id: this.id,
                 construction: this.construction, fixed: this.fixed };
     for (const k of this.paramKeys()) o[k] = this[k];
+    return this._withMeta(o);
+  }
+  /** Adds layer / style fields when set, so plain geometry stays compact. */
+  _withMeta(o) {
+    if (this.layerId) o.layerId = this.layerId;
+    if (this.style) o.style = { ...this.style };
     return o;
   }
+}
+
+/** Applies a resolved draw style's stroke settings to ctx. */
+function applyStroke(ctx, style) {
+  ctx.strokeStyle = style.color;
+  ctx.lineWidth = style.width;
+  if (style.dash && style.dash.length) ctx.setLineDash(style.dash);
+  else if (style.dashed) ctx.setLineDash([6, 4]);
 }
 
 export class Point extends Entity {
@@ -67,18 +83,16 @@ export class Line extends Entity {
     const a = view.worldToScreen(this.p1);
     const b = view.worldToScreen(this.p2);
     ctx.save();
-    ctx.strokeStyle = style.color;
-    ctx.lineWidth = style.width;
-    if (style.dashed) ctx.setLineDash([6, 4]);
+    applyStroke(ctx, style);
     ctx.beginPath();
     ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
     ctx.stroke();
     ctx.restore();
   }
   toJSON() {
-    return { type: 'line', id: this.id,
+    return this._withMeta({ type: 'line', id: this.id,
              construction: this.construction, fixed: this.fixed,
-             p1: this.p1.toJSON(), p2: this.p2.toJSON() };
+             p1: this.p1.toJSON(), p2: this.p2.toJSON() });
   }
 }
 
@@ -94,18 +108,16 @@ export class Circle extends Entity {
   draw(ctx, view, style) {
     const c = view.worldToScreen(this.center);
     ctx.save();
-    ctx.strokeStyle = style.color;
-    ctx.lineWidth = style.width;
-    if (style.dashed) ctx.setLineDash([6, 4]);
+    applyStroke(ctx, style);
     ctx.beginPath();
     ctx.arc(c.x, c.y, this.r * view.zoom, 0, TAU);
     ctx.stroke();
     ctx.restore();
   }
   toJSON() {
-    return { type: 'circle', id: this.id,
+    return this._withMeta({ type: 'circle', id: this.id,
              construction: this.construction, fixed: this.fixed,
-             center: this.center.toJSON(), r: this.r };
+             center: this.center.toJSON(), r: this.r });
   }
 }
 
@@ -138,18 +150,16 @@ export class Arc extends Entity {
   draw(ctx, view, style) {
     this.syncEnds();
     ctx.save();
-    ctx.strokeStyle = style.color;
-    ctx.lineWidth = style.width;
-    if (style.dashed) ctx.setLineDash([6, 4]);
+    applyStroke(ctx, style);
     ctx.beginPath();
     drawDirectedArcPath(ctx, view, this.center, this.r, this.a0, this.a1, this.clockwise);
     ctx.stroke();
     ctx.restore();
   }
   toJSON() {
-    return { type: 'arc', id: this.id,
+    return this._withMeta({ type: 'arc', id: this.id,
              construction: this.construction, fixed: this.fixed,
              center: this.center.toJSON(),
-             r: this.r, a0: this.a0, a1: this.a1, clockwise: !!this.clockwise };
+             r: this.r, a0: this.a0, a1: this.a1, clockwise: !!this.clockwise });
   }
 }

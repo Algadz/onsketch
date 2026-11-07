@@ -14,6 +14,7 @@ import { OperationsMixin } from './operations.js';
 import { ConstraintActionsMixin } from './constraint-actions.js';
 import { RenderEventsMixin } from './render-events.js';
 import { PanelsMixin } from './panels.js';
+import { LayersPanelMixin } from './layers-panel.js';
 import { PersistenceMixin } from './persistence.js';
 
 /* =============== 10. APP ====================================== */
@@ -25,6 +26,7 @@ export class App {
     this.canvas = document.getElementById('canvas');
     this.renderer = new Renderer(this.canvas, this.view);
     this.snap = new SnapEngine();
+    this.snap.entityFilter = (e) => this.isEntityVisible(e);
     this.solver = new Solver();
     this.tool = new SelectTool(this);
     this.toolName = 'select';
@@ -60,6 +62,7 @@ export class App {
     this._setupKeyboard();
     this._setupTopbar();
     this._setupSidebar();
+    this._setupLayersPanel();
     this._setupModal();
     this._setupResize();
     this.refreshUI();
@@ -74,6 +77,12 @@ export class App {
     const s = this.activeSketch();
     return (s && s.visible) ? [s] : [];
   }
+
+  /* ---- Layer visibility / lock ---- */
+  /** Entity's layer is shown (hidden layers are still solved). */
+  isEntityVisible(e) { const l = this.project.layerOf(e); return !l || l.visible; }
+  /** Entity can be hovered, picked and box-selected. */
+  isEntityInteractive(e) { const l = this.project.layerOf(e); return !l || (l.visible && !l.locked); }
 
   makeOrReusePoint(world, snap, sketch) {
     // Endpoint snaps return the snapped Point directly so callers share
@@ -254,12 +263,13 @@ export class App {
     // entities, such as centerline midpoints, must win over line bodies.
     for (const s of sketches) {
       for (const e of s.entities) {
+        if (!this.isEntityInteractive(e)) continue;
         for (const c of e.children()) if (c.hit(world, v)) return c;
         if (e instanceof Point && e.hit(world, v)) return e;
       }
     }
     for (const s of sketches) {
-      for (const e of s.entities) if (!(e instanceof Point) && e.hit(world, v)) return e;
+      for (const e of s.entities) if (!(e instanceof Point) && this.isEntityInteractive(e) && e.hit(world, v)) return e;
     }
     return null;
   }
@@ -275,13 +285,14 @@ export class App {
     };
     for (const s of sketches) {
       for (const e of s.entities) {
+        if (!this.isEntityInteractive(e)) continue;
         for (const c of e.children()) if (c.hit(world, v)) add(c);
         if (e instanceof Point && e.hit(world, v)) add(e);
       }
     }
     for (const s of sketches) {
       for (const e of s.entities) {
-        if (!(e instanceof Point) && e.hit(world, v)) add(e);
+        if (!(e instanceof Point) && this.isEntityInteractive(e) && e.hit(world, v)) add(e);
       }
     }
     return out;
@@ -486,7 +497,7 @@ export class App {
 }
 
 /* Methods are grouped into mixins by concern; see src/app/*.js. */
-for (const Mixin of [DimensionLabelsMixin, SelectionMixin, DragMixin, SolveMixin, OperationsMixin, ConstraintActionsMixin, RenderEventsMixin, PanelsMixin, PersistenceMixin]) {
+for (const Mixin of [LayersPanelMixin, DimensionLabelsMixin, SelectionMixin, DragMixin, SolveMixin, OperationsMixin, ConstraintActionsMixin, RenderEventsMixin, PanelsMixin, PersistenceMixin]) {
   for (const key of Object.getOwnPropertyNames(Mixin.prototype)) {
     if (key === 'constructor') continue;
     Object.defineProperty(App.prototype, key, Object.getOwnPropertyDescriptor(Mixin.prototype, key));

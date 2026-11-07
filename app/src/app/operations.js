@@ -4,6 +4,12 @@ import { Arc, Circle, Line, Point, newId } from '../core/entities.js';
 import { AngleConstraint, ArcEndpointArcEndpointCoincidentConstraint, ArcEndpointCoincidentConstraint, ArcEndpointMidpointConstraint, ArcEndpointOnCircleConstraint, ArcEndpointOnLineConstraint, CoincidentConstraint, CollinearConstraint, ConcentricConstraint, Constraint, DirectedAngleConstraint, EqualLengthConstraint, EqualRadiusConstraint, HorizontalConstraint, MidpointConstraint, OffsetConstraint, OffsetDistanceConstraint, ParallelConstraint, ParamFixConstraint, PerpendicularConstraint, PointOnCircleConstraint, PointOnLineConstraint, PointRefHorizontalConstraint, PointRefVerticalConstraint, SymmetricConstraint, TangentCircleCircleConstraint, TangentLineCircleConstraint, VerticalConstraint } from '../core/constraints.js';
 import { SelectTool } from '../tools/select.js';
 
+/** Mirrored and offset copies keep their source's layer and style. */
+function copyDisplay(src, dst) {
+  dst.layerId = src.layerId;
+  dst.style = src.style ? { ...src.style } : null;
+}
+
 export class OperationsMixin {
 
   /* ---- Operations ---- */
@@ -1130,6 +1136,7 @@ export class OperationsMixin {
     for (const src of sources) {
       if (src instanceof Point) {
         const p = linkPoint(src);
+        copyDisplay(src, p);
         sketch.addEntity(p);
         newEntities.push(p);
       } else if (src instanceof Line) {
@@ -1137,12 +1144,14 @@ export class OperationsMixin {
         const b = linkPoint(src.p2);
         const line = new Line(a, b);
         line.construction = src.construction;
+        copyDisplay(src, line);
         sketch.addEntity(line);
         newEntities.push(line);
       } else if (src instanceof Circle) {
         const center = linkPoint(src.center);
         const circle = new Circle(center, src.r);
         circle.construction = src.construction;
+        copyDisplay(src, circle);
         sketch.addEntity(circle);
         sketch.constraints.push(new EqualRadiusConstraint(src.id, circle.id));
         newEntities.push(circle);
@@ -1392,6 +1401,7 @@ export class OperationsMixin {
       }
       if (!entity) continue;
       entity.construction = item.source.construction;
+      copyDisplay(item.source, entity);
       sketch.addEntity(entity);
       made.push(entity);
       madeBySourceId.set(item.source.id, { source: item.source, entity, item });

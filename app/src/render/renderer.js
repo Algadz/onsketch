@@ -1,5 +1,8 @@
 import { EPS, TAU, angleArcFromPoints, angleSectorForValue, drawDirectedArcPath, lineIntersection, normalizeAngleValue } from '../core/math.js';
 import { Arc, Circle, Line, Point } from '../core/entities.js';
+import { resolveStyle, dashFor, withAlpha } from '../core/style.js';
+import { getTheme, INK } from './theme.js';
+import { findClosedProfiles } from './regions.js';
 
 export class Renderer {
   constructor(canvas, view) {
@@ -8,6 +11,8 @@ export class Renderer {
     this.view = view;
     this.dpr = window.devicePixelRatio || 1;
     this.lastDimRects = [];
+    this.theme = getTheme('light');
+    this.colorMode = 'status';     // 'status' | 'layer'
   }
   resize() {
     const r = this.canvas.getBoundingClientRect();
@@ -29,7 +34,7 @@ export class Renderer {
     const minY = Math.floor(br.y / unit) * unit;
     const maxY = Math.ceil (tl.y / unit) * unit;
 
-    ctx.strokeStyle = '#e8ecf1'; ctx.lineWidth = 1;
+    ctx.strokeStyle = this.theme.gridFine; ctx.lineWidth = 1;
     ctx.beginPath();
     for (let x = minX; x <= maxX + EPS; x += unit) {
       const sx = v.worldToScreen({x,y:0}).x + 0.5;
@@ -41,7 +46,7 @@ export class Renderer {
     }
     ctx.stroke();
 
-    ctx.strokeStyle = '#cdd3db';
+    ctx.strokeStyle = this.theme.gridMajor;
     ctx.beginPath();
     const major = unit * 10;
     const mMinX = Math.floor(tl.x / major) * major;
@@ -59,40 +64,106 @@ export class Renderer {
     ctx.stroke();
 
     const o = v.worldToScreen({x:0,y:0});
-    ctx.strokeStyle = '#a7afba'; ctx.lineWidth = 1.2;
+    ctx.strokeStyle = this.theme.origin; ctx.lineWidth = 1.2;
     ctx.beginPath();
     ctx.moveTo(o.x - 7, o.y); ctx.lineTo(o.x + 7, o.y);
     ctx.moveTo(o.x, o.y - 7); ctx.lineTo(o.x, o.y + 7);
     ctx.stroke();
   }
 
-  styleFor(entity, isActive) {
-    let color = '#1f7ad6';                          // blue (under)
-    if (entity.status === 'fully') color = '#111418';
-    if (entity.status === 'over')  color = '#d63a3a'; // red
-    if (entity.construction)        color = '#c44b8a';
-    if (entity.hover)               color = '#ffae5a'; // lighter orange — distinct from selected
-    if (entity.selected)            color = '#ff8a1e';
-    if (!isActive && !entity.selected) color = '#7a828c';
+  /** Stroke style for one entity.
+   *  colorMode 'status' is the SolidWorks scheme (blue under-defined,
+   *  black fully defined); 'layer' uses layer / entity colours. Errors,
+   *  construction, hover and selection read the same in both. */
+  styleFor(entity, isActive, layer = null, owner = null) {
+    const t = this.theme;
+    const st = resolveStyle(owner && !entity.style ? owner : entity, layer);
+    const construction = entity.construction || (owner && owner.construction);
+    let color;
+    if (this.colorMode === 'layer') {
+      color = st.color === INK ? t.ink : st.color;
+      if (entity.status === 'over') color = t.over;
+    } else {
+      color = t.under;
+      if (entity.status === 'fully') color = t.fully;
+      if (entity.status === 'over')  color = t.over;
+      if (!isActive) color = t.inactive;
+    }
+    if (construction)    color = t.construction;
+    if (entity.hover)    color = t.hover;
+    if (entity.selected) color = t.selected;
+    const width = st.lineWidth + (entity.selected ? 0.6 : 0);
     return {
       color,
-      width: entity.selected ? 2 : 1.4,
-      dashed: entity.construction
+      width,
+      dashed: !!construction,
+      dash: construction ? [6, 4] : dashFor(st.lineStyle, width),
     };
   }
 
-  drawEntities(sketches, activeId) {
+  /** Draws fills, then strokes, layer by layer (bottom to top). Hidden
+   *  layers and sketches are skipped; layer opacity multiplies in. */
+  drawEntities(project) {
     const ctx = this.ctx, v = this.view;
-    for (const s of sketches) {
+    const activeId = project.activeSketchId;
+    // One pass to bucket entities by layer, then draw layers bottom → top.
+    const buckets = new Map(project.layers.map(l => [l, new Map()]));
+    for (const s of project.sketches) {
       if (!s.visible) continue;
-      const isActive = s.id === activeId;
-      ctx.globalAlpha = isActive ? 1 : 0.55;
       for (const e of s.entities) {
-        const style = this.styleFor(e, isActive);
-        e.draw(ctx, v, style);
-        for (const c of e.children()) c.draw(ctx, v, this.styleFor(c, isActive));
+        const bySketch = buckets.get(project.layerOf(e));
+        if (!bySketch.has(s)) bySketch.set(s, []);
+        bySketch.get(s).push(e);
       }
-      ctx.globalAlpha = 1;
+    }
+    for (const layer of project.layers) {
+      if (!layer.visible) continue;
+      for (const [s, ents] of buckets.get(layer)) {
+        const isActive = s.id === activeId;
+        const alpha = layer.opacity * (isActive ? 1 : 0.55);
+        ctx.globalAlpha = alpha;
+        this._drawFills(ents, layer);
+        for (const e of ents) {
+          e.draw(ctx, v, this.styleFor(e, isActive, layer));
+          for (const c of e.children()) c.draw(ctx, v, this.styleFor(c, isActive, layer, e));
+        }
+        ctx.globalAlpha = 1;
+      }
+    }
+  }
+
+  /** Fill closed profiles. Entities are grouped by resolved fill so a
+   *  profile nested in another with the same fill becomes a hole. */
+  _drawFills(ents, layer) {
+    const groups = new Map();
+    for (const e of ents) {
+      if (e.construction || e instanceof Point) continue;
+      const st = resolveStyle(e, layer);
+      if (!st.fill) continue;
+      const key = st.fill + '|' + st.fillOpacity;
+      if (!groups.has(key)) groups.set(key, { fill: st.fill, opacity: st.fillOpacity, ents: [] });
+      groups.get(key).ents.push(e);
+    }
+    if (!groups.size) return;
+    const ctx = this.ctx, v = this.view;
+    for (const g of groups.values()) {
+      const { loops, circles } = findClosedProfiles(g.ents);
+      if (!loops.length && !circles.length) continue;
+      ctx.save();
+      ctx.beginPath();
+      for (const loop of loops) {
+        loop.forEach((p, i) => { const q = v.worldToScreen(p); if (i) ctx.lineTo(q.x, q.y); else ctx.moveTo(q.x, q.y); });
+        ctx.closePath();
+      }
+      for (const c of circles) {
+        const q = v.worldToScreen(c.center);
+        ctx.moveTo(q.x + c.r * v.zoom, q.y);
+        ctx.arc(q.x, q.y, c.r * v.zoom, 0, TAU);
+        ctx.closePath();
+      }
+      ctx.fillStyle = withAlpha(g.fill === INK ? this.theme.ink : g.fill, g.opacity);
+      ctx.fill('evenodd');
+      ctx.restore();
     }
   }
 
@@ -101,7 +172,7 @@ export class Renderer {
     const v = this.view, ctx = this.ctx;
     const s = v.worldToScreen(snap);
     ctx.save();
-    ctx.strokeStyle = '#1f7ad6'; ctx.fillStyle = 'white'; ctx.lineWidth = 1.4;
+    ctx.strokeStyle = this.theme.preview; ctx.fillStyle = this.theme.previewHalo; ctx.lineWidth = 1.4;
     ctx.beginPath();
     if (snap.kind === 'endpoint')      ctx.rect(s.x-5, s.y-5, 10, 10);
     else if (snap.kind === 'midpoint') { ctx.moveTo(s.x, s.y-6); ctx.lineTo(s.x+6, s.y); ctx.lineTo(s.x, s.y+6); ctx.lineTo(s.x-6, s.y); ctx.closePath(); }
@@ -115,7 +186,7 @@ export class Renderer {
     if (!pathPoints || pathPoints.length < 2) return;
     const v = this.view, ctx = this.ctx;
     ctx.save();
-    ctx.strokeStyle = '#1f7ad6'; ctx.lineWidth = 1.2;
+    ctx.strokeStyle = this.theme.preview; ctx.lineWidth = 1.2;
     if (dashed) ctx.setLineDash([5, 4]);
     ctx.beginPath();
     const a = v.worldToScreen(pathPoints[0]);
@@ -132,7 +203,7 @@ export class Renderer {
     const v = this.view, ctx = this.ctx;
     const c = v.worldToScreen(center);
     ctx.save();
-    ctx.strokeStyle = '#1f7ad6'; ctx.lineWidth = 1.2;
+    ctx.strokeStyle = this.theme.preview; ctx.lineWidth = 1.2;
     ctx.setLineDash([5, 4]);
     ctx.beginPath();
     ctx.arc(c.x, c.y, radius * v.zoom, 0, TAU);
@@ -143,7 +214,7 @@ export class Renderer {
   drawTempArc(center, radius, a0, a1, clockwise=false) {
     const v = this.view, ctx = this.ctx;
     ctx.save();
-    ctx.strokeStyle = '#1f7ad6'; ctx.lineWidth = 1.2;
+    ctx.strokeStyle = this.theme.preview; ctx.lineWidth = 1.2;
     ctx.setLineDash([5, 4]);
     ctx.beginPath();
     drawDirectedArcPath(ctx, v, center, radius, a0, a1, clockwise);
@@ -156,8 +227,8 @@ export class Renderer {
     const v = this.view, ctx = this.ctx;
     const p = v.worldToScreen(point);
     ctx.save();
-    ctx.fillStyle = '#1f7ad6';
-    ctx.strokeStyle = 'white';
+    ctx.fillStyle = this.theme.preview;
+    ctx.strokeStyle = this.theme.previewHalo;
     ctx.lineWidth = 1.2;
     ctx.beginPath();
     ctx.arc(p.x, p.y, 4, 0, TAU);
@@ -169,8 +240,8 @@ export class Renderer {
     if (!box) return;
     const ctx = this.ctx;
     ctx.save();
-    ctx.strokeStyle = '#2563a5';
-    ctx.fillStyle = 'rgba(37,99,165,0.08)';
+    ctx.strokeStyle = this.theme.accent;
+    ctx.fillStyle = this.theme.accentFill;
     ctx.lineWidth = 1; ctx.setLineDash([4, 3]);
     ctx.beginPath(); ctx.rect(box.x, box.y, box.w, box.h);
     ctx.fill(); ctx.stroke();
@@ -181,8 +252,8 @@ export class Renderer {
     if (!picks || !picks.length) return;
     const v = this.view, ctx = this.ctx;
     ctx.save();
-    ctx.strokeStyle = '#ff8a1e';
-    ctx.fillStyle = 'rgba(255,138,30,0.18)';
+    ctx.strokeStyle = this.theme.selected;
+    ctx.fillStyle = this.theme.pickFill;
     ctx.lineWidth = 2;
     for (const e of picks) {
       if (e instanceof Point) {
@@ -276,10 +347,10 @@ export class Renderer {
 
   _dimColors(grey, selected = false) {
     return selected
-      ? { stroke: '#ff8a1e', fill: '#ff8a1e', text: '#bf5b00' }
+      ? { stroke: this.theme.selected, fill: this.theme.selected, text: this.theme.dimSelectedText }
       : grey
-      ? { stroke: 'rgba(120,128,140,0.85)', fill: 'rgba(120,128,140,0.85)', text: '#7a828c' }
-      : { stroke: '#1c2026', fill: '#1c2026', text: '#1c2026' };
+      ? { stroke: this.theme.dimGrey, fill: this.theme.dimGrey, text: this.theme.dimGreyText }
+      : { stroke: this.theme.dim, fill: this.theme.dim, text: this.theme.dim };
   }
 
   _drawArrow(ctx, tip, dir) {
@@ -309,7 +380,7 @@ export class Renderer {
     // Subtle stroke under the text so it stays legible over grid / lines
     // without painting a hard white background rectangle.
     ctx.lineWidth = 3;
-    ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+    ctx.strokeStyle = this.theme.textHalo;
     ctx.lineJoin = 'round';
     ctx.strokeText(text, 0, 0);
     ctx.fillStyle = color;

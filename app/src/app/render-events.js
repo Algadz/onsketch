@@ -13,7 +13,7 @@ export class RenderEventsMixin {
   }
   _render() {
     this.renderer.drawGrid(this.gridOn);
-    this.renderer.drawEntities(this.project.sketches, this.project.activeSketchId);
+    this.renderer.drawEntities(this.project);
 
     // Build a project-wide id → entity lookup for dimension drawing.
     const entMap = new Map();
@@ -228,6 +228,8 @@ export class RenderEventsMixin {
           case 'grid':         this.gridOn = !this.gridOn; b.classList.toggle('on', this.gridOn); this.requestRender(); break;
           case 'snap':         this.snapOn = !this.snapOn; b.classList.toggle('on', this.snapOn); this.requestRender(); break;
           case 'zoom-fit':     this.zoomFit(); break;
+          case 'color-mode':   this.setColorMode(this.colorMode === 'layer' ? 'status' : 'layer'); this._refreshStylePanel(); break;
+          case 'theme':        this.setTheme(this.themeName === 'dark' ? 'light' : 'dark'); break;
           case 'zoom-reset':   this.view.zoom = 4; this.view.panX = 0; this.view.panY = 0; this.requestRender(); break;
         }
       });

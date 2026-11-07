@@ -212,6 +212,7 @@ export class SelectTool extends Tool {
       const mirrorHits = [];
       for (const s of this.app.activeVisibleSketches()) {
         for (const e of s.entities) {
+          if (!this.app.isEntityInteractive(e)) continue;
           const inBox = (p) => p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1;
           let inside = false;
           if (e instanceof Line)        inside = inBox(e.p1) && inBox(e.p2);

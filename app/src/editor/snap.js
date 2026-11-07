@@ -30,6 +30,7 @@ export class SnapEngine {
     };
     for (const sketch of sketches) {
       for (const e of sketch.entities) {
+        if (this.entityFilter && !this.entityFilter(e)) continue;
         if (e instanceof Line) {
           consider(e.p1, 'endpoint', e.p1);
           consider(e.p2, 'endpoint', e.p2);

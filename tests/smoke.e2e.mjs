@@ -35,6 +35,7 @@ page.route(/umami/, r => r.abort());
 let failed = 0;
 const check = (cond, msg) => { console.log((cond ? 'ok   ' : 'FAIL ') + msg); if (!cond) failed++; };
 
+await page.addInitScript(() => { try { localStorage.setItem('onsketch:prefs', JSON.stringify({ theme: 'light', colorMode: 'status' })); } catch {} });
 await page.goto(`http://localhost:${port}/app/`);
 await page.waitForFunction(() => window._app);
 const box = await page.locator('#canvas').boundingBox();
@@ -123,6 +124,80 @@ const rt = await page.evaluate(() => {
 });
 check(rt, 'project JSON round-trips');
 
+// ---- Layers, styles, fills ----
+await page.click('#layer-add');
+const layerInfo = await page.evaluate(() => {
+  const a = window._app;
+  return { n: a.project.layers.length, active: a.project.activeLayer().name, rows: document.querySelectorAll('#layer-list .lyr-row').length };
+});
+check(layerInfo.n === 2 && layerInfo.rows === 2 && layerInfo.active === 'Layer 2', `add layer (${JSON.stringify(layerInfo)})`);
+
+// A rectangle drawn now goes on Layer 2; give the layer a fill from the panel.
+await page.keyboard.press('r');
+await page.mouse.click(cx + 60, cy + 60);
+await page.mouse.click(cx + 200, cy + 160);
+await page.keyboard.press('Escape');
+await page.keyboard.press('s');
+await page.evaluate(() => window._app.clearSelection());
+await page.click('#style-body .swatches[data-key="fill"] .sw[data-v="#e07b00"]');
+const onLayer2 = await page.evaluate(() => {
+  const a = window._app, ly = a.project.activeLayer();
+  return { count: a.project.entitiesOnLayer(ly.id).length, fill: ly.fill };
+});
+check(onLayer2.count === 4 && onLayer2.fill === '#e07b00', `new geometry on active layer, layer fill set (${JSON.stringify(onLayer2)})`);
+
+// Fill pixels actually painted inside the rectangle.
+await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
+const filled = await page.evaluate(([x, y]) => {
+  const c = document.getElementById('canvas'), r = c.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  const px = c.getContext('2d').getImageData((x - r.left) * d, (y - r.top) * d, 1, 1).data;
+  return Array.from(px);
+}, [cx + 130, cy + 110]);
+check(filled[3] > 0 && filled[0] > filled[2], `fill painted (rgba ${filled.join(',')})`);
+
+// Per-entity override through the selection style panel.
+await page.evaluate(() => {
+  const a = window._app, ly = a.project.activeLayer();
+  a.clearSelection();
+  a.setSelected(a.project.entitiesOnLayer(ly.id)[0], true);
+  a.refreshUI();
+});
+await page.click('#style-body .swatches[data-key="color"] .sw[data-v="#d63a3a"]');
+await page.selectOption('#style-body select[data-key="lineStyle"]', 'center');
+const ov = await page.evaluate(() => {
+  const a = window._app, ly = a.project.activeLayer();
+  return a.project.entitiesOnLayer(ly.id)[0].style;
+});
+check(ov && ov.color === '#d63a3a' && ov.lineStyle === 'center', `entity style override (${JSON.stringify(ov)})`);
+const undoStyle = await page.evaluate(() => {
+  const a = window._app; a.undo();
+  const ly = a.project.activeLayer();
+  return a.project.entitiesOnLayer(ly.id)[0].style;
+});
+check(undoStyle && undoStyle.lineStyle === undefined && undoStyle.color === '#d63a3a', `style change is undoable (${JSON.stringify(undoStyle)})`);
+
+// Lock: geometry on a locked layer can't be picked; hide: can't be snapped either.
+const lockHit = await page.evaluate(() => {
+  const a = window._app, ly = a.project.activeLayer();
+  const line = a.project.entitiesOnLayer(ly.id)[0];
+  const mid = { x: (line.p1.x + line.p2.x) / 2, y: (line.p1.y + line.p2.y) / 2 };
+  const before = a.hitTestAcrossLayers(mid) === line;
+  ly.locked = true;
+  const locked = a.hitTestAcrossLayers(mid);
+  ly.locked = false; ly.visible = false;
+  const snap = a.snap.find(line.p1, a.view, a.visibleSketches());
+  ly.visible = true;
+  return { before, locked: locked === null, snapHidden: !snap || snap.entity !== line.p1 };
+});
+check(lockHit.before && lockHit.locked && lockHit.snapHidden, `lock / hide exclude picking and snapping (${JSON.stringify(lockHit)})`);
+
+// Colour mode + theme toggles.
+await page.click('#topbar [data-action="color-mode"]');
+await page.click('#topbar [data-action="theme"]');
+const prefs = await page.evaluate(() => ({ mode: window._app.renderer.colorMode, theme: document.documentElement.dataset.theme }));
+check(prefs.mode === 'layer' && prefs.theme === 'dark', `colour mode + theme (${JSON.stringify(prefs)})`);
+
+await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
 if (shot) await page.screenshot({ path: shot });
 check(errors.length === 0, `no page errors${errors.length ? ': ' + errors.join(' / ') : ''}`);
 
