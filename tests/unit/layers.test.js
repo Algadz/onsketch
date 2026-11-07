@@ -77,10 +77,9 @@ test('older files: stroke colours are dropped, shape and layer fills become Fill
   const fills = p.sketches[0].fills;
   assert.equal(fills.length, 2);
   const sq = fills.find(f => f.color === '#e07b00');
-  assert.equal(sq.opacity, 0.4); assert.deepEqual(new Set(sq.ids), new Set(['e5', 'e6', 'e7', 'e8']));
-  assert.ok(sq.seed.x > 0 && sq.seed.x < 10);
+  assert.equal(sq.opacity, 0.4);
+  assert.ok(sq.seed.x > 0 && sq.seed.x < 10 && sq.seed.y > 0 && sq.seed.y < 10);
   const disc = fills.find(f => f.color === '#8a4fd1');
-  assert.deepEqual(disc.ids, ['e10']);
   assert.ok(Math.hypot(disc.seed.x - 30, disc.seed.y) < 2);
   const ids = new Set([...p.sketches[0].entities.map(e => e.id), ...fills.map(f => f.id)]);
   assert.equal(ids.size, 5 + 2, 'new fill ids do not collide');
@@ -201,19 +200,20 @@ test('new entities take the drawing style; loaded ones keep their own', () => {
   assert.equal(q.sketches[0].entities[0].style, null);
 });
 
-test('fill-tool fills and background survive save/load; fills drop only when all boundary entities go', () => {
+test('fill-tool fills and background survive save/load (hidden ones keep their outline)', () => {
   const p = new Project(); const s = p.addSketch('A');
   const a = new Line(new Point(0, 0), new Point(4, 0)), b = new Line(a.p2, new Point(0, 3)), c = new Line(b.p2, a.p1);
   for (const e of [a, b, c]) s.addEntity(e);
-  s.fills.push({ id: 'f900', layerId: p.layers[0].id, color: '#8a4fd1', opacity: 0.5, ids: [a.id, b.id, c.id], seed: { x: 1, y: 1 } });
+  s.fills.push({ id: 'f900', layerId: p.layers[0].id, color: '#8a4fd1', opacity: 0.5, seed: { x: 1, y: 1 }, region: { outer: [], holes: [] } });
+  s.fills.push({ id: 'f901', layerId: p.layers[0].id, color: '#14946b', opacity: 1, seed: { x: 9, y: 9 }, dormant: true, outline: [{ x: 8, y: 8 }, { x: 10, y: 8 }, { x: 9, y: 10 }] });
   p.background = '#e5e7eb';
   const q = Project.fromJSON(JSON.parse(JSON.stringify(p.toJSON())));
   assert.equal(q.background, '#e5e7eb');
-  assert.deepEqual(q.sketches[0].fills[0].seed, { x: 1, y: 1 });
+  const [f0, f1] = q.sketches[0].fills;
+  assert.deepEqual(f0, { id: 'f900', layerId: p.layers[0].id, color: '#8a4fd1', opacity: 0.5, seed: { x: 1, y: 1 } });
+  assert.equal(f1.dormant, true); assert.equal(f1.outline.length, 3);
   s.removeEntity(b);
-  assert.deepEqual(s.fills[0].ids, [a.id, c.id]);
-  s.removeEntity(a); s.removeEntity(c);
-  assert.equal(s.fills.length, 0);
+  assert.equal(s.fills.length, 2, 'deleting a shape does not delete paint; recolouring decides');
 });
 
 test('fills saved in the older outline format get an inside point on load', () => {
@@ -226,7 +226,7 @@ test('fills saved in the older outline format get an inside point on load', () =
     { type: 'circle', id: 'e10', layerId: 'ly1', center: pt('e9', 5, 5), r: 2 }],
     constraints: [], fills: [{ id: 'f11', layerId: 'ly1', color: '#8a4fd1', opacity: 0.5, outer: ['e3', 'e5', 'e7', 'e8'], holes: [['e10']] }] }] };
   const f = Project.fromJSON(old).sketches[0].fills[0];
-  assert.deepEqual(new Set(f.ids), new Set(['e3', 'e5', 'e7', 'e8', 'e10']));
+  assert.equal(f.ids, undefined);
   assert.ok(f.seed.x > 0 && f.seed.x < 10 && f.seed.y > 0 && f.seed.y < 10);
   assert.ok(Math.hypot(f.seed.x - 5, f.seed.y - 5) > 2, 'seed is outside the hole');
   assert.equal(f.outer, undefined);

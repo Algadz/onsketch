@@ -16,7 +16,7 @@ export class RenderEventsMixin {
   }
   _render() {
     this.renderer.drawGrid(this.gridOn, this.project.background);
-    this.renderer.drawEntities(this.project);
+    this.renderer.drawEntities(this.project, this.fillDisplay());
 
     // Build a project-wide id → entity lookup for dimension drawing.
     const entMap = new Map();

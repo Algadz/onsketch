@@ -273,9 +273,9 @@ await page.keyboard.press('b');
 await page.mouse.click(cx - 120, cy - 20);
 const bucket = await page.evaluate(() => {
   const a = window._app, s = a.activeSketch();
-  return { fills: s.fills.map(f => ({ layer: f.layerId === a.project.activeLayerId, color: f.color, n: f.ids.length })) };
+  return { fills: s.fills.map(f => ({ layer: f.layerId === a.project.activeLayerId, color: f.color, painted: !f.dormant })) };
 });
-check(bucket.fills.length === 1 && bucket.fills[0].layer && bucket.fills[0].color === '#8a4fd1' && bucket.fills[0].n >= 4,
+check(bucket.fills.length === 1 && bucket.fills[0].layer && bucket.fills[0].color === '#8a4fd1' && bucket.fills[0].painted,
   `fill tool fills the clicked region (${JSON.stringify(bucket)})`);
 const bucketPx = await pixel(cx - 120, cy - 20);
 check(bucketPx[3] > 0 && bucketPx[2] > bucketPx[1], `region fill painted (rgba ${bucketPx.join(',')})`);
@@ -543,6 +543,55 @@ offs.sort((x, y) => x - y);
 const medianOff = offs[offs.length >> 1];
 check(worstOff < 1.5 && medianOff < 0.1, `point on a fixed arm follows the cursor round its circle (median ${medianOff.toFixed(3)} mm, worst ${worstOff.toFixed(3)} mm off)`);
 check(armAfter === arm.n, `release over an unreachable target adds nothing (${arm.n} → ${armAfter})`);
+
+// Fill colours follow the areas: merge on release, undo, opened areas.
+const fillScene = await page.evaluate(() => {
+  const a = window._app, P = a.project.constructor;
+  const pt = (id, x, y, fixed = false) => ({ type: 'point', id, x, y, fixed });
+  a.project = P.fromJSON({ version: 3, layers: [{ id: 'ly1', name: 'L' }], activeLayerId: 'ly1', sketches: [{ id: 's1', name: 'S', entities: [
+    { type: 'line', id: 'e5', layerId: 'ly1', p1: pt('e1', 0, 0, true), p2: pt('e2', 60, 0, true) },
+    { type: 'line', id: 'e6', layerId: 'ly1', p1: pt('e2', 60, 0, true), p2: pt('e3', 60, 40, true) },
+    { type: 'line', id: 'e7', layerId: 'ly1', p1: pt('e3', 60, 40, true), p2: pt('e4', 0, 40, true) },
+    { type: 'line', id: 'e8', layerId: 'ly1', p1: pt('e4', 0, 40, true), p2: pt('e1', 0, 0, true) },
+    { type: 'line', id: 'e10', layerId: 'ly1', p1: pt('e4', 0, 40, true), p2: pt('e9', 75, -20) },   // crosses the bottom at x=50
+    // an open-able triangle: its last side ends on the base (no shared point)
+    { type: 'line', id: 'e13', layerId: 'ly1', p1: pt('e11', 86, 0, true), p2: pt('e12', 110, 0, true) },
+    { type: 'line', id: 'e15', layerId: 'ly1', p1: pt('e12', 110, 0, true), p2: pt('e14', 100, 20, true) },
+    { type: 'line', id: 'e17', layerId: 'ly1', p1: pt('e14', 100, 20, true), p2: pt('e16', 92, 0) }],
+    constraints: [],
+    fills: [{ id: 'f20', layerId: 'ly1', color: '#14946b', opacity: 1, seed: { x: 50, y: 30 } },
+            { id: 'f21', layerId: 'ly1', color: '#c9a400', opacity: 1, seed: { x: 10, y: 10 } },
+            { id: 'f22', layerId: 'ly1', color: '#8a4fd1', opacity: 1, seed: { x: 100, y: 7 } }] }] });
+  a._afterStateSwap(); a.view.zoom = 4; a.view.panX = -180; a.view.panY = 60; a.commit({ diagnostics: 'sync' });
+  for (const w of ['equations', 'props', 'colors']) a.windows.toggle(w, false);
+  return a.activeSketch().fills.map(f => f.color + (f.dormant ? '(hidden)' : '')).sort().join(',');
+});
+check(fillScene === '#14946b,#8a4fd1,#c9a400', `fill scene loads with three painted areas (${fillScene})`);
+await page.keyboard.press('s');
+const drag2 = async (from, to, holdCheck) => {
+  const A = await W(from[0], from[1]), B = await W(to[0], to[1]);
+  await page.mouse.move(box.x + A.x, box.y + A.y); await page.mouse.down();
+  for (let i = 1; i <= 10; i++) await page.mouse.move(box.x + A.x + (B.x - A.x) * i / 10, box.y + A.y + (B.y - A.y) * i / 10);
+  const during = holdCheck ? await page.evaluate(() => { const d = [...window._app.fillDisplay().values()][0]; return { painted: d.painted.length, ghosts: d.ghosts.length }; }) : null;
+  await page.mouse.up();
+  return during;
+};
+await drag2([75, -20], [40, 20]);          // diagonal end inside the rectangle: no longer splits it
+const merged = await page.evaluate(() => window._app.activeSketch().fills.filter(f => !f.dormant).map(f => f.color));
+check(merged.length === 2 && merged.includes('#14946b') && !merged.includes('#c9a400'),
+  `merge on release keeps the majority colour, green 1400 mm² over yellow 1000 mm² (${merged.join(',')})`);
+const unmerged = await page.evaluate(() => { const a = window._app; a.undo(); return a.activeSketch().fills.map(f => f.color).sort().join(','); });
+check(unmerged === '#14946b,#8a4fd1,#c9a400', `undo brings both colours back (${unmerged})`);
+// Open the triangle: the side now passes left of the base (x≈83 < 86).
+const ghostDuring = await drag2([92, 0], [70, -15], true);
+const hidden = await page.evaluate(() => ({ n: window._app.dormantFillCount(), hint: document.getElementById('status-hint').textContent }));
+check(ghostDuring && ghostDuring.ghosts === 1 && hidden.n === 1 && /hidden/.test(hidden.hint),
+  `opened area: ghost while dragging, hidden after release (${JSON.stringify({ ghostDuring, hidden })})`);
+await page.keyboard.press('b');
+await page.click('#optbar [data-opt="delete-hidden-fills"]');
+const afterDelete = await page.evaluate(() => window._app.dormantFillCount());
+check(afterDelete === 0, 'Fill tool: delete hidden fills');
+await page.keyboard.press('s');
 
 await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
 if (shot) await page.screenshot({ path: shot });

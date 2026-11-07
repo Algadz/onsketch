@@ -17,7 +17,7 @@ function convertLegacyFills(items, sketch) {
     for (const c of planarCycles(g.ents)) {
       if (c.area <= 1e-9) continue;
       const seed = interiorPoint({ outer: c.pts, holes: [] });
-      if (seed) out.push({ id: newId('f'), layerId: g.layerId, color: g.color, opacity: g.opacity, ids: c.ids, seed });
+      if (seed) out.push({ id: newId('f'), layerId: g.layerId, color: g.color, opacity: g.opacity, seed });
     }
   }
   return out;
@@ -39,7 +39,7 @@ function isSelfReferential(c) {
  *  out from that outline. */
 function reviveFill(f, sketch) {
   if (!f || typeof f !== 'object') return null;
-  if (Array.isArray(f.ids) && f.seed && Number.isFinite(f.seed.x)) return { ...f, ids: [...f.ids] };
+  if (f.seed && Number.isFinite(f.seed.x)) return fillToJSON(f);
   if (!Array.isArray(f.outer)) return null;
   const byId = new Map(sketch.entities.map(e => [e.id, e]));
   const loop = (ids) => {
@@ -54,8 +54,14 @@ function reviveFill(f, sketch) {
   const holes = (f.holes || []).map(loop).filter(Boolean);
   const seed = interiorPoint({ outer, holes });
   if (!seed) return null;
-  const { outer: o, holes: h, ...rest } = f;
-  return { ...rest, ids: [...new Set([...o, ...(h || []).flat()])], seed };
+  return fillToJSON({ ...f, seed });
+}
+
+/** Saved form of a fill (drops the transient region). */
+export function fillToJSON(f) {
+  const o = { id: f.id, layerId: f.layerId, color: f.color, opacity: f.opacity ?? 1, seed: { x: f.seed.x, y: f.seed.y } };
+  if (f.dormant) { o.dormant = true; if (Array.isArray(f.outline)) o.outline = f.outline.map(p => ({ x: p.x, y: p.y })); }
+  return o;
 }
 import { AngleConstraint, ArcEndpointArcEndpointCoincidentConstraint, ArcEndpointCoincidentConstraint, ArcEndpointFixConstraint, ArcEndpointMidpointConstraint, ArcEndpointOnCircleConstraint, ArcEndpointOnLineConstraint, CoincidentConstraint, CollinearConstraint, ConcentricConstraint, CurveDistanceConstraint, DirectedAngleConstraint, DistanceConstraint, EqualLengthConstraint, EqualRadiusConstraint, FixConstraint, HorizontalConstraint, MidpointConstraint, OffsetConstraint, OffsetDistanceConstraint, ParallelConstraint, PerpendicularConstraint, PointLineDistanceConstraint, PointOnCircleConstraint, PointOnLineConstraint, PointRefHorizontalConstraint, PointRefVerticalConstraint, RadiusConstraint, SymmetricConstraint, TangentCircleCircleConstraint, TangentLineCircleConstraint, VerticalConstraint } from './constraints.js';
 
@@ -68,9 +74,12 @@ export class Sketch {
     this.entities = [];
     this.constraints = [];
     this.features = [];
-    // Fill-tool fills: { id, layerId, color, opacity, ids:[boundary entity ids], seed:{x,y} }.
-    // The region is re-found from its boundary entities around the seed
-    // (a point inside it), so a fill follows its geometry.
+    // Fill-tool fills: { id, layerId, color, opacity, seed:{x,y} } where the
+    // seed is a point inside the painted area; the area is whatever closed
+    // region the layer's shapes form around it. When shapes change, colours
+    // are carried over by overlap (core/regions.js reconcileFills). Paint
+    // whose area opened up is kept as { dormant:true, outline:[...] }.
+    // A transient `region` (current outline) is attached at run time.
     this.fills = [];
     this.dirtyIds = new Set();
     this.project = null;          // back-reference, set by Project; not serialised
@@ -107,11 +116,6 @@ export class Sketch {
         .concat(f.generatedEntityIds || []);
       return !refs.some(id => staleIds.has(id));
     });
-    // Deleted boundary entities leave the fill's list; if the region no
-    // longer closes, the fill simply isn't drawn.
-    this.fills = this.fills
-      .map(f => ({ ...f, ids: f.ids.filter(id => !staleIds.has(id)) }))
-      .filter(f => f.ids.length);
   }
   toJSON() {
     const o = {
@@ -125,7 +129,7 @@ export class Sketch {
       })
     };
     if (this.features && this.features.length) o.features = this.features;
-    if (this.fills.length) o.fills = this.fills.map(f => ({ ...f }));
+    if (this.fills.length) o.fills = this.fills.map(fillToJSON);
     return o;
   }
 }

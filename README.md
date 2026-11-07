@@ -101,7 +101,8 @@ Project
    ├─ entities[]   Point / Line / Circle / Arc, each with layerId and style
    │               (line weight, line type)
    ├─ constraints[]
-   └─ fills[]      fill-tool regions: colour, boundary entity ids, a point inside
+   └─ fills[]      fill-tool paint: colour, opacity, layer, a point inside the area
+                   (hidden ones also keep their last outline)
 ```
 
 New geometry takes the current line weight and type. Files from earlier
@@ -109,8 +110,15 @@ versions drop stroke colours, and shapes they filled through their style
 become Fill-tool fills. Regions are
 found on a planar arrangement of the geometry (segments split where they touch
 or cross, overlaps merged), so shapes sharing or crossing edges fill correctly.
-A fill-tool fill is re-found each time from its boundary entities around its
-inside point, so it follows the geometry.
+Fill-tool fills are paint on areas (like Live Paint): a colour plus a point
+inside the area, on one layer. When that layer's shapes change, colours follow
+the areas by overlap: a split keeps the colour on both pieces, a merge takes the
+colour that covered most of it, a re-cut area takes the majority colour of each
+new piece, and a new unpainted area stays empty. Paint whose area opens up is
+kept hidden (ghosted while dragging) and returns if the area closes again; the
+Fill tool's options can delete hidden fills. During a drag nothing is stored:
+dragging back restores the colours exactly; the result is kept on release and
+can be undone.
 
 
 

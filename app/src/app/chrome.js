@@ -174,6 +174,8 @@ export class ChromeMixin {
     } else if (t.id === 'fill') {
       html += sep + `<span class="seg"><button class="${this.fillErase ? '' : 'on'}" data-opt="fill-mode">Fill</button><button class="${this.fillErase ? 'on' : ''}" data-opt="erase-mode">Erase fill</button></span>`;
       html += `<label class="opt">Colour <i class="opt-sw" style="--sw:${p.fillColor}"></i></label>`;
+      const hidden = this.dormantFillCount();
+      if (hidden) html += sep + `<span class="opt-warn">${hidden} hidden fill${hidden > 1 ? 's' : ''} (area no longer closed)</span><button class="tbtn" data-opt="delete-hidden-fills">Delete</button>`;
       html += sep + '<span class="opt-hint">Click an area of the active layer: a region closed by its shapes is filled; anywhere else fills the background. Other layers are ignored.</span>';
     }
     bar.innerHTML = html;
@@ -196,6 +198,7 @@ export class ChromeMixin {
       }
       el.addEventListener('click', () => {
         if (k === 'construction') this._runAction('construction');
+        else if (k === 'delete-hidden-fills') this.deleteDormantFills();
         else if (k === 'fill-mode' || k === 'erase-mode') {
           this.fillErase = k === 'erase-mode';
           this._refreshOptionsBar();

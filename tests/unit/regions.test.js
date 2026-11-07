@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Point, Line, Circle, Arc } from '../../app/src/core/entities.js';
-import { findClosedProfiles, findFaceAt, boundedFaces, regionContains, interiorPoint } from '../../app/src/core/regions.js';
+import { findClosedProfiles, findFaceAt, boundedFaces, regionContains, interiorPoint, reconcileFills, allRegions } from '../../app/src/core/regions.js';
 
 function rect(x, y, w, h, shared = true) {
   const pts = [new Point(x, y), new Point(x + w, y), new Point(x + w, y + h), new Point(x, y + h)];
@@ -113,4 +113,66 @@ test('interiorPoint lands inside the region and outside its holes', () => {
   const f = findFaceAt([...rect(0, 0, 10, 10), new Circle(new Point(5, 5), 4)], { x: 0.5, y: 0.5 });
   const p = interiorPoint(f);
   assert.ok(regionContains(f, p));
+});
+
+/* ---- Fill colours follow the areas (Live Paint style) ---- */
+let nid = 0;
+const mk = () => 'n' + (nid++);
+const paint = (ents, pt, color, id) => ({ id, layerId: 'L', color, opacity: 1, seed: pt, region: findFaceAt(ents, pt) });
+const colourAt = (fills, pt) => fills.find(f => !f.dormant && f.region && regionContains(f.region, pt))?.color ?? null;
+
+test('split: both pieces keep the colour', () => {
+  const r = rect(0, 0, 10, 10);
+  const fills = [paint(r, { x: 5, y: 5 }, 'red', 'f1')];
+  const cut = new Line(new Point(5, 0), new Point(5, 10));
+  const { fills: out } = reconcileFills(fills, [...r, cut], mk);
+  assert.equal(colourAt(out, { x: 2, y: 5 }), 'red'); assert.equal(colourAt(out, { x: 8, y: 5 }), 'red');
+  assert.equal(out.filter(f => f.id === 'f1').length, 1, 'the original id stays on one piece');
+});
+
+test('merge: the colour that covered most of the merged area wins', () => {
+  const r = rect(0, 0, 10, 10);
+  const cut = new Line(new Point(3, 0), new Point(3, 10));
+  const ents = [...r, cut];
+  const fills = [paint(ents, { x: 1, y: 5 }, 'green', 'g'), paint(ents, { x: 6, y: 5 }, 'yellow', 'y')];
+  const { fills: out, dormant } = reconcileFills(fills, r, mk);       // the cut is gone
+  assert.equal(colourAt(out, { x: 1, y: 5 }), 'yellow');
+  assert.equal(out.length, 1); assert.equal(dormant, 0);
+});
+
+test('re-cut: each new piece takes the colour that covered most of it', () => {
+  const r = rect(0, 0, 10, 10);
+  const diag = new Line(new Point(0, 10), new Point(10, 0));           // splits into two triangles
+  const fills = [paint([...r, diag], { x: 2, y: 2 }, 'yellow', 'y'), paint([...r, diag], { x: 8, y: 8 }, 'green', 'g')];
+  const steep = new Line(new Point(0, 10), new Point(3, 0));           // now: thin left piece, big right piece
+  const { fills: out } = reconcileFills(fills, [...r, steep], mk);
+  assert.equal(colourAt(out, { x: 0.5, y: 2 }), 'yellow');
+  assert.equal(colourAt(out, { x: 8, y: 2 }), 'green');
+});
+
+test('a newly closed area that was never painted stays empty', () => {
+  const r = rect(0, 0, 10, 10), other = rect(20, 0, 5, 5);
+  const fills = [paint(r, { x: 5, y: 5 }, 'red', 'f1')];
+  const { fills: out } = reconcileFills(fills, [...r, ...other], mk);
+  assert.equal(colourAt(out, { x: 22, y: 2 }), null);
+  assert.equal(colourAt(out, { x: 5, y: 5 }), 'red');
+});
+
+test('paint whose area opens becomes hidden, and comes back when it closes again', () => {
+  const r = rect(0, 0, 10, 10);
+  const fills = [paint(r, { x: 5, y: 5 }, 'red', 'f1')];
+  const open = r.slice(0, 3);                                          // one side removed
+  const a = reconcileFills(fills, open, mk);
+  assert.equal(a.dormant, 1);
+  assert.equal(a.fills[0].dormant, true); assert.ok(a.fills[0].outline.length >= 4);
+  const b = reconcileFills(a.fills, r, mk);                            // closed again
+  assert.equal(b.dormant, 0);
+  assert.equal(colourAt(b.fills, { x: 5, y: 5 }), 'red'); assert.equal(b.fills[0].id, 'f1');
+});
+
+test('allRegions lists every closed area with its holes', () => {
+  const regs = allRegions([...rect(0, 0, 10, 10), new Circle(new Point(5, 5), 2)]);
+  assert.equal(regs.length, 2);
+  const outer = regs.find(r => r.holes.length === 1);
+  assert.ok(outer && Math.abs(outer.area - (100 - Math.PI * 4)) < 0.2);
 });

@@ -238,21 +238,115 @@ export function boundedFaces(entities) {
 /** Region under `pt`: the smallest bounded face containing it, plus the
  *  separate pieces sitting directly inside it as holes. Returns null
  *  when the point is outside every closed region. */
+/** Holes of a bounded face: separate pieces sitting directly inside it
+ *  (their clockwise outer boundaries), keeping only the outermost. */
+function holesOf(face, cycles) {
+  const EPSA = 1e-9;
+  const inner = cycles.filter(c => c.area < -EPSA && -c.area < face.area - EPSA
+    && pointInPolygon(c.pts[0], face.pts));
+  return inner.filter(c => !inner.some(o => o !== c && -o.area > -c.area && pointInPolygon(c.pts[0], o.pts)));
+}
+
+/** Every closed area the entities form: { outer, holes, area }. */
+export function allRegions(entities) {
+  const cycles = planarCycles(entities);
+  return cycles.filter(c => c.area > 1e-9).map(face => {
+    const holes = holesOf(face, cycles);
+    return { outer: face.pts, holes: holes.map(h => h.pts), area: face.area - holes.reduce((t, h) => t - h.area, 0) };
+  });
+}
+
+/** Region under `pt`: the smallest bounded face containing it, with the
+ *  separate pieces inside it as holes; null outside every closed area. */
 export function findFaceAt(entities, pt) {
   const cycles = planarCycles(entities);
-  const EPSA = 1e-9;
   let face = null;
   for (const c of cycles) {
-    if (c.area <= EPSA || !pointInPolygon(pt, c.pts)) continue;
+    if (c.area <= 1e-9 || !pointInPolygon(pt, c.pts)) continue;
     if (!face || c.area < face.area) face = c;
   }
   if (!face) return null;
-  const inner = cycles.filter(c => c.area < -EPSA
-    && pointInPolygon(c.pts[0], face.pts) && !pointInPolygon(pt, c.pts));
-  const holes = inner.filter(c => !inner.some(o => o !== c && pointInPolygon(c.pts[0], o.pts)));
+  const holes = holesOf(face, cycles).filter(h => !pointInPolygon(pt, h.pts));
   const ids = new Set(face.ids);
   for (const h of holes) for (const id of h.ids) ids.add(id);
   return { outer: face.pts, holes: holes.map(h => h.pts), ids: [...ids], area: face.area };
+}
+
+/** Up to ~n points spread over a region (a grid clipped to it), always
+ *  at least one. Used to measure how much of one area covers another. */
+export function sampleRegion(region, n = 49) {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const p of region.outer) { minX = Math.min(minX, p.x); minY = Math.min(minY, p.y); maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y); }
+  const k = Math.max(2, Math.round(Math.sqrt(n)));
+  const out = [];
+  for (let i = 0; i < k; i++) {
+    for (let j = 0; j < k; j++) {
+      const p = { x: minX + (maxX - minX) * (i + 0.5) / k, y: minY + (maxY - minY) * (j + 0.5) / k };
+      if (regionContains(region, p)) out.push(p);
+    }
+  }
+  if (out.length < 4) {                        // thin region: add scan-line centres
+    const ip = interiorPoint(region);
+    if (ip) out.push(ip);
+  }
+  return out;
+}
+
+/**
+ * Carry fill colours over to the closed areas the shapes form now.
+ * Each area takes the colour that covered most of it before, if at least
+ * half of it was painted (a split keeps the colour on every piece, a
+ * merge takes the majority colour, an unpainted new area stays empty).
+ * Paint whose area no longer exists becomes dormant (kept with its old
+ * outline, shown again when an area there closes); paint swallowed by a
+ * merge is dropped.
+ *
+ * @param fills  previous fills of one layer: { id, color, opacity,
+ *               region:{outer,holes}|null, dormant?, outline? }
+ * @param entities  current shapes of that layer
+ * @param makeId  () => new fill id
+ * @returns {{ fills: Array, dormant: number }}  new fills (painted ones
+ *          carry `region`; dormant ones carry `outline`)
+ */
+export function reconcileFills(fills, entities, makeId) {
+  const regions = allRegions(entities);
+  const refs = fills.map(f => ({
+    f, region: f.dormant ? (f.outline ? { outer: f.outline, holes: [] } : null) : f.region,
+  })).filter(r => r.region);
+  const out = [];
+  const won = new Set();
+  for (const reg of regions) {
+    const pts = sampleRegion(reg);
+    if (!pts.length) continue;
+    const counts = refs.map(r => pts.reduce((n, p) => n + (regionContains(r.region, p) ? 1 : 0), 0));
+    const painted = pts.reduce((n, p) => n + (refs.some(r => regionContains(r.region, p)) ? 1 : 0), 0);
+    if (painted * 2 < pts.length) continue;
+    let best = -1;
+    counts.forEach((c, i) => { if (c > 0 && (best < 0 || c >= counts[best])) best = i; });   // ties → topmost
+    if (best < 0) continue;
+    const src = refs[best].f;
+    const first = !won.has(src);
+    won.add(src);
+    out.push({ id: first ? src.id : makeId(), layerId: src.layerId, color: src.color, opacity: src.opacity,
+      seed: interiorPoint(reg) || pts[0], region: reg });
+  }
+  let dormant = 0;
+  // Paint we can't place at all (hidden, with no outline left) is kept.
+  for (const f of fills) {
+    if (refs.some(r => r.f === f)) continue;
+    dormant++;
+    out.push({ id: f.id, layerId: f.layerId, color: f.color, opacity: f.opacity, seed: f.seed, dormant: true, outline: f.outline || null });
+  }
+  for (const r of refs) {
+    if (won.has(r.f)) continue;
+    const pts = sampleRegion(r.region);
+    const inside = pts.filter(p => regions.some(reg => regionContains(reg, p))).length;
+    if (inside * 2 >= pts.length) continue;            // merged into another colour's area
+    dormant++;
+    out.push({ id: r.f.id, layerId: r.f.layerId, color: r.f.color, opacity: r.f.opacity,
+      seed: r.f.seed, dormant: true, outline: r.region.outer.map(p => ({ x: +p.x.toFixed(4), y: +p.y.toFixed(4) })) });
+  }
+  return { fills: out, dormant };
 }
 
 /** True when pt is inside the region (outer, not in a hole). */

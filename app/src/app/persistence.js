@@ -83,6 +83,7 @@ export class PersistenceMixin {
     this.selectionOrder = [];
     this.refreshUI();
     this.solveAndRender();
+    this._primeFillRegions();
   }
 
   _setupResize() {

@@ -494,12 +494,23 @@ export class App {
     return this.snap.find(world, this.view, this.visibleSketches());
   }
 
+  /** Dragged points plus every line / arc / circle they belong to: a
+   *  dragged point can't meaningfully snap onto its own geometry. */
+  _dragSnapExclusions(drag) {
+    if (drag._snapExclusions) return drag._snapExclusions;
+    const set = new Set(drag.pts.map(r => r.p));
+    const sketch = this.activeSketch();
+    if (sketch) for (const e of sketch.entities) if (e.children().some(c => set.has(c))) set.add(e);
+    drag._snapExclusions = set;
+    return set;
+  }
+
   _snapForDragging(world) {
     const drag = this.tool?.dragging;
     if (!drag) return null;
     const dx = world.x - drag.startWorld.x;
     const dy = world.y - drag.startWorld.y;
-    const draggedSet = new Set(drag.pts.map(r => r.p));
+    const draggedSet = this._dragSnapExclusions(drag);
     const handles = drag.snapPts || drag.pts;
     let best = null;
     for (const r of handles) {
@@ -539,7 +550,7 @@ export class App {
       out.push(primary);
       if (primary.dragRecord) usedHandles.add(primary.dragRecord);
     }
-    const draggedSet = new Set(drag.pts.map(r => r.p));
+    const draggedSet = this._dragSnapExclusions(drag);
     const handles = drag.snapPts || drag.pts;
     for (const r of handles) {
       if (usedHandles.has(r)) continue;

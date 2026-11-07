@@ -7,6 +7,9 @@ export class SolveMixin {
     // Equation changes (variables, formulas) reach every layer, and are
     // solved before the undo snapshot so undo restores a consistent state.
     if (this._applyEquations().changed) this._solveAllLayers();
+    // Carry fill colours over to the areas the shapes form now (split /
+    // merge / re-cut / opened), before the undo snapshot.
+    this._reconcileStoredFills();
     const diagnostics = options.diagnostics || 'defer';
     const sketch = this.activeSketch();
     const activeIds = options.activeIds

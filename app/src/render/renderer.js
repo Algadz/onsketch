@@ -2,7 +2,6 @@ import { EPS, TAU, angleArcFromPoints, angleSectorForValue, drawDirectedArcPath,
 import { Arc, Circle, Line, Point } from '../core/entities.js';
 import { resolveStyle, dashFor, withAlpha } from '../core/style.js';
 import { getTheme, INK } from './theme.js';
-import { findFaceAt, geometryKey, interiorPoint } from '../core/regions.js';
 
 export class Renderer {
   constructor(canvas, view) {
@@ -11,7 +10,6 @@ export class Renderer {
     this.view = view;
     this.dpr = window.devicePixelRatio || 1;
     this.lastDimRects = [];
-    this._regionCache = new Map();   // fill id → { key, region }
     this.theme = getTheme('light');
   }
   resize() {
@@ -104,29 +102,31 @@ export class Renderer {
 
   /** Draws fills, then strokes, layer by layer (bottom to top). Hidden
    *  layers and sketches are skipped; layer opacity multiplies in. */
-  drawEntities(project) {
+  /** @param fillDisplay  layerId → { painted:[{color,opacity,region}], ghosts:[{color,outline}] } */
+  drawEntities(project, fillDisplay = new Map()) {
     const ctx = this.ctx, v = this.view;
     const activeId = project.activeSketchId;
     // One pass to bucket entities by layer, then draw layers bottom → top.
     const buckets = new Map(project.layers.map(l => [l, new Map()]));
     const slot = (layer, s) => {
       const bySketch = buckets.get(layer);
-      if (!bySketch.has(s)) bySketch.set(s, { ents: [], fills: [] });
+      if (!bySketch.has(s)) bySketch.set(s, { ents: [] });
       return bySketch.get(s);
     };
-    const byId = new Map();
     for (const s of project.sketches) {
       if (!s.visible) continue;
-      for (const e of s.entities) { slot(project.layerOf(e), s).ents.push(e); byId.set(e.id, e); }
-      for (const f of s.fills) { const l = project.layer(f.layerId); if (l) slot(l, s).fills.push(f); }
+      for (const e of s.entities) slot(project.layerOf(e), s).ents.push(e);
     }
+    const paintSketch = project.active();
+    for (const [layerId] of fillDisplay) { const l = project.layer(layerId); if (l && paintSketch) slot(l, paintSketch); }
     for (const layer of project.layers) {
       if (!layer.visible) continue;
-      for (const [s, { ents, fills }] of buckets.get(layer)) {
+      for (const [s, { ents }] of buckets.get(layer)) {
         const isActive = s.id === activeId;
         const alpha = layer.opacity * (isActive ? 1 : 0.55);
         ctx.globalAlpha = alpha;
-        for (const f of fills) this._drawRegionFill(f, byId);
+        const paint = s === paintSketch ? fillDisplay.get(layer.id) : null;
+        if (paint) { for (const p of paint.painted) this._drawPaint(p); for (const g of paint.ghosts) this._drawGhost(g); }
         for (const e of ents) {
           e.draw(ctx, v, this.styleFor(e, isActive));
           for (const c of e.children()) c.draw(ctx, v, this.styleFor(c, isActive, e));
@@ -136,34 +136,44 @@ export class Renderer {
     }
   }
 
-  /** A Fill-tool fill: its region is re-found from its boundary entities
-   *  around its seed point, drawn even-odd (inner pieces are holes), and
-   *  the seed is re-centred so it keeps tracking the region as the
-   *  geometry moves. Not drawn if the region no longer closes. */
-  _drawRegionFill(f, byId) {
-    const ents = f.ids.map(id => byId.get(id)).filter(Boolean);
-    const gk = geometryKey(ents);
-    let hit = this._regionCache.get(f.id);
-    if (!hit || hit.key !== gk + '|' + f.seed.x + ',' + f.seed.y) {
-      const region = findFaceAt(ents, f.seed);
-      const seed = region ? interiorPoint(region) : null;
-      if (seed) f.seed = seed;
-      hit = { key: gk + '|' + f.seed.x + ',' + f.seed.y, region };
-      this._regionCache.set(f.id, hit);
-    }
-    const region = hit.region;
-    if (!region) return;
+  /** A painted area: outline and holes, even-odd. */
+  _drawPaint(p) {
     const ctx = this.ctx, v = this.view;
     ctx.save();
     ctx.beginPath();
-    for (const loop of [region.outer, ...region.holes]) {
-      loop.forEach((p, i) => { const q = v.worldToScreen(p); if (i) ctx.lineTo(q.x, q.y); else ctx.moveTo(q.x, q.y); });
+    for (const loop of [p.region.outer, ...p.region.holes]) {
+      loop.forEach((q, i) => { const s = v.worldToScreen(q); if (i) ctx.lineTo(s.x, s.y); else ctx.moveTo(s.x, s.y); });
       ctx.closePath();
     }
-    ctx.fillStyle = withAlpha(f.color === INK ? this.theme.ink : f.color, f.opacity ?? 1);
+    ctx.fillStyle = withAlpha(p.color === INK ? this.theme.ink : p.color, p.opacity ?? 1);
     ctx.fill('evenodd');
     ctx.restore();
   }
+
+  /** Paint whose area has opened up, while dragging: hatched ghost of
+   *  its last outline so it is clearly kept, not lost. */
+  _drawGhost(g) {
+    const ctx = this.ctx, v = this.view;
+    const pts = g.outline.map(q => v.worldToScreen(q));
+    if (pts.length < 3) return;
+    ctx.save();
+    ctx.beginPath();
+    pts.forEach((s, i) => { if (i) ctx.lineTo(s.x, s.y); else ctx.moveTo(s.x, s.y); });
+    ctx.closePath();
+    ctx.globalAlpha *= 0.55;
+    ctx.fillStyle = withAlpha(g.color === INK ? this.theme.ink : g.color, 0.12);
+    ctx.fill();
+    ctx.clip();
+    ctx.strokeStyle = withAlpha(g.color === INK ? this.theme.ink : g.color, 0.5);
+    ctx.lineWidth = 1;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const s of pts) { minX = Math.min(minX, s.x); minY = Math.min(minY, s.y); maxX = Math.max(maxX, s.x); maxY = Math.max(maxY, s.y); }
+    ctx.beginPath();
+    for (let x = minX - (maxY - minY); x < maxX; x += 7) { ctx.moveTo(x, maxY); ctx.lineTo(x + (maxY - minY), minY); }
+    ctx.stroke();
+    ctx.restore();
+  }
+
 
 
 
