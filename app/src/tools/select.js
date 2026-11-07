@@ -132,12 +132,20 @@ export class SelectTool extends Tool {
       this.dragging.rejectedSnapKeys = new Set();
       if (snap && snap.dragRecord && !this.app.shouldIgnoreDragSnap(this.dragging, snap)) {
         const snapped = this.app._dragDeltaForSnap(this.dragging, snap);
+        const beforeSnap = this.dragging.state ? this.app._captureParamValues(this.dragging.state) : null;
         result = this.app.solveLocalizedDrag(this.dragging, snapped.dx, snapped.dy);
-        if (result && result.ok && !result.rejected) {
+        // Keep the snap only if the point really got onto it. A point held
+        // by its constraints (e.g. on a fixed-length arm) may only be able
+        // to aim at the target; then the snap is dropped for this frame and
+        // the drag simply follows the cursor.
+        if (result && result.ok && !result.rejected && this.app._snapReached(snap)) {
           dx = snapped.dx;
           dy = snapped.dy;
           primary = snap;
         } else {
+          // Undo the attempt so the plain drag starts from where the
+          // geometry was, not from wherever the snap solve left it.
+          if (beforeSnap) this.app._applyParamValues(this.dragging.state, beforeSnap);
           snap.rejected = true;
           this.dragging.rejectedSnapKeys.add(this.app._snapKey(snap));
           this.app.lastSnap = null;
@@ -254,12 +262,11 @@ export class SelectTool extends Tool {
       const sketch = this.app.activeSketch();
       const snaps = this.dragging.endSnaps || [];
       if (sketch && snaps.length) {
-        const reach = 3 / this.app.view.zoom;      // 3 screen pixels
         for (const sn of snaps) {
           const pt = sn.dragPoint || (this.dragging.pts.length === 1 ? this.dragging.pts[0].p : null);
           if (!pt || sn.entity === pt) continue;
           if (this.app.shouldIgnoreDragSnap(this.dragging, sn)) continue;
-          if (Math.hypot(pt.x - sn.x, pt.y - sn.y) > reach) continue;
+          if (!this.app._snapReached({ ...sn, dragPoint: pt })) continue;
           const c = this.app.snapToConstraint(sn, pt);
           if (!c) continue;
           this.app.admitConstraint(sketch, c);

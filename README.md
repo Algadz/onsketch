@@ -64,6 +64,10 @@ cached modules after a deploy. `npm test` fails if the stamp is out of date.
   dropped on a target) are test-solved first. Ones that would conflict, that
   are already implied, or that tie a point to itself are not added; the status
   bar says why. A dropped point only connects to a target it actually reached.
+- While dragging, a snap only pulls (and only shows) if the dragged point can
+  actually land on it. A point that is held by its constraints (say, the end
+  of a fixed-length arm) keeps following the cursor along the path it is
+  allowed to take.
 - Constraints that only involve geometry on inactive layers are left out of
   the solve while those layers are inactive.
 

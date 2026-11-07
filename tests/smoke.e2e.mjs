@@ -498,6 +498,52 @@ if (dimRect) {
 }
 check(dimInput && dimInput.color !== dimInput.bg && !/255, 255, 255/.test(dimInput.bg), `dimension edit box readable in dark mode (${JSON.stringify(dimInput)})`);
 
+// A point on a fixed-length arm, dragged over points / lines it can't
+// reach: it keeps following the cursor round its circle, no snap is shown
+// unless the point is really on it, and release adds no constraint.
+const arm = await page.evaluate(() => {
+  const a = window._app, P = a.project.constructor;
+  const pt = (id, x, y, fixed = false) => ({ type: 'point', id, x, y, fixed });
+  a.project = P.fromJSON({ version: 3, layers: [{ id: 'ly1', name: 'L' }], activeLayerId: 'ly1', sketches: [{ id: 's1', name: 'S', entities: [
+    { type: 'line', id: 'e3', layerId: 'ly1', p1: pt('e1', 0, 0, true), p2: pt('e2', 0, 50, true) },
+    { type: 'line', id: 'e6', layerId: 'ly1', p1: pt('e4', -60, 50, true), p2: pt('e5', -44, 38) }],
+    constraints: [
+      { id: 'c7', kind: 'fix', pointId: 'e1', x: 0, y: 0 }, { id: 'c8', kind: 'fix', pointId: 'e2', x: 0, y: 50 },
+      { id: 'c9', kind: 'fix', pointId: 'e4', x: -60, y: 50 },
+      { id: 'c10', kind: 'distance', p1: 'e4', p2: 'e5', value: 20 }] }] });
+  a._afterStateSwap(); a.view.zoom = 5; a.view.panX = 150; a.view.panY = 175; a.commit({ diagnostics: 'sync' });
+  if (a.windows) a.windows.toggle('equations', false);
+  return { n: a.activeSketch().constraints.length };
+});
+await page.keyboard.press('s');
+const W = (x, y) => page.evaluate(([x, y]) => window._app.view.worldToScreen({ x, y }), [x, y]);
+const startPt = await W(-44, 38);
+await page.mouse.move(box.x + startPt.x, box.y + startPt.y); await page.mouse.down();
+let worstGap = 0, worstOff = 0, cur = [-44, 38];
+const offs = [];
+for (const [tx, ty] of [[-20, 48], [0, 50], [0, 30], [-2, 10], [0, 0], [-30, 20], [-55, 70]]) {
+  for (let i = 1; i <= 6; i++) {
+    const wx = cur[0] + (tx - cur[0]) * i / 6, wy = cur[1] + (ty - cur[1]) * i / 6;
+    const sp = await W(wx, wy);
+    await page.mouse.move(box.x + sp.x, box.y + sp.y);
+    const f = await page.evaluate(([wx, wy]) => {
+      const a = window._app, l = a.activeSketch().entities.find(e => e.id === 'e6');
+      const gaps = (a.lastDragSnaps || []).map(k => Math.hypot(l.p2.x - k.x, l.p2.y - k.y) * a.view.zoom);
+      const vx = wx + 60, vy = wy - 50, L = Math.hypot(vx, vy);
+      return { gap: Math.max(0, ...gaps), off: Math.hypot(l.p2.x - (-60 + 20 * vx / L), l.p2.y - (50 + 20 * vy / L)) };
+    }, [wx, wy]);
+    worstGap = Math.max(worstGap, f.gap); worstOff = Math.max(worstOff, f.off); offs.push(f.off);
+  }
+  cur = [tx, ty];
+}
+await page.mouse.up();
+const armAfter = await page.evaluate(() => window._app.activeSketch().constraints.length);
+check(worstGap <= 3, `no snap shown away from the dragged point (worst ${worstGap.toFixed(2)} px)`);
+offs.sort((x, y) => x - y);
+const medianOff = offs[offs.length >> 1];
+check(worstOff < 1.5 && medianOff < 0.1, `point on a fixed arm follows the cursor round its circle (median ${medianOff.toFixed(3)} mm, worst ${worstOff.toFixed(3)} mm off)`);
+check(armAfter === arm.n, `release over an unreachable target adds nothing (${arm.n} → ${armAfter})`);
+
 await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
 if (shot) await page.screenshot({ path: shot });
 check(errors.length === 0, `no page errors${errors.length ? ': ' + errors.join(' / ') : ''}`);

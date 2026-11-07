@@ -522,8 +522,17 @@ export class App {
    *  used to latch the cursor delta) is one of them; the rest come from
    *  probing each *other* handle at its post-solve final position. The
    *  user sees a marker for every entry in the returned list. */
+  /** True when a drag snap's point actually sits on the snap target
+   *  (within 3 screen pixels). A point held by its constraints may be
+   *  unable to get there; such a snap must neither pull the drag nor be
+   *  shown, nor become a constraint on release. */
+  _snapReached(snap) {
+    const p = snap && snap.dragPoint;
+    return !!p && Math.hypot(p.x - snap.x, p.y - snap.y) * this.view.zoom <= 3;
+  }
+
   collectDragSnaps(drag, primary) {
-    if (!drag) return [];
+    if (!drag || !this.snapOn) return [];
     const out = [];
     const usedHandles = new Set();
     if (primary) {
@@ -544,6 +553,7 @@ export class App {
       });
       if (!snap) continue;
       if (drag.rejectedSnapKeys && drag.rejectedSnapKeys.has(this._snapKey(snap))) continue;
+      if (!this._snapReached({ ...snap, dragPoint: r.p })) continue;   // near, but not on it
       // It's fine if a secondary picks up the same feature as the primary
       // — e.g. dragging both endpoints of a line onto the same reference
       // line gives two distinct PointOnLine constraints (different points,

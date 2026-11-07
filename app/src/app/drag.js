@@ -752,12 +752,37 @@ export class DragMixin {
     };
   }
 
+  /** One drag frame for a point with freedom left (e.g. swinging on a
+   *  fixed-length arm). The motion is searched from two starts: the
+   *  geometry at drag start (path-independent) and the previous frame
+   *  (short step, follows curved paths smoothly). The result closer to
+   *  the cursor wins, so the handle can't hop to a far-off solution. */
   _solveDofDrag(drag, dx, dy) {
+    const previous = this._captureParamValues(drag.state);
     this._restoreSketchParams(drag.state);
+    const fromStart = this._dofDragFrom(drag, dx, dy);
+    this._applyParamValues(drag.state, previous);
+    const fromPrevious = this._dofDragFrom(drag, dx, dy);
+    const best = fromPrevious.error <= fromStart.error ? fromPrevious : fromStart;
+
+    this._applyParamValues(drag.state, best.values);
+    const sys = this._constraintSystem(drag.state, drag.constraints, drag.lookup);
+    const result = {
+      ok: sys.residual < 1e-4,
+      iters: best.iterations,
+      residual: sys.residual,
+      state: this._lastSolve?.state || 'under'
+    };
+    return this._finishDragStep(drag, result);
+  }
+
+  /** Iterate from the current parameter values toward the cursor intent,
+   *  moving only along the constraints' free directions. Returns the best
+   *  values found and their intent error (geometry left as found best). */
+  _dofDragFrom(drag, dx, dy) {
     let bestValues = this._captureParamValues(drag.state);
     let bestError = this._dragIntentError(drag, dx, dy);
     let iterations = 0;
-
     for (let iter = 0; iter < 20; iter++) {
       iterations = iter + 1;
       const sys = this._constraintSystem(drag.state, drag.constraints, drag.lookup);
@@ -774,26 +799,32 @@ export class DragMixin {
       }
       const maxStep = step.reduce((m, v) => Math.max(m, Math.abs(v)), 0);
       if (maxStep < 1e-7) break;
-      this._applyParamStep(drag.state, step);
-      this._projectConstraintResidual(drag.state, drag.constraints, 2, drag.lookup);
-      const err = this._dragIntentError(drag, dx, dy);
-      if (err < bestError) {
-        bestError = err;
-        bestValues = this._captureParamValues(drag.state);
+      // Backtracking: a long step along the free directions of a curved
+      // path (an arm swinging round a pivot) leaves the constraints badly
+      // broken. Try shorter steps until one projects back onto the
+      // constraints AND gets closer to the cursor.
+      const here = this._captureParamValues(drag.state);
+      let improved = false;
+      for (let alpha = 1; alpha >= 1 / 32; alpha /= 2) {
+        this._applyParamValues(drag.state, here);
+        this._applyParamStep(drag.state, alpha === 1 ? step : step.map(v => v * alpha));
+        this._projectConstraintResidual(drag.state, drag.constraints, 6, drag.lookup);
+        const sysAfter = this._constraintSystem(drag.state, drag.constraints, drag.lookup);
+        const err = this._dragIntentError(drag, dx, dy);
+        if (sysAfter.residual < 1e-6 && err < bestError) {
+          bestError = err;
+          bestValues = this._captureParamValues(drag.state);
+          improved = true;
+          break;
+        }
       }
-      if (err < 1e-5) break;
+      if (!improved) { this._applyParamValues(drag.state, bestValues); break; }
+      if (bestError < 1e-5) break;
     }
-
     this._applyParamValues(drag.state, bestValues);
-    const sys = this._constraintSystem(drag.state, drag.constraints, drag.lookup);
-    const result = {
-      ok: sys.residual < 1e-4,
-      iters: iterations,
-      residual: sys.residual,
-      state: this._lastSolve?.state || 'under'
-    };
-    return this._finishDragStep(drag, result);
+    return { values: bestValues, error: bestError, iterations };
   }
+
 
   _applySimilarityToRows(rows, component, anchor, scale, angle) {
     const cs = Math.cos(angle), sn = Math.sin(angle);
