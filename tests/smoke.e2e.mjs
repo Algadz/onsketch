@@ -83,7 +83,7 @@ await page.evaluate(() => {
 });
 await page.mouse.move(cx + 260, cy - 80);
 await page.mouse.click(cx + 260, cy - 80);
-const input = page.locator('#workspace input');
+const input = page.locator('#workspace > input');
 if (await input.count()) { await input.fill('12.5'); await input.press('Enter'); }
 const rad = await page.evaluate(() => {
   const s = window._app.activeSketch();
@@ -134,10 +134,11 @@ check(layerInfo.n === 2 && layerInfo.rows === 2 && layerInfo.active === 'Layer 2
 
 // Drawing style: pick a stroke colour and turn on shape fill, then draw.
 await page.evaluate(() => window._app.clearSelection());
-await page.click('#style-body .swatches[data-key="color"] .sw[data-v="#14946b"]');
-await page.click('#style-body .swatches[data-key="fill"] .sw[data-v="#e07b00"]');
-await page.check('#style-body input[data-key="fillShapes"]');
+// Paint.NET style: left-click a swatch = stroke, right-click = fill.
+await page.click('.palette .sw[data-c="#14946b"]');
+await page.click('.palette .sw[data-c="#e07b00"]', { button: 'right' });
 await page.keyboard.press('r');
+await page.selectOption('#optbar select[data-pen="fillShapes"]', '1');
 await page.mouse.click(cx + 60, cy + 60);
 await page.mouse.click(cx + 200, cy + 160);
 await page.keyboard.press('Escape');
@@ -149,7 +150,7 @@ const onLayer2 = await page.evaluate(() => {
 });
 check(onLayer2.count === 4 && onLayer2.style?.color === '#14946b' && onLayer2.style?.fill === '#e07b00',
   `new shapes use the drawing style (${JSON.stringify(onLayer2)})`);
-await page.uncheck('#style-body input[data-key="fillShapes"]');
+await page.evaluate(() => window._app._setPen('fillShapes', false, true));
 
 const pixel = (x, y) => page.evaluate(async ([x, y]) => {
   await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
@@ -160,15 +161,21 @@ const pixel = (x, y) => page.evaluate(async ([x, y]) => {
 const filled = await pixel(cx + 130, cy + 110);
 check(filled[3] > 0 && filled[0] > filled[2], `shape fill painted (rgba ${filled.join(',')})`);
 
-// Per-entity override through the selection style panel.
+// Changing colours never touches existing geometry; "Apply drawing style" does.
 await page.evaluate(() => {
   const a = window._app, ly = a.project.activeLayer();
   a.clearSelection();
   a.setSelected(a.project.entitiesOnLayer(ly.id)[0], true);
   a.refreshUI();
 });
-await page.click('#style-body .swatches[data-key="color"] .sw[data-v="#d63a3a"]');
-await page.selectOption('#style-body select[data-key="lineStyle"]', 'center');
+await page.click('.palette .sw[data-c="#d63a3a"]');
+await page.evaluate(() => window._app._setPen('lineStyle', 'center', true));
+const untouched = await page.evaluate(() => {
+  const a = window._app, ly = a.project.activeLayer();
+  return a.project.entitiesOnLayer(ly.id)[0].style;
+});
+check(untouched.color === '#14946b' && untouched.lineStyle !== 'center', `colour picks leave the selection alone (${JSON.stringify(untouched)})`);
+await page.click('#optbar [data-opt="apply-style"]');
 const ov = await page.evaluate(() => {
   const a = window._app, ly = a.project.activeLayer();
   return a.project.entitiesOnLayer(ly.id)[0].style;
@@ -179,7 +186,7 @@ const undoStyle = await page.evaluate(() => {
   const ly = a.project.activeLayer();
   return a.project.entitiesOnLayer(ly.id)[0].style;
 });
-check(undoStyle && undoStyle.lineStyle !== 'center' && undoStyle.color === '#d63a3a', `style change is undoable (${JSON.stringify(undoStyle)})`);
+check(undoStyle && undoStyle.lineStyle !== 'center' && undoStyle.color === '#14946b', `style change is undoable (${JSON.stringify(undoStyle)})`);
 
 // Only the active layer is pickable.
 const activeOnly = await page.evaluate(() => {
@@ -241,7 +248,8 @@ check(after2.p[0] === lockDrag.p[0] && after2.p[1] === lockDrag.p[1], `locked la
 await page.evaluate(() => { const a = window._app; a.project.layers[0].locked = false; a.commit(); a.refreshUI(); });
 
 // Fill tool: fill the Layer 1 rectangle (boundary on another layer), then the background, then erase.
-await page.click('#style-body .swatches[data-key="fill"] .sw[data-v="#8a4fd1"]');
+await page.evaluate(() => window._app._setPen('lineStyle', 'solid', true));
+await page.click('.palette .sw[data-c="#8a4fd1"]', { button: 'right' });
 await page.keyboard.press('b');
 await page.mouse.click(cx - 120, cy - 20);
 const bucket = await page.evaluate(() => {
@@ -259,22 +267,37 @@ check(bg === '#8a4fd1', `click outside regions fills the background (${bg})`);
 const bgUndo = await page.evaluate(() => { const a = window._app; a.undo(); return a.project.background; });
 check(bgUndo === null, 'background fill is undoable');
 await page.evaluate(() => window._app.redo());
-await page.click('#tool-options-body [data-mode="erase"]');
+await page.click('#optbar [data-opt="erase-mode"]');
 await page.mouse.click(cx - 120, cy - 20);
 await page.mouse.click(cx + 200, cy - 220);
 const erased = await page.evaluate(() => ({ fills: window._app.activeSketch().fills.length, bg: window._app.project.background }));
 check(erased.fills === 0 && erased.bg === null, `erase removes fills and background (${JSON.stringify(erased)})`);
-await page.click('#tool-options-body [data-mode="fill"]');
+await page.click('#optbar [data-opt="fill-mode"]');
 await page.mouse.click(cx - 120, cy - 20);
 await page.keyboard.press('s');
 void holePx;
 
+// Dimensions can be hidden and shown; Smart Dimension brings them back.
+await page.click('#menubar [data-action="dimensions"]');
+const dimsHidden = await page.evaluate(() => ({ show: window._app.showDimensions, rects: window._app.renderer.lastDimRects.length }));
+await page.keyboard.press('d');
+const dimsBack = await page.evaluate(() => window._app.showDimensions);
+await page.keyboard.press('Escape'); await page.keyboard.press('s');
+check(!dimsHidden.show && dimsHidden.rects === 0 && dimsBack, `dimension visibility toggle (${JSON.stringify({ dimsHidden, dimsBack })})`);
+
+// Floating windows close and reopen from the menu bar.
+await page.click('.fwin[data-win="layers"] .fwin-x');
+const closed = await page.evaluate(() => document.querySelector('.fwin[data-win="layers"]').hidden);
+await page.click('#menubar [data-window="layers"]');
+const reopened = await page.evaluate(() => !document.querySelector('.fwin[data-win="layers"]').hidden);
+check(closed && reopened, 'floating window close / reopen');
+
 // Colour mode + theme toggles (end in Colors mode for the screenshot).
-await page.click('#topbar [data-action="color-mode"]');
-await page.click('#topbar [data-action="theme"]');
+await page.click('#menubar [data-action="color-mode"]');
+await page.click('#menubar [data-action="theme"]');
 const prefs = await page.evaluate(() => ({ mode: window._app.renderer.colorMode, theme: document.documentElement.dataset.theme }));
 check(prefs.mode === 'status' && prefs.theme === 'dark', `colour mode + theme (${JSON.stringify(prefs)})`);
-await page.click('#topbar [data-action="color-mode"]');
+await page.click('#menubar [data-action="color-mode"]');
 
 await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
 if (shot) await page.screenshot({ path: shot });

@@ -22,6 +22,22 @@ npm run stamp        # after changing anything in app/: refresh cache-busting ha
 `file.js?v=<content hash>`, so browsers never mix a fresh page with stale
 cached modules after a deploy. `npm test` fails if the stamp is out of date.
 
+## Interface
+
+- **Menu bar**: file and edit actions, project name, view toggles (grid, snap,
+  dimensions `M`, status colours, zoom, theme) and toggles for each window.
+- **Options bar** (second row): settings for the active tool, as in Paint.NET.
+  Line weight, line type, outline / outline + fill and construction while
+  drawing; Mirror, Offset, *Apply drawing style* and *Pick style* with Select;
+  step-by-step help for Smart Dimension; Fill / Erase for the Fill tool.
+- **Floating windows** over the canvas, dragged by their title bar and
+  remembered per browser: Tools, Colors, Layers, Properties (selection,
+  relations, dimensions). *Reset window layout* puts them back.
+- **Colors**: primary (stroke) and secondary (fill) colour. Left-click a
+  swatch for stroke, right-click for fill. They apply to the next shapes and
+  the Fill tool only; existing geometry changes only through *Apply drawing
+  style*.
+
 ## Source layout
 
 | Path | Contents |
@@ -30,14 +46,15 @@ cached modules after a deploy. `npm test` fails if the stamp is out of date.
 | `app/src/render/` | view transform, canvas renderer, themes, closed-profile detection for fills |
 | `app/src/editor/` | snap engine, selection-aware relation/dimension lists |
 | `app/src/tools/` | select, draw tools, smart dimension |
-| `app/src/app/` | `App` shell plus mixins grouped by concern (drag, solve, operations, panels, layers panel, …) |
+| `app/src/app/` | `App` shell plus mixins grouped by concern (drag, solve, operations, chrome, panels, layers, fills, …) |
+| `app/src/ui/` | icons, tool definitions, floating window manager |
 | `app/styles.css` | UI styles; light and dark tokens on `:root` / `:root[data-theme="dark"]` |
 
 ## Data model
 
 ```
 Project
-├─ layers[]        bottom → top: name, opacity, visible, locked
+├─ layers[]        bottom → top: name, opacity, visible, locked (no colours)
 ├─ background      canvas colour from the fill tool, or null
 └─ sketches[0]     the single parametric sketch
    ├─ entities[]   Point / Line / Circle / Arc, each with layerId and style

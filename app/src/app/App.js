@@ -14,6 +14,7 @@ import { OperationsMixin } from './operations.js';
 import { ConstraintActionsMixin } from './constraint-actions.js';
 import { RenderEventsMixin } from './render-events.js';
 import { PanelsMixin } from './panels.js';
+import { ChromeMixin } from './chrome.js';
 import { LayersPanelMixin } from './layers-panel.js';
 import { FillsMixin } from './fills.js';
 import { PersistenceMixin } from './persistence.js';
@@ -61,7 +62,7 @@ export class App {
 
     this._setupCanvasEvents();
     this._setupKeyboard();
-    this._setupTopbar();
+    this._setupChrome();
     this._setupSidebar();
     this._setupLayersPanel();
     this._setupModal();
@@ -512,7 +513,7 @@ export class App {
 }
 
 /* Methods are grouped into mixins by concern; see src/app/*.js. */
-for (const Mixin of [LayersPanelMixin, FillsMixin, DimensionLabelsMixin, SelectionMixin, DragMixin, SolveMixin, OperationsMixin, ConstraintActionsMixin, RenderEventsMixin, PanelsMixin, PersistenceMixin]) {
+for (const Mixin of [ChromeMixin, LayersPanelMixin, FillsMixin, DimensionLabelsMixin, SelectionMixin, DragMixin, SolveMixin, OperationsMixin, ConstraintActionsMixin, RenderEventsMixin, PanelsMixin, PersistenceMixin]) {
   for (const key of Object.getOwnPropertyNames(Mixin.prototype)) {
     if (key === 'constructor') continue;
     Object.defineProperty(App.prototype, key, Object.getOwnPropertyDescriptor(Mixin.prototype, key));

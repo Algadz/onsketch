@@ -79,9 +79,9 @@ export class Renderer {
    *  colorMode 'status' is the SolidWorks scheme (blue under-defined,
    *  black fully defined); 'style' uses each entity's own colour. Errors,
    *  construction, hover and selection read the same in both. */
-  styleFor(entity, isActive, layer = null, owner = null) {
+  styleFor(entity, isActive, owner = null) {
     const t = this.theme;
-    const st = resolveStyle(owner && !entity.style ? owner : entity, layer);
+    const st = resolveStyle(owner && !entity.style ? owner : entity);
     const construction = entity.construction || (owner && owner.construction);
     let color;
     if (this.colorMode === 'style' && owner && entity instanceof Point) {
@@ -135,10 +135,10 @@ export class Renderer {
         const alpha = layer.opacity * (isActive ? 1 : 0.55);
         ctx.globalAlpha = alpha;
         for (const f of fills) this._drawRegionFill(f, byId);
-        this._drawFills(ents, layer);
+        this._drawFills(ents);
         for (const e of ents) {
-          e.draw(ctx, v, this.styleFor(e, isActive, layer));
-          for (const c of e.children()) c.draw(ctx, v, this.styleFor(c, isActive, layer, e));
+          e.draw(ctx, v, this.styleFor(e, isActive));
+          for (const c of e.children()) c.draw(ctx, v, this.styleFor(c, isActive, e));
         }
         ctx.globalAlpha = 1;
       }
@@ -165,11 +165,11 @@ export class Renderer {
 
   /** Fill closed profiles. Entities are grouped by resolved fill so a
    *  profile nested in another with the same fill becomes a hole. */
-  _drawFills(ents, layer) {
+  _drawFills(ents) {
     const groups = new Map();
     for (const e of ents) {
       if (e.construction || e instanceof Point) continue;
-      const st = resolveStyle(e, layer);
+      const st = resolveStyle(e);
       if (!st.fill) continue;
       const key = st.fill + '|' + st.fillOpacity;
       if (!groups.has(key)) groups.set(key, { fill: st.fill, opacity: st.fillOpacity, ents: [] });

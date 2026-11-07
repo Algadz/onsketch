@@ -74,7 +74,7 @@ export class Project {
     this.units = 'mm';
     this.sketches = [];
     this.activeSketchId = null;
-    this.layers = [new Layer('Layer 1', { color: Layer.nextColor(0) })];   // bottom → top
+    this.layers = [new Layer('Layer 1')];   // bottom → top
     this.activeLayerId = this.layers[0].id;
   }
   addSketch(name) {
@@ -103,7 +103,7 @@ export class Project {
     if (!e.layerId || !this.layer(e.layerId)) e.layerId = this.activeLayerId;
   }
   addLayer(name) {
-    const l = new Layer(name || ('Layer ' + (this.layers.length + 1)), { color: Layer.nextColor(this.layers.length) });
+    const l = new Layer(name || ('Layer ' + (this.layers.length + 1)));
     const i = this.layers.indexOf(this.activeLayer());
     this.layers.splice(i + 1, 0, l);       // just above the active layer
     this.activeLayerId = l.id;
@@ -175,6 +175,14 @@ export class Project {
     p.background = /^#[0-9a-f]{6}$/i.test(o.background || '') ? o.background : null;
     // Layers arrived in v3. Older files get the single default layer and
     // every entity lands on it (assignLayer below).
+    const layerLook = new Map();
+    if (Array.isArray(o.layers)) {
+      for (const lj of o.layers) {
+        const look = cleanStyle({ color: lj.color, lineWidth: lj.lineWidth, lineStyle: lj.lineStyle,
+          ...(lj.fill ? { fill: lj.fill, fillOpacity: lj.fillOpacity } : {}) });
+        if (look) layerLook.set(lj.id, look);
+      }
+    }
     if (Array.isArray(o.layers) && o.layers.length) {
       p.layers = o.layers.map(Layer.fromJSON);
       p.activeLayerId = p.layer(o.activeLayerId) ? o.activeLayerId : p.layers[p.layers.length - 1].id;
@@ -204,7 +212,9 @@ export class Project {
         e.construction = !!ej.construction;
         e.fixed = !!ej.fixed;
         if (ej.layerId) e.layerId = ej.layerId;
-        e.style = cleanStyle(ej.style);
+        // Files from when layers had styles: the layer's look moves onto
+        // its entities so nothing changes on screen.
+        e.style = cleanStyle(ej.style) || (ej.layerId ? layerLook.get(ej.layerId) || null : null);
         if (e instanceof Arc) e.clockwise = !!ej.clockwise;
         if (ej.id) idMap.set(ej.id, e);
         return e;
@@ -298,7 +308,7 @@ export class Project {
     if (this.sketches.length > 1) {
       const wasActive = this.sketches.findIndex(s => s.id === this.activeSketchId);
       if (legacy) {
-        this.layers = this.sketches.map((s, i) => new Layer(s.name, { color: Layer.nextColor(i), visible: s.visible }));
+        this.layers = this.sketches.map((s) => new Layer(s.name, { visible: s.visible }));
         this.activeLayerId = this.layers[Math.max(0, wasActive)].id;
       }
       this.sketches.forEach((s, i) => {

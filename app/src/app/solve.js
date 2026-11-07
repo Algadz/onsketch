@@ -15,6 +15,7 @@ export class SolveMixin {
     if (sketch?.dirtyIds) sketch.dirtyIds.clear();
     if (diagnostics === 'sync') this.solveAndRender();
     else this.solveFastAndRender({ diagnostics, activeIds });
+    if (this._refreshLayerPanel) this._refreshLayerPanel();   // entity counts
   }
 
   solveSoft() {

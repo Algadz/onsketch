@@ -1,4 +1,4 @@
-import { clamp, dist, normalizeAngleValue } from '../core/math.js';
+import { dist, normalizeAngleValue } from '../core/math.js';
 import { Arc, Circle, Line, Point } from '../core/entities.js';
 import { CONSTRAINT_LABELS, Constraint, FixConstraint } from '../core/constraints.js';
 import { availableDimensions, availableRelations, constraintAppliesToSelection } from '../editor/relations.js';
@@ -18,7 +18,8 @@ export class PanelsMixin {
     this.refreshToolOptions();
     this._refreshSelectionPanel();
     this._refreshLayerPanel();
-    this._refreshStylePanel();
+    this._refreshColorsPanel();
+    this._refreshOptionsBar();
     document.getElementById('project-name').value = this.project.name;
   }
 
@@ -34,38 +35,9 @@ export class PanelsMixin {
       this._refreshOffsetOptions(section, body);
       return;
     }
-    if (this.toolName === 'fill') {
-      this._refreshFillOptions(section, body);
-      return;
-    }
-    if (this.toolName !== 'hexagon') {
-      section.hidden = true;
-      body.innerHTML = '';
-      document.getElementById('tool-options-title').textContent = 'Tool Options';
-      return;
-    }
-    section.hidden = false;
-    document.getElementById('tool-options-title').textContent = 'Polygon';
-    body.innerHTML = `
-      <div class="tool-summary">
-        <div class="tool-metric"><strong id="polygon-sides-summary">${this.polygonSides}</strong><span>Sides</span></div>
-        <div class="tool-metric"><strong>2</strong><span>Clicks</span></div>
-      </div>
-      <div class="prop-row">
-        <label for="polygon-sides">sides</label>
-        <input id="polygon-sides" type="number" min="3" max="64" step="1" value="${this.polygonSides}">
-      </div>
-    `;
-    const input = body.querySelector('#polygon-sides');
-    input.addEventListener('input', () => {
-      const n = Math.round(parseFloat(input.value));
-      if (!Number.isFinite(n)) return;
-      this.polygonSides = clamp(n, 3, 64);
-      input.value = this.polygonSides;
-      body.querySelector('#polygon-sides-summary').textContent = this.polygonSides;
-      this.requestRender();
-      document.getElementById('status-hint').textContent = (this.tool.hint && this.tool.hint()) || '';
-    });
+    section.hidden = true;
+    body.innerHTML = '';
+    document.getElementById('tool-options-title').textContent = 'Tool Options';
   }
 
   _refreshSelectionPanel() {

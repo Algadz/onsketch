@@ -43,20 +43,34 @@ test('removeLayer deletes its geometry and keeps at least one layer', () => {
   assert.ok(!p.removeLayer(keep.id));
 });
 
-test('layers and style overrides survive a JSON round trip', () => {
+test('layers and entity styles survive a JSON round trip', () => {
   const p = new Project(); const s = p.addSketch('A');
   const ly = p.addLayer('Holes');
-  ly.fill = '#d63a3a'; ly.locked = true; ly.opacity = 0.5;
+  ly.locked = true; ly.opacity = 0.5;
   const c = new Circle(new Point(0, 0), 3);
   c.style = { color: '#14946b', lineWidth: 3, lineStyle: 'center' };
   s.addEntity(c);
   const q = Project.fromJSON(JSON.parse(JSON.stringify(p.toJSON())));
   const ly2 = q.layer(ly.id);
-  assert.equal(ly2.fill, '#d63a3a'); assert.equal(ly2.locked, true); assert.equal(ly2.opacity, 0.5);
+  assert.equal(ly2.locked, true); assert.equal(ly2.opacity, 0.5);
+  assert.deepEqual(Object.keys(ly2.toJSON()).sort(), ['id', 'locked', 'name', 'opacity', 'visible']);
   const c2 = q.sketches[0].entities[0];
   assert.equal(c2.layerId, ly.id);
   assert.deepEqual(c2.style, c.style);
   assert.equal(q.activeLayerId, ly.id);
+});
+
+test('files from when layers had colours move that look onto their entities', () => {
+  const pt = (id, x, y) => ({ type: 'point', id, x, y });
+  const v3 = { version: 3, layers: [{ id: 'ly1', name: 'Red', color: '#d63a3a', lineWidth: 3, lineStyle: 'dashed', fill: '#e07b00', fillOpacity: 0.4 }],
+    sketches: [{ id: 's1', name: 'S', entities: [
+      { type: 'circle', id: 'e2', layerId: 'ly1', center: pt('e1', 0, 0), r: 2 },
+      { type: 'circle', id: 'e4', layerId: 'ly1', style: { color: '#14946b' }, center: pt('e3', 5, 0), r: 2 }], constraints: [] }] };
+  const p = Project.fromJSON(v3);
+  const [a, b] = p.sketches[0].entities;
+  assert.deepEqual(a.style, { color: '#d63a3a', lineWidth: 3, lineStyle: 'dashed', fill: '#e07b00', fillOpacity: 0.4 });
+  assert.deepEqual(b.style, { color: '#14946b' });
+  assert.equal(p.layers[0].color, undefined);
 });
 
 test('v2 files without layers migrate onto a default layer', () => {
@@ -67,11 +81,12 @@ test('v2 files without layers migrate onto a default layer', () => {
   assert.equal(p.sketches[0].entities[0].layerId, p.layers[0].id);
 });
 
-test('resolveStyle layers entity overrides on layer defaults', () => {
-  const layer = { color: '#111418', lineWidth: 1.4, lineStyle: 'solid', fill: '#1f7ad6', fillOpacity: 0.3 };
-  assert.deepEqual(resolveStyle({ style: null }, layer), { ...layer });
-  const r = resolveStyle({ style: { color: '#d63a3a', fill: 'none' } }, layer);
-  assert.equal(r.color, '#d63a3a'); assert.equal(r.fill, null); assert.equal(r.lineWidth, 1.4);
+test('resolveStyle fills in defaults; fill "none" means no fill', () => {
+  const d = resolveStyle({ style: null });
+  assert.equal(d.color, '#111418'); assert.equal(d.fill, null); assert.equal(d.lineStyle, 'solid');
+  const r = resolveStyle({ style: { color: '#d63a3a', fill: 'none', lineWidth: 3 } });
+  assert.equal(r.color, '#d63a3a'); assert.equal(r.fill, null); assert.equal(r.lineWidth, 3);
+  assert.equal(resolveStyle({ style: { fill: '#e07b00' } }).fill, '#e07b00');
 });
 
 test('cleanStyle drops junk and empty objects', () => {

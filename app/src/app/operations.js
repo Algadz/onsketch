@@ -45,7 +45,7 @@ export class OperationsMixin {
     this.toolName = 'select';
     this.tool = new SelectTool(this);
     if (this.tool.activate) this.tool.activate();
-    document.querySelectorAll('#topbar .tool').forEach(b => b.classList.toggle('active', b.dataset.tool === 'select'));
+    document.querySelectorAll('[data-tool]').forEach(b => b.classList.toggle('active', b.dataset.tool === 'select'));
     document.getElementById('status-tool').textContent = 'Tool: Select';
     this.canvas.style.cursor = 'default';
   }

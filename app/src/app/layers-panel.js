@@ -1,4 +1,4 @@
-import { LINE_STYLES, LINE_WEIGHTS, PALETTE, cleanStyle, resolveStyle } from '../core/style.js';
+import { cleanStyle } from '../core/style.js';
 import { getTheme, INK } from '../render/theme.js';
 import { uiIcon } from '../ui/icons.js';
 
@@ -17,10 +17,8 @@ const DEFAULT_PEN = {
    (as in Paint.NET): visibility, lock, opacity, order. Layers carry no
    colours of their own.
 
-   "Style" edits the drawing style the tools use for the next shapes
-   (and the fill tool's colour), or the selected entities' style when
-   something is selected. Also owns view preferences: theme and colour
-   mode.
+   Also owns per-browser preferences: theme, colour mode, dimension
+   visibility and the drawing style (pen) used for new shapes.
    ============================================================ */
 export class LayersPanelMixin {
   _setupLayersPanel() {
@@ -58,17 +56,18 @@ export class LayersPanelMixin {
     this._penChanged(false);
     this.setTheme(prefs.theme || (systemDark ? 'dark' : 'light'), false);
     this.setColorMode(prefs.colorMode === 'status' ? 'status' : 'style', false);
+    this.setDimensionsVisible(prefs.showDimensions !== false, false);
   }
   _savePrefs() {
     try {
-      localStorage.setItem(PREFS_KEY, JSON.stringify({ theme: this.themeName, colorMode: this.colorMode, pen: this.pen }));
+      localStorage.setItem(PREFS_KEY, JSON.stringify({ theme: this.themeName, colorMode: this.colorMode, pen: this.pen, showDimensions: this.showDimensions }));
     } catch { /* storage unavailable */ }
   }
   setTheme(name, save = true) {
     this.themeName = name === 'dark' ? 'dark' : 'light';
     document.documentElement.dataset.theme = this.themeName;
     this.renderer.theme = getTheme(this.themeName);
-    const b = document.querySelector('#topbar [data-action="theme"]');
+    const b = document.querySelector('#menubar [data-action="theme"]');
     if (b) b.innerHTML = uiIcon(this.themeName === 'dark' ? 'sun' : 'moon').replace('class="ui-icon"', '');
     if (save) this._savePrefs();
     this.requestRender();
@@ -76,10 +75,8 @@ export class LayersPanelMixin {
   setColorMode(mode, save = true) {
     this.colorMode = mode === 'status' ? 'status' : 'style';
     this.renderer.colorMode = this.colorMode;
-    const b = document.querySelector('#topbar [data-action="color-mode"]');
+    const b = document.querySelector('#menubar [data-action="color-mode"]');
     if (b) b.classList.toggle('on', this.colorMode === 'status');
-    const label = document.getElementById('color-mode-label');
-    if (label) label.textContent = this.colorMode === 'status' ? 'Status' : 'Colors';
     if (save) this._savePrefs();
     this.requestRender();
   }
@@ -181,145 +178,5 @@ export class LayersPanelMixin {
         for (const c of e.children()) { c.selected = false; c.hover = false; }
       }
     }
-  }
-
-  /** Top-level entities whose style the panel edits. Selecting only a
-   *  line end or a centre leaves the panel on the drawing style, since a
-   *  shared corner belongs to several entities. */
-  _styleTargets() {
-    const out = [];
-    for (const s of this.project.sketches) for (const e of s.entities) if (e.selected) out.push(e);
-    return out;
-  }
-
-  /* ---- Style panel ---- */
-  _swatchesHtml(key, value, allowNone) {
-    return `
-      <div class="swatches" data-key="${key}">
-        ${allowNone ? `<button class="sw sw-none${value === null ? ' on' : ''}" data-v="none" title="No fill">${uiIcon('none')}</button>` : ''}
-        ${PALETTE.map(c => `<button class="sw${value === c ? ' on' : ''}" data-v="${c}" style="--sw:${c}" title="${c}"></button>`).join('')}
-        <label class="sw sw-custom${value && !PALETTE.includes(value) ? ' on' : ''}" title="Custom colour" style="--sw:${value || '#888888'}">
-          <input type="color" value="${value || '#888888'}" data-key="${key}">
-        </label>
-      </div>`;
-  }
-
-  _refreshStylePanel() {
-    const body = document.getElementById('style-body');
-    if (!body) return;
-    const project = this.project;
-    const targets = this._styleTargets();
-    const onSelection = targets.length > 0;
-    document.getElementById('style-title').textContent = onSelection ? 'Selection style' : 'Drawing style';
-    document.getElementById('style-target').textContent = onSelection
-      ? `${targets.length} entit${targets.length === 1 ? 'y' : 'ies'}`
-      : 'next shapes';
-
-    // Current values; undefined when the selection is mixed.
-    const common = (fn) => {
-      const vals = new Set(targets.map(fn));
-      return vals.size === 1 ? [...vals][0] : undefined;
-    };
-    const st = (e) => resolveStyle(e, project.layerOf(e));
-    const cur = onSelection ? {
-      color: common(e => st(e).color),
-      lineWidth: common(e => st(e).lineWidth),
-      lineStyle: common(e => st(e).lineStyle),
-      fill: common(e => st(e).fill),
-      fillOpacity: common(e => st(e).fillOpacity),
-      layerId: common(e => e.layerId),
-    } : {
-      color: this.pen.color, lineWidth: this.pen.lineWidth, lineStyle: this.pen.lineStyle,
-      fill: this.pen.fillColor, fillOpacity: this.pen.fillOpacity,
-    };
-
-    const mixed = (v) => v === undefined ? '<option value="" selected>Mixed</option>' : '';
-    const weightOpts = LINE_WEIGHTS.map(w => `<option value="${w}"${cur.lineWidth === w ? ' selected' : ''}>${w} px</option>`).join('');
-    const typeOpts = Object.entries(LINE_STYLES).map(([k, v]) => `<option value="${k}"${cur.lineStyle === k ? ' selected' : ''}>${v.label}</option>`).join('');
-
-    let html = '';
-    if (onSelection) {
-      html += `<div class="prop-row"><label>layer</label>
-        <select data-key="layerId">${mixed(cur.layerId)}${[...project.layers].reverse().map(l => `<option value="${l.id}"${cur.layerId === l.id ? ' selected' : ''}>${esc(l.name)}</option>`).join('')}</select></div>`;
-    }
-    html += `<div class="sb-subhead">Stroke</div>${this._swatchesHtml('color', cur.color, false)}`;
-    html += `<div class="prop-row"><label>weight</label><select data-key="lineWidth">${mixed(cur.lineWidth)}${weightOpts}</select></div>`;
-    html += `<div class="prop-row"><label>line type</label><select data-key="lineStyle">${mixed(cur.lineStyle)}${typeOpts}</select></div>`;
-    html += `<div class="sb-subhead">Fill</div>${this._swatchesHtml('fill', cur.fill === undefined ? undefined : (cur.fill || null), onSelection)}`;
-    const fo = cur.fillOpacity ?? 0.35;
-    html += `<div class="prop-row"><label>fill opacity</label>
-      <div class="range-row"><input type="range" min="0.05" max="1" step="0.05" value="${fo}" data-key="fillOpacity"><span>${Math.round(fo * 100)}%</span></div></div>`;
-    if (!onSelection) {
-      html += `<label class="check-row"><input type="checkbox" data-key="fillShapes"${this.pen.fillShapes ? ' checked' : ''}> Fill new closed shapes</label>`;
-      html += `<div class="empty">Applies to the next shapes you draw. The Fill tool (B) paints regions with the fill colour.${this.colorMode === 'status' ? ' Stroke colours are hidden while <b>Status</b> colouring is on.' : ''}</div>`;
-    }
-    body.innerHTML = html;
-
-    const live = (key, value) => this._applyStyle(targets, onSelection, key, value, false);
-    const commit = (key, value) => this._applyStyle(targets, onSelection, key, value, true);
-
-    body.querySelectorAll('.swatches button.sw').forEach(b => b.addEventListener('click', () => {
-      commit(b.closest('.swatches').dataset.key, b.dataset.v === 'none' ? 'none' : b.dataset.v);
-    }));
-    body.querySelectorAll('.swatches input[type=color]').forEach(inp => {
-      inp.addEventListener('input', () => live(inp.dataset.key, inp.value));
-      inp.addEventListener('change', () => commit(inp.dataset.key, inp.value));
-    });
-    body.querySelectorAll('select[data-key]').forEach(sel => sel.addEventListener('change', () => {
-      if (sel.value === '') return;
-      const k = sel.dataset.key;
-      commit(k, k === 'lineWidth' ? parseFloat(sel.value) : sel.value);
-    }));
-    body.querySelectorAll('input[type=range]').forEach(r => {
-      const label = r.nextElementSibling;
-      const read = () => { label.textContent = Math.round(r.value * 100) + '%'; return parseFloat(r.value); };
-      r.addEventListener('input', () => live(r.dataset.key, read()));
-      r.addEventListener('change', () => commit(r.dataset.key, read()));
-    });
-    const cb = body.querySelector('input[type=checkbox][data-key="fillShapes"]');
-    if (cb) cb.addEventListener('change', () => commit('fillShapes', cb.checked));
-  }
-
-  /** Writes one style key: to the selected entities (with an undo step),
-   *  or to the drawing style (a preference, no undo step). `final`
-   *  rebuilds the panel. */
-  _applyStyle(targets, onSelection, key, value, final) {
-    if (onSelection) {
-      for (const e of targets) {
-        if (key === 'layerId') { e.layerId = value; continue; }
-        const next = { ...(e.style || {}) };
-        next[key] = value;
-        e.style = cleanStyle(next);
-      }
-      if (final) {
-        if (key === 'layerId') this.clearSelection();   // moved off the active layer
-        this._layerChanged();
-      } else this.requestRender();
-      return;
-    }
-    const penKey = key === 'fill' ? 'fillColor' : key;
-    this.pen[penKey] = value;
-    this._penChanged(final);
-    if (final) { this._refreshStylePanel(); this.refreshToolOptions(); }
-  }
-
-  /* ---- Fill tool options (left panel) ---- */
-  _refreshFillOptions(section, body) {
-    section.hidden = false;
-    document.getElementById('tool-options-title').textContent = 'Fill';
-    body.innerHTML = `
-      <div class="choice-grid">
-        <button class="choice-row ${this.fillErase ? '' : 'active'}" data-mode="fill">
-          <span class="sw-dot" style="--sw:${this.pen.fillColor}"></span><span>Fill</span></button>
-        <button class="choice-row ${this.fillErase ? 'active' : ''}" data-mode="erase">${uiIcon('x')}<span>Erase fill</span></button>
-      </div>
-      <div class="empty">${this.fillErase
-        ? 'Click a filled region on this layer to remove its fill. Click outside every region to clear the background.'
-        : 'Click inside a closed region to fill it. Inner shapes stay as holes. Click outside every region to fill the background. Change the colour in Drawing style → Fill.'}</div>`;
-    body.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => {
-      this.fillErase = b.dataset.mode === 'erase';
-      this.refreshToolOptions();
-      document.getElementById('status-hint').textContent = (this.tool.hint && this.tool.hint()) || '';
-    }));
   }
 }

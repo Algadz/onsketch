@@ -1,13 +1,12 @@
 /* =============== STYLE + LAYERS ================================
    Display attributes, kept separate from geometry and constraints.
 
-   A Layer is a display group shared by every sketch in a project
-   (like layers in Paint.NET or AutoCAD). It carries default style plus
-   visibility / lock / opacity. Entities point at a layer by id and may
-   override any style key through `entity.style`.
+   Every entity carries its own style (`entity.style`), taken from the
+   drawing style when it was drawn, as in Paint.NET. Layers are display
+   groups only: visibility, lock, opacity, order.
 
-   Layers never affect solving: constraints may freely link entities
-   that live on different layers.
+   Layers never affect solving (except that locked geometry is held
+   still): constraints may freely link entities on different layers.
    ============================================================ */
 import { newId } from './entities.js';
 
@@ -30,37 +29,28 @@ export const PALETTE = [
   '#e07b00', '#d63a3a', '#c2307a', '#8a4fd1', '#5b5fd6',
 ];
 
-/** Colours handed to new layers in turn. */
-const LAYER_COLORS = ['#1f7ad6', '#d63a3a', '#14946b', '#e07b00', '#8a4fd1', '#0f9fb5', '#c2307a', '#6aa121'];
-
 export const STYLE_KEYS = ['color', 'lineWidth', 'lineStyle', 'fill', 'fillOpacity'];
 
 const isHex = (c) => typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c);
 
+/** Style of an entity that has none of its own. */
+export const DEFAULT_STYLE = { color: '#111418', lineWidth: 1.4, lineStyle: 'solid', fill: null, fillOpacity: 0.35 };
+
+/** A layer is a display group only: it carries no colours or line
+ *  settings (those belong to each entity, set from the drawing style
+ *  when it was drawn). */
 export class Layer {
   constructor(name = 'Layer', props = {}) {
     this.id = props.id || newId('ly');
     this.name = name;
-    this.color = isHex(props.color) ? props.color : '#1f7ad6';
-    this.lineWidth = Number.isFinite(props.lineWidth) ? props.lineWidth : 1.4;
-    this.lineStyle = LINE_STYLES[props.lineStyle] ? props.lineStyle : 'solid';
-    this.fill = isHex(props.fill) ? props.fill : null;           // null = no fill
-    this.fillOpacity = Number.isFinite(props.fillOpacity) ? props.fillOpacity : 0.25;
     this.opacity = Number.isFinite(props.opacity) ? props.opacity : 1;
     this.visible = props.visible !== false;
     this.locked = !!props.locked;
   }
   toJSON() {
-    const o = {
-      id: this.id, name: this.name, color: this.color, lineWidth: this.lineWidth,
-      lineStyle: this.lineStyle, fillOpacity: this.fillOpacity, opacity: this.opacity,
-      visible: this.visible, locked: this.locked,
-    };
-    if (this.fill) o.fill = this.fill;
-    return o;
+    return { id: this.id, name: this.name, opacity: this.opacity, visible: this.visible, locked: this.locked };
   }
   static fromJSON(o) { return new Layer(o.name || 'Layer', o); }
-  static nextColor(index) { return LAYER_COLORS[index % LAYER_COLORS.length]; }
 }
 
 /** Keep only known, valid style keys. Returns null when nothing is left so
@@ -76,18 +66,17 @@ export function cleanStyle(style) {
   return Object.keys(out).length ? out : null;
 }
 
-/** Effective style for an entity: its own overrides on top of its layer.
- *  `fill` resolves to a colour or null ('none' overrides a layer fill). */
-export function resolveStyle(entity, layer) {
+/** Effective style for an entity: its own style over the defaults.
+ *  `fill` resolves to a colour or null. */
+export function resolveStyle(entity) {
   const s = entity?.style || {};
-  const base = layer || { color: '#1f7ad6', lineWidth: 1.4, lineStyle: 'solid', fill: null, fillOpacity: 0.25 };
-  const fill = s.fill !== undefined ? s.fill : base.fill;
+  const fill = s.fill !== undefined ? s.fill : DEFAULT_STYLE.fill;
   return {
-    color: s.color ?? base.color,
-    lineWidth: s.lineWidth ?? base.lineWidth,
-    lineStyle: s.lineStyle ?? base.lineStyle,
+    color: s.color ?? DEFAULT_STYLE.color,
+    lineWidth: s.lineWidth ?? DEFAULT_STYLE.lineWidth,
+    lineStyle: s.lineStyle ?? DEFAULT_STYLE.lineStyle,
     fill: fill === 'none' ? null : (fill || null),
-    fillOpacity: s.fillOpacity ?? base.fillOpacity,
+    fillOpacity: s.fillOpacity ?? DEFAULT_STYLE.fillOpacity,
   };
 }
 

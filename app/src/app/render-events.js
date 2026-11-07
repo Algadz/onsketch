@@ -1,3 +1,4 @@
+import { toolDef } from '../ui/tool-defs.js';
 import { Arc, Circle, Line, Point } from '../core/entities.js';
 import { SelectTool } from '../tools/select.js';
 import { ArcTool, CenterLineTool, CenterRectangleTool, CircleTool, HexagonTool, LineTool, PointTool, RectangleTool, ThreePointCircleTool } from '../tools/draw.js';
@@ -21,7 +22,7 @@ export class RenderEventsMixin {
     const walk = (e) => { entMap.set(e.id, e); for (const c of e.children()) walk(c); };
     for (const s of this.project.visibleSketches()) for (const e of s.entities) walk(e);
     const sketch = this.activeSketch();
-    if (sketch) {
+    if (sketch && this.showDimensions) {
       this.renderer.drawDimensions(sketch, entMap, this._lastSolve?.redundantIds);
     }
 
@@ -78,13 +79,10 @@ export class RenderEventsMixin {
       case 'fill':      this.tool = new FillTool(this); break;
     }
     if (this.tool.activate) this.tool.activate();
-    document.querySelectorAll('#topbar .tool').forEach(b => b.classList.toggle('active', b.dataset.tool === name));
-    document.getElementById('status-tool').textContent = 'Tool: ' + (
-      name === 'centerRectangle' ? 'Center Rectangle' :
-      name === 'centerLine' ? 'Centerpoint Line' :
-      name === 'threePointCircle' ? '3-Point Circle' :
-      name[0].toUpperCase() + name.slice(1)
-    );
+    document.querySelectorAll('[data-tool]').forEach(b => b.classList.toggle('active', b.dataset.tool === name));
+    document.getElementById('status-tool').textContent = 'Tool: ' + toolDef(name).label;
+    if (name === 'smartdim' && !this.showDimensions) this.setDimensionsVisible(true);
+    this._refreshOptionsBar();
     document.getElementById('status-hint').textContent = (this.tool.hint && this.tool.hint()) || '';
     this.canvas.style.cursor = name === 'select' ? 'default' : name === 'fill' ? 'cell' : 'crosshair';
     this.refreshToolOptions();
@@ -203,6 +201,7 @@ export class RenderEventsMixin {
       else if (k === 'p') this.setTool('point');
       else if (k === 'd') this.setTool('smartdim');
       else if (k === 'b') this.setTool('fill');
+      else if (k === 'm') this.setDimensionsVisible(!this.showDimensions);
       else if (k === 'f') this.zoomFit();
       else if (k === 'f5') { ev.preventDefault(); this.solveAndRender(); }
       this.tool.onKey && this.tool.onKey(ev);
@@ -210,35 +209,6 @@ export class RenderEventsMixin {
   }
 
   /* ---- Top bar ---- */
-  _setupTopbar() {
-    document.querySelectorAll('#topbar .tool').forEach(b =>
-      b.addEventListener('click', () => this.setTool(b.dataset.tool)));
-
-    document.querySelectorAll('#topbar [data-action]').forEach(b => {
-      b.addEventListener('click', () => {
-        const a = b.dataset.action;
-        switch (a) {
-          case 'new':          this.newProject(); break;
-          case 'save':         this.saveLocal(); break;
-          case 'export':       this.exportJSON(); break;
-          case 'import':       this.importJSON(); break;
-          case 'undo':         this.undo(); break;
-          case 'redo':         this.redo(); break;
-          case 'solve':        this.solveAndRender(); break;
-          case 'mirror':       this.startMirrorOperation(); break;
-          case 'offset':       this.startOffsetOperation(); break;
-          case 'construction': this.constructionMode = !this.constructionMode; b.classList.toggle('on', this.constructionMode); break;
-          case 'grid':         this.gridOn = !this.gridOn; b.classList.toggle('on', this.gridOn); this.requestRender(); break;
-          case 'snap':         this.snapOn = !this.snapOn; b.classList.toggle('on', this.snapOn); this.requestRender(); break;
-          case 'zoom-fit':     this.zoomFit(); break;
-          case 'color-mode':   this.setColorMode(this.colorMode === 'status' ? 'style' : 'status'); this._refreshStylePanel(); break;
-          case 'theme':        this.setTheme(this.themeName === 'dark' ? 'light' : 'dark'); break;
-          case 'zoom-reset':   this.view.zoom = 4; this.view.panX = 0; this.view.panY = 0; this.requestRender(); break;
-        }
-      });
-    });
-  }
-
   zoomFit() {
     const sketch = this.activeSketch(); if (!sketch || sketch.entities.length === 0) return;
     let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
