@@ -1,0 +1,280 @@
+import { clamp, dist, normalizeAngleValue } from '../core/math.js';
+import { uiIcon } from '../ui/icons.js';
+import { Arc, Circle, Line, Point } from '../core/entities.js';
+import { CONSTRAINT_LABELS, Constraint, FixConstraint } from '../core/constraints.js';
+import { availableDimensions, availableRelations, constraintAppliesToSelection } from '../editor/relations.js';
+
+export class PanelsMixin {
+
+  /* ---- Sidebar ---- */
+  _setupSidebar() {
+    document.getElementById('add-layer').addEventListener('click', () => {
+      this.project.addSketch();
+      this.commit();
+      this.refreshUI();
+    });
+    document.getElementById('project-name').addEventListener('input', (e) => {
+      this.project.name = e.target.value;
+    });
+  }
+
+  refreshUI() {
+    this._refreshLayers();
+    this.refreshToolOptions();
+    this._refreshSelectionPanel();
+    document.getElementById('project-name').value = this.project.name;
+  }
+
+  refreshToolOptions() {
+    const section = document.getElementById('tool-options-section');
+    const body = document.getElementById('tool-options-body');
+    if (!section || !body) return;
+    if (this.operationName === 'mirror') {
+      this._refreshMirrorOptions(section, body);
+      return;
+    }
+    if (this.operationName === 'offset') {
+      this._refreshOffsetOptions(section, body);
+      return;
+    }
+    if (this.toolName !== 'hexagon') {
+      section.hidden = true;
+      body.innerHTML = '';
+      document.getElementById('tool-options-title').textContent = 'Tool Options';
+      return;
+    }
+    section.hidden = false;
+    document.getElementById('tool-options-title').textContent = 'Polygon';
+    body.innerHTML = `
+      <div class="tool-summary">
+        <div class="tool-metric"><strong id="polygon-sides-summary">${this.polygonSides}</strong><span>Sides</span></div>
+        <div class="tool-metric"><strong>2</strong><span>Clicks</span></div>
+      </div>
+      <div class="prop-row">
+        <label for="polygon-sides">sides</label>
+        <input id="polygon-sides" type="number" min="3" max="64" step="1" value="${this.polygonSides}">
+      </div>
+    `;
+    const input = body.querySelector('#polygon-sides');
+    input.addEventListener('input', () => {
+      const n = Math.round(parseFloat(input.value));
+      if (!Number.isFinite(n)) return;
+      this.polygonSides = clamp(n, 3, 64);
+      input.value = this.polygonSides;
+      body.querySelector('#polygon-sides-summary').textContent = this.polygonSides;
+      this.requestRender();
+      document.getElementById('status-hint').textContent = (this.tool.hint && this.tool.hint()) || '';
+    });
+  }
+
+  _refreshLayers() {
+    const ul = document.getElementById('layers-list');
+    ul.innerHTML = '';
+    for (const s of this.project.sketches) {
+      const row = document.createElement('div');
+      row.className = 'layer-row' + (s.id === this.project.activeSketchId ? ' active' : '');
+      row.innerHTML = `
+        <button class="icon-btn" title="Toggle visibility" aria-label="Toggle visibility">${uiIcon(s.visible ? 'eye' : 'eyeOff')}</button>
+        <span class="name" title="${s.name}">${s.name}<span class="badge">${s.entities.length}</span></span>
+        <button class="icon-btn" title="Delete" aria-label="Delete sketch">${uiIcon('trash')}</button>
+      `;
+      const [vis, name, del] = row.querySelectorAll(':scope > *');
+      vis.addEventListener('click', (e) => { e.stopPropagation(); s.visible = !s.visible; this.refreshUI(); this.requestRender(); });
+      del.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (this.project.sketches.length <= 1) return alert('A project must have at least one sketch.');
+        if (!confirm(`Delete sketch "${s.name}"?`)) return;
+        this.project.removeSketch(s.id);
+        this.commit();
+        this.refreshUI();
+      });
+      name.addEventListener('dblclick', (e) => {
+        e.stopPropagation();
+        const span = e.currentTarget;
+        span.setAttribute('contenteditable', 'true');
+        span.focus();
+        const range = document.createRange(); range.selectNodeContents(span);
+        const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
+        const finish = () => {
+          span.removeAttribute('contenteditable');
+          s.name = span.textContent.trim() || s.name;
+          span.removeEventListener('blur', finish);
+          this.refreshUI();
+        };
+        span.addEventListener('blur', finish);
+        span.addEventListener('keydown', (ev) => { if (ev.key==='Enter'){ ev.preventDefault(); span.blur(); }});
+      });
+      row.addEventListener('click', () => {
+        this.project.activeSketchId = s.id;
+        this.clearSelection();
+        this.solveAndRender();
+        this.refreshUI();
+      });
+      ul.appendChild(row);
+    }
+  }
+
+  _refreshSelectionPanel() {
+    const sel = this.selectedEntitiesAndPoints();
+    const body = document.getElementById('sel-body');
+    document.getElementById('sel-count').textContent = sel.length + (sel.length === 1 ? ' item' : ' items');
+
+    if (sel.length === 0) {
+      body.innerHTML = '<div class="empty">Click an entity to select. Ctrl-click to add or remove from selection.</div>';
+      return;
+    }
+
+    const activeId = this.project.activeSketchId;
+    const sketch = this.activeSketch();
+    const hasConstraintSelection = sel.some(e => e instanceof Constraint);
+
+    // ---- Selection list ----
+    let html = '<div class="sb-subhead">Items</div>';
+    for (const e of sel) {
+      const owner = this.project.sketchOf(e);
+      const cross = owner && owner.id !== activeId;
+      const glyph = e instanceof Point ? 'P' : e instanceof Line ? 'L' : e instanceof Circle ? 'C' : e instanceof Arc ? 'A' : '?';
+      const kind  = e instanceof Constraint ? (CONSTRAINT_LABELS[e.kind] || e.kind) : e.constructor.kind;
+      html += `<div class="sel-item${cross ? ' cross-layer' : ''}">
+                 <span class="glyph">${glyph}</span>
+                 <span>${kind} ${e.id}</span>
+                 <span class="layer-tag">${owner ? owner.name : '—'}</span>
+               </div>`;
+    }
+
+    // ---- Add Relations ----
+    const rels = hasConstraintSelection ? [] : availableRelations(sel);
+    html += '<div class="sb-subhead">Add Relation</div>';
+    if (rels.length === 0) {
+      html += '<div class="empty">No relations apply to this selection.</div>';
+    } else {
+      html += '<div class="rel-grid">';
+      for (const r of rels) {
+        html += `<button class="rel-btn" data-rel="${r.kind}"><span class="glyph">${r.glyph}</span>${r.label}</button>`;
+      }
+      html += '</div>';
+    }
+
+    // ---- Add Dimension ----
+    const dims = hasConstraintSelection ? [] : availableDimensions(sel);
+    html += '<div class="sb-subhead">Add Dimension</div>';
+    if (dims.length === 0) {
+      html += '<div class="empty">No dimension applies. Use Smart Dim (D) or pick a different combo.</div>';
+    } else {
+      html += '<div class="rel-grid">';
+      for (const d of dims) {
+        html += `<button class="rel-btn" data-dim="${d.kind}"><span class="glyph">${d.glyph}</span>${d.label}</button>`;
+      }
+      html += '</div>';
+    }
+
+    // ---- Existing Relations on selection ----
+    const related = (sketch?.constraints || []).filter(c => constraintAppliesToSelection(c, sel));
+    html += '<div class="sb-subhead">Existing Relations</div>';
+    if (related.length === 0) {
+      html += '<div class="empty">None on selection.</div>';
+    } else {
+      html += '<div>';
+      for (const c of related) {
+        const label = CONSTRAINT_LABELS[c.kind] || c.kind;
+        const valStr = (c.value !== null && c.value !== undefined) ? ` = ${Number(c.value).toFixed(3)}` : '';
+        html += `<span class="constraint-pill" data-cid="${c.id}">${label}${valStr}<span class="x" data-cid="${c.id}">×</span></span>`;
+      }
+      html += '</div>';
+    }
+
+    // ---- Properties ----
+    const e = sel[0];
+    const constructionTargets = sel.filter(x => x instanceof Line || x instanceof Circle || x instanceof Arc);
+    html += '<div class="sb-subhead">Properties</div>';
+    if (sel.length > 1) {
+      if (constructionTargets.length) {
+        const allConstruction = constructionTargets.every(x => x.construction);
+        html += `<div class="prop-row"><label>construction</label><input type="checkbox" data-toggle="construction-all" ${allConstruction?'checked':''}></div>`;
+      } else {
+        html += '<div class="empty">No shared properties.</div>';
+      }
+    } else if (e instanceof Point) {
+      html += `<div class="prop-row"><label>x</label><input type="number" step="0.001" data-edit="x" value="${e.x.toFixed(4)}"></div>`;
+      html += `<div class="prop-row"><label>y</label><input type="number" step="0.001" data-edit="y" value="${e.y.toFixed(4)}"></div>`;
+      html += `<div class="prop-row"><label>fixed</label><input type="checkbox" data-toggle="fixed" ${e.fixed?'checked':''}></div>`;
+    } else if (e instanceof Circle || e instanceof Arc) {
+      html += `<div class="prop-row"><label>radius</label><input type="number" step="0.001" data-edit="r" value="${e.r.toFixed(4)}"></div>`;
+      html += `<div class="prop-row"><label>construction</label><input type="checkbox" data-toggle="construction" ${e.construction?'checked':''}></div>`;
+    } else if (e instanceof Line) {
+      html += `<div class="prop-row"><label>length</label><span>${dist(e.p1,e.p2).toFixed(4)} ${this.project.units}</span></div>`;
+      html += `<div class="prop-row"><label>construction</label><input type="checkbox" data-toggle="construction" ${e.construction?'checked':''}></div>`;
+    } else if (e instanceof Constraint) {
+      const val = e.kind === 'angle'
+        ? (normalizeAngleValue(e.value) * 180 / Math.PI).toFixed(3) + '°'
+        : (e.value != null ? Number(e.value).toFixed(3) : '');
+      if (val) html += `<div class="prop-row"><label>value</label><span>${val}</span></div>`;
+      if (['distance','pointLineDistance','radius','curveDistance','angle','offsetDistance'].includes(e.kind)) {
+        html += `<div class="prop-row"><label>driven</label><span>${e.driven ? 'yes' : 'no'}</span></div>`;
+      }
+    }
+
+    body.innerHTML = html;
+    const constructionAll = body.querySelector('input[data-toggle="construction-all"]');
+    if (constructionAll) {
+      constructionAll.indeterminate = constructionTargets.some(x => x.construction) &&
+        !constructionTargets.every(x => x.construction);
+    }
+
+    // Wire up buttons / inputs
+    body.querySelectorAll('[data-rel]').forEach(b =>
+      b.addEventListener('click', () => this.applyConstraint(b.dataset.rel)));
+    body.querySelectorAll('[data-dim]').forEach(b =>
+      b.addEventListener('click', () => this.applyDimension(b.dataset.dim)));
+    body.querySelectorAll('input[data-edit]').forEach(inp => {
+      inp.addEventListener('change', () => {
+        const k = inp.dataset.edit;
+        const v = parseFloat(inp.value);
+        if (!Number.isFinite(v)) return;
+        // Snap near-zero values back to exactly zero.
+        e[k] = (Math.abs(v) < 1e-12) ? 0 : v;
+        // If this Point is anchored by a Fix constraint, the constraint's
+        // own (x,y) is the solver's target. Update it so the typed value
+        // sticks instead of being pulled back to the old fix.
+        if (e instanceof Point) {
+          const fc = sketch.constraints.find(c => c.kind === 'fix' && c.pointId === e.id);
+          if (fc) { fc.x = e.x; fc.y = e.y; }
+        }
+        this.commit();
+      });
+    });
+    body.querySelectorAll('input[data-toggle]').forEach(inp => {
+      inp.addEventListener('change', () => {
+        const k = inp.dataset.toggle;
+        if (k === 'construction-all') {
+          for (const target of constructionTargets) target.construction = inp.checked;
+          this.commit();
+          this.refreshUI();
+          return;
+        }
+        e[k] = inp.checked;
+        if (k === 'fixed' && inp.checked && e instanceof Point) {
+          sketch.constraints.push(new FixConstraint(e.id, e.x, e.y));
+        }
+        if (k === 'fixed' && !inp.checked && e instanceof Point) {
+          sketch.constraints = sketch.constraints.filter(c => !(c.kind === 'fix' && c.pointId === e.id));
+        }
+        this.commit();
+        this.refreshUI();
+      });
+    });
+    body.querySelectorAll('.constraint-pill .x').forEach(x => {
+      x.addEventListener('click', () => {
+        const cid = x.dataset.cid;
+        sketch.constraints = sketch.constraints.filter(c => c.id !== cid);
+        // recompute fixed flags from remaining FixConstraints
+        for (const en of sketch.entities) for (const c of en.children()) c.fixed = false;
+        for (const c of sketch.constraints) if (c.kind === 'fix') {
+          for (const en of sketch.entities) for (const p of en.children()) if (p.id === c.pointId) p.fixed = true;
+        }
+        this.commit();
+        this.refreshUI();
+      });
+    });
+  }
+}

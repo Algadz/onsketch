@@ -1,0 +1,16 @@
+{
+  "name": "onsketch",
+  "private": true,
+  "type": "module",
+  "description": "Browser-based parametric 2D sketcher. No build step: app/ is served as static ES modules.",
+  "scripts": {
+    "serve": "python3 -m http.server 8080",
+    "test": "node --test \"tests/unit/*.test.js\"",
+    "test:e2e": "node tests/smoke.e2e.mjs",
+    "lint": "eslint app/src tests"
+  },
+  "devDependencies": {
+    "eslint": "^9.39.0",
+    "globals": "^15.15.0"
+  }
+}
