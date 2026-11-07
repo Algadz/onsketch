@@ -7,25 +7,27 @@ export class SolveMixin {
     // New constraints and dimensions belong to the layer they were made on.
     const activeLayer = this.project.activeLayerId;
     for (const s of this.project.sketches) for (const c of s.constraints) if (!c.layerId) c.layerId = activeLayer;
-    // Equation changes (variables, formulas) reach every layer, and are
-    // solved before the undo snapshot so undo restores a consistent state.
+    // Equation changes (variables, formulas) reach every layer.
     if (this._applyEquations().changed) this._solveAllLayers();
-    // Carry fill colours over to the areas the shapes form now (split /
-    // merge / re-cut / opened), before the undo snapshot.
-    this._reconcileStoredFills();
     const diagnostics = options.diagnostics || 'defer';
     const sketch = this.activeSketch();
     const activeIds = options.activeIds
       ? new Set(options.activeIds)
       : (sketch && sketch.dirtyIds && sketch.dirtyIds.size ? new Set(sketch.dirtyIds) : null);
-    this.undoStack.push(JSON.stringify(this.project.toJSON()));
-    if (this.undoStack.length > 100) this.undoStack.shift();
-    this.redoStack.length = 0;
     if (sketch?.dirtyIds) sketch.dirtyIds.clear();
     if (diagnostics === 'sync') this.solveAndRender();
     else this.solveFastAndRender({ diagnostics, activeIds });
+    // Carry fill colours over to the areas the settled shapes form (split /
+    // merge / re-cut / opened). After the solve: a snap constraint added on
+    // release only closes an area once solved.
+    this._reconcileStoredFills();
+    // The undo step holds the settled, recoloured state.
+    this.undoStack.push(JSON.stringify(this.project.toJSON()));
+    if (this.undoStack.length > 100) this.undoStack.shift();
+    this.redoStack.length = 0;
     if (this._refreshLayerPanel) this._refreshLayerPanel();   // entity counts
   }
+
 
   solveSoft() {
     const sketch = this.activeSketch(); if (!sketch) return;

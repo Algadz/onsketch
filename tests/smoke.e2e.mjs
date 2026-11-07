@@ -634,6 +634,70 @@ const dimLayerStates = await page.evaluate(() => { const a = window._app; return
 check(dimLayerStates === 'D1:hidden,D2:hidden,D3:active', `hidden layer hides its dimensions (${dimLayerStates})`);
 await page.evaluate(() => { const a = window._app; a.project.layer('ly1').visible = true; a.requestRender(); });
 
+// Fill follows shapes moved by real drags; undo; hidden paint survives save/load.
+{
+  const loadP = (proj) => page.evaluate((proj) => {
+    const a = window._app; a.project = a.project.constructor.fromJSON(proj); a._afterStateSwap();
+    a.view.zoom = 4; a.view.panX = 0; a.view.panY = 0; a.commit({ diagnostics: 'sync' });
+    for (const w of ['equations', 'props', 'colors', 'tools', 'layers']) a.windows.toggle(w, false);
+    a.setTool('select'); a.requestRender();
+  }, proj);
+  const colourAtW = (x, y) => page.evaluate(([x, y]) => {
+    const d = [...window._app.fillDisplay().values()][0]; if (!d) return null;
+    const pip = (poly, p) => { let c = false; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const A = poly[i], B = poly[j]; if ((A.y > p.y) !== (B.y > p.y) && p.x < (B.x - A.x) * (p.y - A.y) / (B.y - A.y) + A.x) c = !c; } return c; };
+    const f = d.painted.find(f => pip(f.region.outer, { x, y }) && !f.region.holes.some(h => pip(h, { x, y })));
+    return f ? f.color : null;
+  }, [x, y]);
+  const dragW = async (from, to, each) => {
+    const A = await W(...from), B = await W(...to);
+    await page.mouse.move(box.x + A.x, box.y + A.y); await page.mouse.down();
+    const seen = [];
+    for (let i = 1; i <= 10; i++) { await page.mouse.move(box.x + A.x + (B.x - A.x) * i / 10, box.y + A.y + (B.y - A.y) * i / 10); if (each) seen.push(await each(i)); }
+    await page.mouse.up();
+    return seen;
+  };
+  const pt = (id, x, y, fixed = false) => ({ type: 'point', id, x, y, fixed });
+  await page.keyboard.press('s');
+
+  await loadP({ version: 3, layers: [{ id: 'L', name: 'L' }], activeLayerId: 'L', sketches: [{ id: 's', name: 'S', entities: [
+    { type: 'circle', id: 'c1', layerId: 'L', center: pt('p1', -60, 0), r: 10 }], constraints: [],
+    fills: [{ id: 'f1', layerId: 'L', color: '#d63a3a', opacity: 1, seed: { x: -60, y: 0 } }] }] });
+  const along = await dragW([-60, 0], [60, 20], async () => {
+    const c = await page.evaluate(() => { const e = window._app.activeSketch().entities[0]; return [e.center.x, e.center.y]; });
+    return colourAtW(c[0], c[1]);
+  });
+  check(along.every(c => c === '#d63a3a') && await colourAtW(-60, 0) === null, `dragged filled circle keeps its colour every frame and leaves nothing behind (${[...new Set(along)]})`);
+  await page.evaluate(() => window._app.undo());
+  check(await colourAtW(-60, 0) === '#d63a3a', 'undo puts the paint back with the circle');
+
+  await loadP({ version: 3, layers: [{ id: 'L', name: 'L' }], activeLayerId: 'L', sketches: [{ id: 's', name: 'S', entities: [
+    { type: 'line', id: 'l1', layerId: 'L', p1: pt('a', -80, -20), p2: pt('b', -40, -20) },
+    { type: 'line', id: 'l2', layerId: 'L', p1: pt('b', -40, -20), p2: pt('c', -40, 10) },
+    { type: 'line', id: 'l3', layerId: 'L', p1: pt('c', -40, 10), p2: pt('d', -80, 10) },
+    { type: 'line', id: 'l4', layerId: 'L', p1: pt('d', -80, 10), p2: pt('a', -80, -20) }], constraints: [],
+    fills: [{ id: 'f1', layerId: 'L', color: '#1f7ad6', opacity: 1, seed: { x: -60, y: -5 } }] }] });
+  const s1 = await W(-90, 20), s2 = await W(-30, -30);
+  await page.mouse.move(box.x + s1.x, box.y + s1.y); await page.mouse.down(); await page.mouse.move(box.x + s2.x, box.y + s2.y, { steps: 5 }); await page.mouse.up();
+  const rectFrames = await dragW([-60, -20], [40, 30], (i) => colourAtW(-60 + 100 * i / 10, -5 + 50 * i / 10));
+  check(rectFrames.every(c => c === '#1f7ad6') && await colourAtW(40, 45) === '#1f7ad6' && await colourAtW(-60, -5) === null,
+    `box-selected filled rectangle moves with its colour (${[...new Set(rectFrames)]})`);
+
+  await loadP({ version: 3, layers: [{ id: 'L', name: 'L' }], activeLayerId: 'L', sketches: [{ id: 's', name: 'S', entities: [
+    { type: 'line', id: 'l1', layerId: 'L', p1: pt('a', -4, 0, true), p2: pt('b', 40, 0, true) },
+    { type: 'line', id: 'l2', layerId: 'L', p1: pt('b', 40, 0, true), p2: pt('c', 20, 30, true) },
+    { type: 'line', id: 'l3', layerId: 'L', p1: pt('c', 20, 30, true), p2: pt('d', 4, 0) }], constraints: [],
+    fills: [{ id: 'f1', layerId: 'L', color: '#14946b', opacity: 1, seed: { x: 20, y: 8 } }] }] });
+  await dragW([4, 0], [-20, 20]);
+  const hiddenNow = await page.evaluate(() => window._app.dormantFillCount());
+  const saved = await page.evaluate(() => JSON.stringify(window._app.project.toJSON()));
+  await loadP(JSON.parse(saved));
+  const hiddenLoaded = await page.evaluate(() => window._app.dormantFillCount());
+  await dragW([-20, 20], [6, 0]);
+  const back = await colourAtW(20, 8), hiddenEnd = await page.evaluate(() => window._app.dormantFillCount());
+  check(hiddenNow === 1 && hiddenLoaded === 1 && back === '#14946b' && hiddenEnd === 0,
+    `hidden paint survives save/load and returns when the area closes (${hiddenNow}/${hiddenLoaded}/${back}/${hiddenEnd})`);
+}
+
 await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
 if (shot) await page.screenshot({ path: shot });
 check(errors.length === 0, `no page errors${errors.length ? ': ' + errors.join(' / ') : ''}`);

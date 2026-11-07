@@ -60,7 +60,13 @@ function reviveFill(f, sketch) {
 /** Saved form of a fill (drops the transient region). */
 export function fillToJSON(f) {
   const o = { id: f.id, layerId: f.layerId, color: f.color, opacity: f.opacity ?? 1, seed: { x: f.seed.x, y: f.seed.y } };
-  if (f.dormant) { o.dormant = true; if (Array.isArray(f.outline)) o.outline = f.outline.map(p => ({ x: p.x, y: p.y })); }
+  if (f.dormant) {
+    o.dormant = true;
+    if (Array.isArray(f.outline)) o.outline = f.outline.map(p => ({ x: p.x, y: p.y }));
+    // Boundary identity, so hidden paint can come back on the same shapes.
+    if (Array.isArray(f.ids)) o.ids = [...f.ids];
+    if (f.idLen) o.idLen = Object.fromEntries(Object.entries(f.idLen).map(([k, v]) => [k, +v.toFixed(4)]));
+  }
   return o;
 }
 import { AngleConstraint, ArcEndpointArcEndpointCoincidentConstraint, ArcEndpointCoincidentConstraint, ArcEndpointFixConstraint, ArcEndpointMidpointConstraint, ArcEndpointOnCircleConstraint, ArcEndpointOnLineConstraint, CoincidentConstraint, CollinearConstraint, ConcentricConstraint, CurveDistanceConstraint, DirectedAngleConstraint, DistanceConstraint, EqualLengthConstraint, EqualRadiusConstraint, FixConstraint, HorizontalConstraint, MidpointConstraint, OffsetConstraint, OffsetDistanceConstraint, ParallelConstraint, PerpendicularConstraint, PointLineDistanceConstraint, PointOnCircleConstraint, PointOnLineConstraint, PointRefHorizontalConstraint, PointRefVerticalConstraint, RadiusConstraint, SymmetricConstraint, TangentCircleCircleConstraint, TangentLineCircleConstraint, VerticalConstraint } from './constraints.js';

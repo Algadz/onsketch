@@ -118,14 +118,23 @@ become Fill-tool fills. Regions are
 found on a planar arrangement of the geometry (segments split where they touch
 or cross, overlaps merged), so shapes sharing or crossing edges fill correctly.
 Fill-tool fills are paint on areas (like Live Paint): a colour plus a point
-inside the area, on one layer. When that layer's shapes change, colours follow
-the areas by overlap: a split keeps the colour on both pieces, a merge takes the
-colour that covered most of it, a re-cut area takes the majority colour of each
-new piece, and a new unpainted area stays empty. Paint whose area opens up is
-kept hidden (ghosted while dragging) and returns if the area closes again; the
-Fill tool's options can delete hidden fills. During a drag nothing is stored:
-dragging back restores the colours exactly; the result is kept on release and
-can be undone.
+inside the area, on one layer. When that layer's shapes change, each current
+area finds its colour by comparing with every area at the reference moment
+(drag start / last commit), painted or not:
+1. same bounding shapes → same colour (moved, resized, flipped; a hole stays
+   a hole);
+2. it contains a former area's whole boundary plus new edges (crossing,
+   merge) → the candidate covering most of it;
+3. at least half of it painted before → the colour covering most of it
+   (split, re-cut);
+4. mostly the same boundary by outline length → that colour (e.g. a bowtie
+   lobe, or circles pulled apart);
+otherwise it stays empty. Paint whose area opens up is kept hidden (ghosted
+while dragging, saved with its boundary) and returns when the area closes
+again; the Fill tool's options can delete hidden fills. During a drag nothing
+is stored, so dragging back restores the colours exactly; the result is kept
+on release (after the final solve) and can be undone. The scenarios live in
+`tests/unit/fill-drag.test.js`.
 
 
 

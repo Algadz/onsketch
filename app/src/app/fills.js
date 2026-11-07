@@ -1,5 +1,5 @@
 import { newId } from '../core/entities.js';
-import { findFaceAt, geometryKey, reconcileFills, regionContains } from '../core/regions.js';
+import { findFaceAt, geometryKey, reconcileRegions, referenceRegions, regionContains } from '../core/regions.js';
 
 /* =============== FILL TOOL =====================================
    Fills are paint on areas, like Live Paint. A fill is a colour and a
@@ -34,6 +34,25 @@ export class FillsMixin {
       if (!f.region) { f.dormant = true; f.outline = f.outline || null; }
     }
     this._fillDisplayCache = null;
+    this._rebuildFillRefs();
+  }
+
+  /** Reference for recolouring: every area of each painted layer as it is
+   *  now (painted or not). Rebuilt on commit / load / undo / paint, never
+   *  during a drag, so a drag always compares against its start. */
+  _rebuildFillRefs() {
+    const sketch = this.activeSketch(); if (!sketch) { this._fillRefs = null; return; }
+    const layers = new Map();
+    for (const f of sketch.fills) {
+      if (!layers.has(f.layerId)) layers.set(f.layerId, []);
+      layers.get(f.layerId).push(f);
+    }
+    const map = new Map();
+    for (const [layerId, fills] of layers) map.set(layerId, referenceRegions(fills, this._layerShapes(sketch, layerId)));
+    this._fillRefs = { map, sig: this._fillsSignature(sketch) };
+  }
+  _fillsSignature(sketch) {
+    return sketch.fills.map(f => [f.id, f.color, f.opacity, f.seed.x, f.seed.y, f.dormant ? 1 : 0].join(':')).join(';');
   }
 
   /** Colouring of every layer for the current geometry, against the
@@ -53,16 +72,17 @@ export class FillsMixin {
       if (!byLayer.has(f.layerId)) byLayer.set(f.layerId, []);
       byLayer.get(f.layerId).push(f);
     }
-    const keyParts = [];
-    for (const [layerId, fills] of byLayer) {
-      keyParts.push(layerId, geometryKey(this._layerShapes(sketch, layerId)),
-        fills.map(f => [f.id, f.color, f.opacity, f.seed.x, f.seed.y, f.dormant ? 1 : 0, f.region ? 1 : 0].join(':')).join(';'));
-    }
+    // Stored fills changed outside a drag (paint, erase, load): new reference.
+    const sig = this._fillsSignature(sketch);
+    if (!this._fillRefs || this._fillRefs.sig !== sig) this._rebuildFillRefs();
+    const keyParts = [sig];
+    for (const [layerId] of byLayer) keyParts.push(layerId, geometryKey(this._layerShapes(sketch, layerId)));
     const key = keyParts.join('|');
     if (this._fillDisplayCache && this._fillDisplayCache.key === key) return this._fillDisplayCache.map;
     const map = new Map();
     for (const [layerId, fills] of byLayer) {
-      map.set(layerId, reconcileFills(fills, this._layerShapes(sketch, layerId), () => newId('f')));
+      map.set(layerId, reconcileRegions(this._fillRefs.map.get(layerId) || [], fills.filter(f => f.dormant),
+        this._layerShapes(sketch, layerId), () => newId('f')));
     }
     this._fillDisplayCache = { key, map };
     return map;
@@ -90,6 +110,7 @@ export class FillsMixin {
     const order = [...new Set(sketch.fills.map(f => f.layerId))];
     sketch.fills = order.flatMap(id => assignment.get(id)?.fills || []);
     this._fillDisplayCache = null;
+    this._rebuildFillRefs();                // the new state is the next reference
     const dormant = sketch.fills.filter(f => f.dormant).length;
     if (dormant > before) {
       document.getElementById('status-hint').textContent =
