@@ -3,6 +3,8 @@
    title bar, close with ×, reopen from the menu bar. Position and
    open state are remembered per browser.
    ============================================================ */
+import { icon } from './icons.js';
+
 const STORE_KEY = 'onsketch:windows';
 const MARGIN = 8;
 
@@ -30,7 +32,11 @@ export class WindowManager {
     this.wins.set(id, el);
     const st = this.state[id] || (this.state[id] = { open: !el.hasAttribute('data-closed') });
     el.hidden = !st.open;
-    el.querySelector('.fwin-x')?.addEventListener('click', () => this.toggle(id, false));
+    const close = el.querySelector('.fwin-x');
+    if (close) {
+      close.innerHTML = icon('x');
+      close.addEventListener('click', () => this.toggle(id, false));
+    }
     el.addEventListener('pointerdown', () => { el.style.zIndex = ++this.z; });
     const head = el.querySelector('.fwin-head');
     head.addEventListener('pointerdown', (ev) => {

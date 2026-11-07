@@ -2,6 +2,7 @@ import { evaluate } from '../core/expr.js';
 import { dist, normalizeAngleValue } from '../core/math.js';
 import { Arc, Circle, Line, Point } from '../core/entities.js';
 import { CONSTRAINT_LABELS, Constraint, FixConstraint } from '../core/constraints.js';
+import { entityIcon, icon, kindIcon } from '../ui/icons.js';
 import { availableDimensions, availableRelations, constraintAppliesToSelection } from '../editor/relations.js';
 
 const esc = (t) => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -60,7 +61,7 @@ export class PanelsMixin {
     for (const e of sel) {
       const owner = e instanceof Constraint ? null : this.project.ownerOf(e);
       const layer = owner ? this.project.layerOf(owner) : null;
-      const glyph = e instanceof Point ? 'P' : e instanceof Line ? 'L' : e instanceof Circle ? 'C' : e instanceof Arc ? 'A' : '?';
+      const glyph = e instanceof Constraint ? kindIcon(e.kind) : entityIcon(e);
       const kind  = e instanceof Constraint ? (CONSTRAINT_LABELS[e.kind] || e.kind) : e.constructor.kind;
       html += `<div class="sel-item">
                  <span class="glyph">${glyph}</span>
@@ -77,7 +78,7 @@ export class PanelsMixin {
     } else {
       html += '<div class="rel-grid">';
       for (const r of rels) {
-        html += `<button class="rel-btn" data-rel="${r.kind}"><span class="glyph">${r.glyph}</span>${r.label}</button>`;
+        html += `<button class="rel-btn" data-rel="${r.kind}"><span class="glyph">${kindIcon(r.kind)}</span>${r.label}</button>`;
       }
       html += '</div>';
     }
@@ -90,7 +91,7 @@ export class PanelsMixin {
     } else {
       html += '<div class="rel-grid">';
       for (const d of dims) {
-        html += `<button class="rel-btn" data-dim="${d.kind}"><span class="glyph">${d.glyph}</span>${d.label}</button>`;
+        html += `<button class="rel-btn" data-dim="${d.kind}"><span class="glyph">${kindIcon(d.kind)}</span>${d.label}</button>`;
       }
       html += '</div>';
     }
@@ -105,7 +106,7 @@ export class PanelsMixin {
       for (const c of related) {
         const label = CONSTRAINT_LABELS[c.kind] || c.kind;
         const valStr = (c.value !== null && c.value !== undefined) ? ` = ${Number(c.value).toFixed(3)}` : '';
-        html += `<span class="constraint-pill" data-cid="${c.id}">${label}${valStr}<span class="x" data-cid="${c.id}">×</span></span>`;
+        html += `<span class="constraint-pill" data-cid="${c.id}">${kindIcon(c.kind)}<span>${label}${valStr}</span><button class="x" data-cid="${c.id}" title="Delete relation" aria-label="Delete ${label}">${icon('x')}</button></span>`;
       }
       html += '</div>';
     }

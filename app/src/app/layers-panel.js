@@ -68,7 +68,7 @@ export class LayersPanelMixin {
     document.documentElement.dataset.theme = this.themeName;
     this.renderer.theme = getTheme(this.themeName);
     const b = document.querySelector('#menubar [data-action="theme"]');
-    if (b) b.innerHTML = uiIcon(this.themeName === 'dark' ? 'sun' : 'moon').replace('class="ui-icon"', '');
+    if (b) b.innerHTML = uiIcon(this.themeName === 'dark' ? 'sun' : 'moon');
     if (save) this._savePrefs();
     this.requestRender();
   }

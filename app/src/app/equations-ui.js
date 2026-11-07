@@ -4,6 +4,7 @@ import {
   solveEquations, userValue, validateName,
 } from '../core/equations.js';
 import { CONSTRAINT_LABELS } from '../core/constraints.js';
+import { icon } from '../ui/icons.js';
 
 const esc = (t) => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmt = (v, angular) => (v == null || !Number.isFinite(v)) ? '—' : (angular ? v.toFixed(2) + '°' : Number(v.toFixed(4)).toString());
@@ -205,17 +206,17 @@ export class EquationsMixin {
     const dims = allDimensions(project);
     // Keep the focused field if the user is typing in this window.
     if (body.contains(document.activeElement) && document.activeElement.tagName === 'INPUT') return;
-    let html = `<div class="eq-head"><span>Global variables</span><button class="link-btn" data-eq="add-var">+ Add</button></div>`;
+    let html = `<div class="eq-head"><span>Global variables</span><button class="mini-btn" data-eq="add-var" title="Add a global variable">${icon('plus')}Add</button></div>`;
     if (!vars.length) html += '<div class="hint">None yet. Variables can be used in any dimension, e.g. <code>=width/2</code>.</div>';
     html += '<div class="eq-grid">';
     vars.forEach((v, i) => {
       html += `<input class="eq-name" data-k="var-name" data-i="${i}" value="${esc(v.name)}" aria-label="Variable name">
         <input class="eq-expr${v.error ? ' bad' : ''}" data-k="var-expr" data-i="${i}" value="${esc(v.expr)}" title="${esc(v.error || '')}" aria-label="Variable expression">
         <span class="eq-val">${v.error ? '!' : fmt(v.value, false)}</span>
-        <button class="fwin-x" data-eq="del-var" data-i="${i}" title="Delete variable">&times;</button>`;
+        <button class="icon-btn danger" data-eq="del-var" data-i="${i}" title="Delete variable" aria-label="Delete variable ${esc(v.name)}">${icon('trash')}</button>`;
     });
     html += '</div>';
-    html += `<div class="eq-head"><span>Dimensions</span><button class="link-btn" data-eq="names">${this.showDimNames ? 'Hide' : 'Show'} names on canvas</button></div>`;
+    html += `<div class="eq-head"><span>Dimensions</span><button class="mini-btn toggle${this.showDimNames ? ' on' : ''}" data-eq="names" aria-pressed="${!!this.showDimNames}" title="Show dimension names (D1, D2, …) on the canvas">${icon('tag')}Names on canvas</button></div>`;
     if (!dims.length) html += '<div class="hint">Dimensions you add appear here as D1, D2, …</div>';
     html += '<div class="eq-grid">';
     dims.forEach((c, i) => {

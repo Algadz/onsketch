@@ -20,6 +20,7 @@ import { EquationsMixin } from './equations-ui.js';
 import { LayersPanelMixin } from './layers-panel.js';
 import { FillsMixin } from './fills.js';
 import { PersistenceMixin } from './persistence.js';
+import { entityIcon } from '../ui/icons.js';
 
 /* =============== 10. APP ====================================== */
 export class App {
@@ -416,14 +417,6 @@ export class App {
     if (changed) this.requestRender();
   }
 
-  _contextMenuGlyph(e) {
-    if (e instanceof Point) return 'P';
-    if (e instanceof Line) return 'L';
-    if (e instanceof Circle) return 'C';
-    if (e instanceof Arc) return 'A';
-    return '?';
-  }
-
   _selectFromContextMenu(item, ev) {
     const toggle = ev.ctrlKey || ev.metaKey;
     const add = ev.shiftKey;
@@ -453,7 +446,7 @@ export class App {
       row.type = 'button';
       row.className = 'context-menu-item';
       row.innerHTML = `
-        <span class="glyph">${this._contextMenuGlyph(item)}</span>
+        <span class="glyph">${entityIcon(item)}</span>
         <span>${this._entityLabel(item)}</span>
         <span class="meta">${item.construction ? 'construction' : item.fixed ? 'fixed' : ''}</span>
       `;

@@ -2,6 +2,7 @@ import { LINE_STYLES, LINE_WEIGHTS, PALETTE } from '../core/style.js';
 import { clamp } from '../core/math.js';
 import { ACTION_ICONS, DRAW_TOOLS, TOOLS, TOOL_ICONS, WINDOW_ICONS, toolDef } from '../ui/tool-defs.js';
 import { WindowManager } from '../ui/windows.js';
+import { icon } from '../ui/icons.js';
 
 /* =============== APP CHROME ====================================
    Menu bar, tool options bar, and the floating Tools and Colors
@@ -96,8 +97,8 @@ export class ChromeMixin {
         ${TOOL_ICONS.smartdim}<span>Dimension</span></button>
       <div class="tool-sep"></div>
       <div class="tool-grid">
-        <button class="tool-btn" data-action="mirror" title="Mirror selection about a line">${ACTION_ICONS.mirror}</button>
-        <button class="tool-btn" data-action="offset" title="Offset selected line, circle or arc">${ACTION_ICONS.offset}</button>
+        <button class="tool-btn" data-action="mirror" title="Mirror selection about a line" aria-label="Mirror">${ACTION_ICONS.mirror}</button>
+        <button class="tool-btn" data-action="offset" title="Offset selected line, circle or arc" aria-label="Offset">${ACTION_ICONS.offset}</button>
       </div>`;
     body.querySelectorAll('[data-tool]').forEach(b => b.addEventListener('click', () => this.setTool(b.dataset.tool)));
     body.querySelectorAll('[data-action]').forEach(b => b.addEventListener('click', () => this._runAction(b.dataset.action, b)));
@@ -159,23 +160,23 @@ export class ChromeMixin {
     if (DRAW_TOOLS.has(t.id)) {
       html += sep + `<label class="opt">Weight <select data-pen="lineWidth">${LINE_WEIGHTS.map(w => `<option value="${w}"${p.lineWidth === w ? ' selected' : ''}>${w} px</option>`).join('')}</select></label>`;
       html += `<label class="opt">Line <select data-pen="lineStyle">${Object.entries(LINE_STYLES).map(([k, v]) => `<option value="${k}"${p.lineStyle === k ? ' selected' : ''}>${v.label}</option>`).join('')}</select></label>`;
-      html += sep + `<button class="tbtn toggle${this.constructionMode ? ' on' : ''}" data-opt="construction" title="Draw construction (reference) geometry">${ACTION_ICONS.construction}<span class="btn-label">Construction</span></button>`;
+      html += sep + `<button class="tbtn toggle${this.constructionMode ? ' on' : ''}" data-opt="construction" title="Draw construction (reference) geometry" aria-pressed="${!!this.constructionMode}">${ACTION_ICONS.construction}<span class="btn-label">Construction</span></button>`;
       if (t.id === 'hexagon') {
         html += sep + `<label class="opt">Sides <input type="number" min="3" max="64" step="1" value="${this.polygonSides}" data-opt="sides"></label>`;
       }
     } else if (t.id === 'select') {
-      html += sep + `<button class="tbtn" data-opt="mirror">${ACTION_ICONS.mirror}<span class="btn-label">Mirror</span></button>`;
-      html += `<button class="tbtn" data-opt="offset">${ACTION_ICONS.offset}<span class="btn-label">Offset</span></button>`;
+      html += sep + `<button class="tbtn" data-opt="mirror" title="Mirror selection about a line">${ACTION_ICONS.mirror}<span class="btn-label">Mirror</span></button>`;
+      html += `<button class="tbtn" data-opt="offset" title="Offset selected line, circle or arc">${ACTION_ICONS.offset}<span class="btn-label">Offset</span></button>`;
       html += sep + `<button class="tbtn" data-opt="apply-style" title="Give the selected entities the current line weight and line type">${ACTION_ICONS['apply-style']}<span class="btn-label">Apply line style</span></button>`;
       html += `<button class="tbtn" data-opt="pick-style" title="Copy the selected entity's line weight and line type">${ACTION_ICONS['pick-style']}<span class="btn-label">Pick line style</span></button>`;
       html += sep + '<span class="opt-hint">Click to select, Ctrl-click to add, drag a box to select many, drag geometry to move it.</span>';
     } else if (t.id === 'smartdim') {
       html += sep + '<span class="opt-hint"><b>1.</b> Click one or two entities &nbsp; <b>2.</b> Click to place the dimension &nbsp; <b>3.</b> Type a value, Enter. Click an existing dimension to edit it.</span>';
     } else if (t.id === 'fill') {
-      html += sep + `<span class="seg"><button class="${this.fillErase ? '' : 'on'}" data-opt="fill-mode">Fill</button><button class="${this.fillErase ? 'on' : ''}" data-opt="erase-mode">Erase fill</button></span>`;
+      html += sep + `<span class="seg" role="group" aria-label="Fill mode"><button class="${this.fillErase ? '' : 'on'}" data-opt="fill-mode" aria-pressed="${!this.fillErase}">${icon('fill')}Fill</button><button class="${this.fillErase ? 'on' : ''}" data-opt="erase-mode" aria-pressed="${this.fillErase}">${icon('erase')}Erase fill</button></span>`;
       html += `<label class="opt">Colour <i class="opt-sw" style="--sw:${p.fillColor}"></i></label>`;
       const hidden = this.dormantFillCount();
-      if (hidden) html += sep + `<span class="opt-warn">${hidden} hidden fill${hidden > 1 ? 's' : ''} (area no longer closed)</span><button class="tbtn" data-opt="delete-hidden-fills">Delete</button>`;
+      if (hidden) html += sep + `<span class="opt-warn">${hidden} hidden fill${hidden > 1 ? 's' : ''} (area no longer closed)</span><button class="tbtn" data-opt="delete-hidden-fills" title="Delete the hidden fills">${icon('trash')}<span class="btn-label">Delete</span></button>`;
       html += sep + '<span class="opt-hint">Click an area of the active layer: a region closed by its shapes is filled; anywhere else fills the background. Other layers are ignored.</span>';
     }
     bar.innerHTML = html;

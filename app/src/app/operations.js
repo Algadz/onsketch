@@ -1,6 +1,6 @@
 import { evaluate } from '../core/expr.js';
 import { EPS, TAU, angleOnDirectedArc, directedArcSpan, dist, lineIntersection, mirrorPointAcrossLine, offsetArc, offsetCircle, offsetLine } from '../core/math.js';
-import { uiIcon } from '../ui/icons.js';
+import { entityIcon, uiIcon } from '../ui/icons.js';
 import { Arc, Circle, Line, Point, newId } from '../core/entities.js';
 import { AngleConstraint, ArcEndpointArcEndpointCoincidentConstraint, ArcEndpointCoincidentConstraint, ArcEndpointMidpointConstraint, ArcEndpointOnCircleConstraint, ArcEndpointOnLineConstraint, CoincidentConstraint, CollinearConstraint, ConcentricConstraint, Constraint, DirectedAngleConstraint, EqualLengthConstraint, EqualRadiusConstraint, HorizontalConstraint, MidpointConstraint, OffsetConstraint, OffsetDistanceConstraint, ParallelConstraint, ParamFixConstraint, PerpendicularConstraint, PointOnCircleConstraint, PointOnLineConstraint, PointRefHorizontalConstraint, PointRefVerticalConstraint, SymmetricConstraint, TangentCircleCircleConstraint, TangentLineCircleConstraint, VerticalConstraint } from '../core/constraints.js';
 import { SelectTool } from '../tools/select.js';
@@ -999,10 +999,10 @@ export class OperationsMixin {
     const sources = data.sources;
     const axis = data.axis;
     const sourceHtml = sources.length
-      ? `<div class="stack-list">${sources.map(e => `<div class="sel-item"><span class="glyph">${e instanceof Point ? 'P' : e instanceof Line ? 'L' : 'C'}</span><span>${this._entityLabel(e)}</span></div>`).join('')}</div>`
+      ? `<div class="stack-list">${sources.map(e => `<div class="sel-item"><span class="glyph">${entityIcon(e)}</span><span>${this._entityLabel(e)}</span></div>`).join('')}</div>`
       : '<div class="tool-note">Click or drag a box in the canvas to collect source entities.</div>';
     const axisHtml = axis
-      ? `<div class="stack-list"><div class="sel-item"><span class="glyph">L</span><span>${this._entityLabel(axis)}${axis.construction ? ' construction' : ''}</span></div></div>`
+      ? `<div class="stack-list"><div class="sel-item"><span class="glyph">${entityIcon(axis)}</span><span>${this._entityLabel(axis)}${axis.construction ? ' construction' : ''}</span></div></div>`
       : '<div class="tool-note">Pick one line to use as the mirror axis.</div>';
     const entitiesActive = this.mirrorPickMode === 'entities';
     const axisActive = this.mirrorPickMode === 'axis';
@@ -1016,11 +1016,11 @@ export class OperationsMixin {
       </div>
       <div class="sb-subhead">Pick Mode</div>
       <button class="choice-row ${entitiesActive ? 'active' : ''}" id="mirror-pick-entities">
-        <span class="glyph">${entitiesActive ? '>' : '+'}</span>
+        <span class="glyph">${uiIcon('select')}</span>
         <span><strong>Entities</strong><span>Click or box-select points, lines, or circles.</span></span>
       </button>
       <button class="choice-row ${axisActive ? 'active' : ''}" id="mirror-pick-axis">
-        <span class="glyph">${axisActive ? '>' : '+'}</span>
+        <span class="glyph">${uiIcon('mirror')}</span>
         <span><strong>Axis</strong><span>Click a line to define the reflection axis.</span></span>
       </button>
       <div class="sb-subhead">Sources</div>
@@ -1059,7 +1059,7 @@ export class OperationsMixin {
         ? 'Offset: move the mouse to place. Click in space to type a value, or use Create below.'
         : 'Offset: click one or more lines, circles, or arcs to select them.';
     const entityHtml = entities.length
-      ? `<div class="stack-list">${entities.map(entity => `<div class="sel-item"><span class="glyph">${entity instanceof Line ? 'L' : entity instanceof Circle ? 'C' : 'A'}</span><span>${this._entityLabel(entity)}${entity.id === this.offsetAnchorId ? ' anchor' : ''}</span></div>`).join('')}</div>`
+      ? `<div class="stack-list">${entities.map(entity => `<div class="sel-item"><span class="glyph">${entityIcon(entity)}</span><span>${this._entityLabel(entity)}${entity.id === this.offsetAnchorId ? ' anchor' : ''}</span></div>`).join('')}</div>`
       : '<div class="tool-note">Click lines, circles, arcs, or box-select a path to offset.</div>';
     body.innerHTML = `
       <div class="tool-summary">
@@ -1079,7 +1079,7 @@ export class OperationsMixin {
       ${topologyIssue ? `<div class="tool-note warn">${topologyIssue}</div>` : ''}
       ${entities.length && !topologyIssue && !preview ? '<div class="tool-note warn">Offset distance is invalid for one or more selected entities.</div>' : ''}
       <div class="rel-grid op-actions">
-        <button class="rel-btn primary" id="offset-create" ${(!entities.length || topologyIssue || !preview) ? 'disabled' : ''}>${uiIcon('plus')}Create</button>
+        <button class="rel-btn primary" id="offset-create" ${(!entities.length || topologyIssue || !preview) ? 'disabled' : ''}>${uiIcon('offset')}Create</button>
         <button class="rel-btn danger" id="offset-cancel">${uiIcon('x')}Cancel</button>
       </div>
     `;
