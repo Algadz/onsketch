@@ -65,3 +65,23 @@ test('a constrained rectangle (closed profile) solves to its dimensions', () => 
   assert.equal(r.state, 'fully');
   assert.ok(Math.abs(bot.p2.x - 0) < 1e-6 && Math.abs(bot.p2.y + 15) < 1e-6);
 });
+
+test('revertOnFailure keeps geometry (fixed points included) when constraints conflict', () => {
+  const s = sketch(); const l = line(s, 0, 0, 10, 0);
+  s.constraints.push(new C.FixConstraint(l.p1.id, 0, 0));
+  s.constraints.push(new C.DistanceConstraint(l.p1.id, l.p2.id, 10));
+  s.constraints.push(new C.DistanceConstraint(l.p1.id, l.p2.id, 25));     // conflict
+  const r = solve(s, { revertOnFailure: true });
+  assert.equal(r.state, 'over'); assert.ok(r.reverted);
+  assert.deepEqual([l.p1.x, l.p1.y, l.p2.x, l.p2.y], [0, 0, 10, 0]);
+});
+
+test('a failing group does not stop an independent group from solving', () => {
+  const s = sketch(); const a = line(s, 0, 0, 10, 0); const c = circle(s, 50, 0, 2);
+  s.constraints.push(new C.DistanceConstraint(a.p1.id, a.p2.id, 10));
+  s.constraints.push(new C.DistanceConstraint(a.p1.id, a.p2.id, 25));
+  s.constraints.push(new C.RadiusConstraint(c.id, 7));
+  solve(s, { revertOnFailure: true });
+  assert.equal(a.p2.x, 10);
+  assert.ok(Math.abs(c.r - 7) < 1e-9);
+});

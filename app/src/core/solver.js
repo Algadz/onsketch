@@ -155,9 +155,16 @@ export class Solver {
   solve(activeSketch, allVisibleSketches = [activeSketch], extraConstraints = [], options = {}) {
     const diagnostics = options.diagnostics !== false;
     if (activeSketch.project) activeSketch.project.syncLocks();
-    const constraints = extraConstraints.length
+    let constraints = extraConstraints.length
       ? activeSketch.constraints.concat(extraConstraints)
       : activeSketch.constraints;
+    // Constraints that only touch held geometry (other layers) are
+    // constants: nothing in them can move, so they are left out instead of
+    // showing up as redundant or unsatisfiable on the active layer.
+    const lockedIds = new Set();
+    const noteLocked = (e) => { if (e.locked) lockedIds.add(e.id); for (const c of e.children()) noteLocked(c); };
+    for (const e of activeSketch.entities) noteLocked(e);
+    if (lockedIds.size) constraints = constraints.filter(c => !c.refs().filter(Boolean).every(id => lockedIds.has(id)));
     if (options.componentize !== false && activeSketch.entities?.length > 1) {
       return this._solveComponents(activeSketch, allVisibleSketches, constraints, options);
     }
@@ -179,6 +186,7 @@ export class Solver {
 
     const L = this._lookupBuilder(allVisibleSketches);
     const x = params.map(p => p.ent[p.key]);
+    const x0 = x.slice();
     const setX = (xv) => { for (let i = 0; i < n; i++) params[i].ent[params[i].key] = xv[i]; };
     setX(x);
 
@@ -241,11 +249,17 @@ export class Solver {
     }
 
     const residual = Math.sqrt(f.reduce((s,v)=>s+v*v, 0));
+    // A solve that can't satisfy every constraint ends on a least-squares
+    // compromise that bends everything, fixed points included. With
+    // revertOnFailure the geometry goes back to where it was instead, and
+    // the failure is reported (per independent group of constraints).
+    const reverted = options.revertOnFailure && residual >= 1e-4;
+    if (reverted) { for (let j = 0; j < n; j++) x[j] = x0[j]; setX(x); }
     if (!diagnostics) {
       const state = residual > 1e-3 ? 'over' : 'solved';
       return { ok: residual < 1e-4, iters, residual, dof:null, n, m, rank:null,
                redundant:0, state, entityStatus:null, redundantIds:null, pinned:null,
-               diagnostics:false };
+               diagnostics:false, reverted };
     }
 
     // Rank-based analysis of the final Jacobian. The orthonormal basis
@@ -310,6 +324,6 @@ export class Solver {
     else                  state = 'under';
 
     return { ok: residual < 1e-4, iters, residual, dof, n, m, rank, redundant,
-             state, entityStatus, redundantIds, pinned };
+             state, entityStatus, redundantIds, pinned, reverted };
   }
 }

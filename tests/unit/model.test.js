@@ -40,3 +40,14 @@ test('removing an entity drops constraints that reference it', () => {
   s.removeEntity(b);
   assert.equal(s.constraints.length, 0);
 });
+
+test('self-referential constraints are dropped on load', () => {
+  const { p, a } = sample();
+  const j = p.toJSON();
+  j.sketches[0].constraints.push(
+    { id: 'c900', kind: 'pointOnLine', pointId: a.p2.id, l: { a: a.p2.id, b: a.p1.id } },
+    { id: 'c901', kind: 'coincident', p1: a.p1.id, p2: a.p1.id });
+  const q = Project.fromJSON(j);
+  assert.ok(!q.sketches[0].constraints.some(c => c.id === 'c900' || c.id === 'c901'));
+  assert.equal(q.sketches[0].constraints.length, 1);
+});

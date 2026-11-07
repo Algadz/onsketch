@@ -24,6 +24,16 @@ function convertLegacyFills(items, sketch) {
 }
 import { ensureDimensionNames } from './equations.js';
 
+/** Constraints that tie a point to itself or to a line it is an end of:
+ *  always true, never useful, dropped on load. */
+function isSelfReferential(c) {
+  const ends = (l) => l && [l.a, l.b];
+  if (c.kind === 'coincident') return c.p1 === c.p2;
+  if (c.kind === 'pointOnLine' || c.kind === 'midpoint') return ends(c.l)?.includes(c.pointId);
+  if (c.kind === 'pointOnCircle') return c.pointId === c.centerId;
+  return false;
+}
+
 /** Fill from a file. Fills saved before seeds existed stored their
  *  outline as {outer:[ids], holes:[[ids]]}; an inside point is worked
  *  out from that outline. */
@@ -326,6 +336,7 @@ export class Project {
             cj.offsetKind === 'line' ? { l1: cj.l1, l2: cj.l2 } : { p1: cj.p1, p2: cj.p2 }); break;
           case 'offsetDistance': c = new OffsetDistanceConstraint(cj.pairs, cj.value); break;
         }
+        if (c && isSelfReferential(c)) c = null;   // e.g. a point "on" a line it is an end of
         if (c) {
           if (cj.id) c.id = cj.id;
           if (cj.labelOffset   != null) c.labelOffset   = cj.labelOffset;

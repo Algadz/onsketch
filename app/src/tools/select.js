@@ -247,18 +247,22 @@ export class SelectTool extends Tool {
       // snap-on-click produces its own constraint. Dedupe against
       // existing constraints so dragging a handle back to where it
       // already came from doesn't pile on redundant ones.
+      // Only snaps the dragged point actually reached count: a point held
+      // by its constraints stays put even when the cursor lands on a
+      // target, and a constraint must describe where the point is. Each
+      // one is test-solved before it is kept (admitConstraint).
       const sketch = this.app.activeSketch();
       const snaps = this.dragging.endSnaps || [];
       if (sketch && snaps.length) {
+        const reach = 3 / this.app.view.zoom;      // 3 screen pixels
         for (const sn of snaps) {
           const pt = sn.dragPoint || (this.dragging.pts.length === 1 ? this.dragging.pts[0].p : null);
           if (!pt || sn.entity === pt) continue;
           if (this.app.shouldIgnoreDragSnap(this.dragging, sn)) continue;
+          if (Math.hypot(pt.x - sn.x, pt.y - sn.y) > reach) continue;
           const c = this.app.snapToConstraint(sn, pt);
           if (!c) continue;
-          if (this.app._isInvalidConstraint(sketch, c)) continue;
-          if (this.app._isDuplicateConstraint(sketch, c)) continue;
-          sketch.constraints.push(c);
+          this.app.admitConstraint(sketch, c);
         }
       }
       this.dragging = null;

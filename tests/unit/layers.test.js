@@ -166,11 +166,24 @@ test('geometry on layers other than the active one does not move', () => {
   assert.ok(Math.abs(Math.hypot(b.p2.x - 10, b.p2.y) - 8) < 1e-6);
   assert.equal(r.entityStatus.get(a.id), 'fully');
 
-  // A constraint that could only be met by moving inactive geometry is reported, not applied.
-  s.constraints.push(new C.DistanceConstraint(a.p1.id, a.p2.id, 20));
+  // A constraint only on held geometry is a constant while its layer is
+  // inactive: ignored, not reported.
+  const onA = new C.DistanceConstraint(a.p1.id, a.p2.id, 20);
+  s.constraints.push(onA);
   const r2 = new Solver().solve(s, [s], [], { diagnostics: true });
   assert.equal(a.p2.x, 10);
-  assert.equal(r2.state, 'over');
+  assert.notEqual(r2.state, 'over');
+
+  // A conflict involving active geometry is reported; with revertOnFailure
+  // nothing moves.
+  const clash = new C.CoincidentConstraint(b.p2.id, a.p1.id);   // b would need length 10, not 8
+  s.constraints.push(clash);
+  const bEnd = [b.p2.x, b.p2.y];
+  const r3 = new Solver().solve(s, [s], [], { diagnostics: true, revertOnFailure: true });
+  assert.equal(r3.state, 'over'); assert.ok(r3.reverted);
+  assert.deepEqual([b.p2.x, b.p2.y], bEnd);
+  assert.deepEqual([a.p1.x, a.p1.y, a.p2.x, a.p2.y], [0, 0, 10, 0]);
+  s.constraints.pop();
 
   p.activeLayerId = frozen.id;                                         // now 'a' is editable, 'b' is held
   new Solver().solve(s, [s], [], { diagnostics: true });

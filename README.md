@@ -53,6 +53,18 @@ cached modules after a deploy. `npm test` fails if the stamp is out of date.
 - The Equations window (Σ in the menu bar) lists global variables and all
   dimensions: rename them (references follow), edit equations, see values.
 
+## Solving and conflicts
+
+- A solve that can't satisfy every constraint leaves the geometry as it was
+  (per independent group) and reports the sketch as over-defined; it never
+  applies a least-squares compromise that bends shapes or moves fixed points.
+- Constraints created by snapping (while drawing, or when a dragged point is
+  dropped on a target) are test-solved first. Ones that would conflict, that
+  are already implied, or that tie a point to itself are not added; the status
+  bar says why. A dropped point only connects to a target it actually reached.
+- Constraints that only involve geometry on inactive layers are left out of
+  the solve while those layers are inactive.
+
 ## Layers
 
 Only the active layer is editable, and it is highlighted in the Layers

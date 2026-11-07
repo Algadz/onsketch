@@ -79,11 +79,11 @@ export class LineTool extends Tool {
       // are part of the sketch — otherwise the solver lookup won't find them.
       if (this._pendingStartSnap) {
         const cs = this.app.snapToConstraint(this._pendingStartSnap, this.startPt);
-        if (cs) sketch.constraints.push(cs);
+        if (cs) this.app.admitConstraint(sketch, cs);
       }
       if (endSnap) {
         const cs = this.app.snapToConstraint(endSnap, endPt);
-        if (cs) sketch.constraints.push(cs);
+        if (cs) this.app.admitConstraint(sketch, cs);
       }
       if (axis.kind === 'horizontal') {
         sketch.constraints.push(new HorizontalConstraint(line.id, line.p1.id, line.p2.id));
@@ -179,11 +179,11 @@ export class CenterLineTool extends Tool {
       }
       if (this._centerSnap) {
         const cs = this.app.snapToConstraint(this._centerSnap, this.center);
-        if (cs) sketch.constraints.push(cs);
+        if (cs) this.app.admitConstraint(sketch, cs);
       }
       if (!endInfo.reused && snap) {
         const cs = this.app.snapToConstraint(snap, b);
-        if (cs) sketch.constraints.push(cs);
+        if (cs) this.app.admitConstraint(sketch, cs);
       }
       this.center = null;
       this._centerSnap = null;
@@ -248,11 +248,11 @@ export class RectangleTool extends Tool {
       // Apply snap-derived constraints to the diagonal corners.
       if (!startInfo.reused && this._startSnap) {
         const cs = this.app.snapToConstraint(this._startSnap, a);
-        if (cs) sketch.constraints.push(cs);
+        if (cs) this.app.admitConstraint(sketch, cs);
       }
       if (!endInfo.reused && snap) {
         const cs = this.app.snapToConstraint(snap, c);
-        if (cs) sketch.constraints.push(cs);
+        if (cs) this.app.admitConstraint(sketch, cs);
       }
       this.start = null; this._startSnap = null;
       this.app.commit();
@@ -324,7 +324,7 @@ export class CenterRectangleTool extends Tool {
       sketch.constraints.push(new MidpointConstraint(this.center.id, { a: hCenter.p1.id, b: hCenter.p2.id }));
       if (this._centerSnap) {
         const cs = this.app.snapToConstraint(this._centerSnap, this.center);
-        if (cs) sketch.constraints.push(cs);
+        if (cs) this.app.admitConstraint(sketch, cs);
       }
       this.center = null;
       this._centerSnap = null;
@@ -378,7 +378,7 @@ export class CircleTool extends Tool {
       sketch.addEntity(c);
       if (this._pendingCenterSnap) {
         const cs = this.app.snapToConstraint(this._pendingCenterSnap, this.center);
-        if (cs) sketch.constraints.push(cs);
+        if (cs) this.app.admitConstraint(sketch, cs);
       }
       this.center = null;
       this._pendingCenterSnap = null;
@@ -417,7 +417,7 @@ export class ThreePointCircleTool extends Tool {
           sketch.constraints.push(new PointOnCircleConstraint(pick.point.id, circle.id, circle.center.id));
           if (pick.snap) {
             const cs = this.app.snapToConstraint(pick.snap, pick.point);
-            if (cs) sketch.constraints.push(cs);
+            if (cs) this.app.admitConstraint(sketch, cs);
           }
         }
         this.app.commit();
@@ -497,7 +497,7 @@ export class HexagonTool extends Tool {
         }
         if (this._pendingCenterSnap) {
           const cs = this.app.snapToConstraint(this._pendingCenterSnap, this.center);
-          if (cs) sketch.constraints.push(cs);
+          if (cs) this.app.admitConstraint(sketch, cs);
         }
         this.app.commit();
       }
@@ -566,15 +566,15 @@ export class ArcTool extends Tool {
       sketch.addEntity(A);
       if (this._pendingCenterSnap) {
         const cs = this.app.snapToConstraint(this._pendingCenterSnap, this.center);
-        if (cs) sketch.constraints.push(cs);
+        if (cs) this.app.admitConstraint(sketch, cs);
       }
       if (this._pendingStartSnap) {
         const cs = this.app.snapToConstraint(this._pendingStartSnap, A.start);
-        if (cs) sketch.constraints.push(cs);
+        if (cs) this.app.admitConstraint(sketch, cs);
       }
       if (snap) {
         const cs = this.app.snapToConstraint(snap, A.end);
-        if (cs) sketch.constraints.push(cs);
+        if (cs) this.app.admitConstraint(sketch, cs);
       }
       this.center = null;
       this.start = null;
@@ -666,7 +666,7 @@ export class PointTool extends Tool {
     sketch.addEntity(p);
     if (snap) {
       const cs = this.app.snapToConstraint(snap, p);
-      if (cs) sketch.constraints.push(cs);
+      if (cs) this.app.admitConstraint(sketch, cs);
     }
     this.app.commit();
     this.app.requestRender();

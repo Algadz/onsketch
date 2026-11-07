@@ -402,6 +402,48 @@ const layerUi = await page.evaluate(() => ({
 }));
 check(layerUi.active === 1 && layerUi.lockButtons === 0 && layerUi.activeName === layerUi.current, `active layer highlighted, no lock UI (${JSON.stringify(layerUi)})`);
 
+// Dropping a dragged point on a snap target: a free point connects; a
+// fully defined point stays put and no conflicting constraint is added.
+const dropSetup = await page.evaluate(() => {
+  const a = window._app;
+  const P = a.project.constructor;
+  a.project = P.fromJSON({ version: 3, layers: [{ id: 'ly1', name: 'L' }], activeLayerId: 'ly1', sketches: [{ id: 's1', name: 'S', entities: [
+    { type: 'line', id: 'e3', layerId: 'ly1', p1: { type: 'point', id: 'e1', x: 0, y: 0, fixed: true }, p2: { type: 'point', id: 'e2', x: 40, y: 0 } },
+    { type: 'line', id: 'e5', layerId: 'ly1', p1: { type: 'point', id: 'e2', x: 40, y: 0 }, p2: { type: 'point', id: 'e4', x: 40, y: 20 } },
+    { type: 'line', id: 'e8', layerId: 'ly1', p1: { type: 'point', id: 'e6', x: -30, y: -20 }, p2: { type: 'point', id: 'e7', x: -10, y: -20 } }],
+    constraints: [
+      { id: 'c9', kind: 'fix', pointId: 'e1', x: 0, y: 0 },
+      { id: 'c10', kind: 'horizontal', lineId: 'e3', p1: 'e1', p2: 'e2' },
+      { id: 'c11', kind: 'vertical', lineId: 'e5', p1: 'e2', p2: 'e4' },
+      { id: 'c12', kind: 'distance', p1: 'e1', p2: 'e2', value: 40 },
+      { id: 'c13', kind: 'distance', p1: 'e2', p2: 'e4', value: 20 }] }] });
+  a._afterStateSwap(); a.view.zoom = 4; a.view.panX = 0; a.view.panY = 0; a.commit({ diagnostics: 'sync' });
+  const s = a.activeSketch(); const pt = (id) => { for (const e of s.entities) for (const c of e.children()) if (c.id === id) return c; };
+  const scr = (id) => a.view.worldToScreen(pt(id));
+  return { e4: scr('e4'), e7: scr('e7'), e1: scr('e1'), n: s.constraints.length };
+});
+await page.keyboard.press('s');
+const dragTo = async (from, to) => {
+  await page.mouse.move(box.x + from.x, box.y + from.y); await page.mouse.down();
+  for (let i = 1; i <= 10; i++) await page.mouse.move(box.x + from.x + (to.x - from.x) * i / 10, box.y + from.y + (to.y - from.y) * i / 10);
+  await page.mouse.up();
+};
+await dragTo(dropSetup.e4, dropSetup.e7);          // fully defined corner onto the free line's end
+const held = await page.evaluate(() => {
+  const s = window._app.activeSketch(); const pts = {};
+  for (const e of s.entities) for (const c of e.children()) pts[c.id] = [+c.x.toFixed(6), +c.y.toFixed(6)];
+  return { pts, n: s.constraints.length, state: document.getElementById('status-state').textContent };
+});
+check(held.n === dropSetup.n && held.pts.e4[0] === 40 && held.pts.e4[1] === 20 && held.pts.e1[0] === 0 && held.pts.e1[1] === 0,
+  `fully defined point dropped on a target: unchanged, nothing added (${JSON.stringify(held)})`);
+await dragTo(dropSetup.e7, dropSetup.e4);          // free end onto the corner
+const joined = await page.evaluate(() => {
+  const s = window._app.activeSketch();
+  return { coincident: s.constraints.some(c => c.kind === 'coincident' && [c.p1, c.p2].sort().join() === 'e4,e7'),
+    e7: (() => { const l = s.entities.find(e => e.id === 'e8'); return [+l.p2.x.toFixed(6), +l.p2.y.toFixed(6)]; })() };
+});
+check(joined.coincident && joined.e7[0] === 40 && joined.e7[1] === 20, `free point dropped on a target connects (${JSON.stringify(joined)})`);
+
 // Colour mode + theme toggles (end in Colors mode for the screenshot).
 await page.click('#menubar [data-action="theme"]');
 const prefs = await page.evaluate(() => ({ theme: document.documentElement.dataset.theme }));

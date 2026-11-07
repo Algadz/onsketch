@@ -21,7 +21,7 @@ export class SolveMixin {
 
   solveSoft() {
     const sketch = this.activeSketch(); if (!sketch) return;
-    const r = this.solver.solve(sketch, this.project.sketches, [], { diagnostics:true });
+    const r = this.solver.solve(sketch, this.project.sketches, [], { diagnostics:true, revertOnFailure:true });
     for (const e of sketch.entities) if (e instanceof Arc) e.syncEnds();
     this._updateConstraintStatus(r);
     this._lastSolve = r;
@@ -35,6 +35,7 @@ export class SolveMixin {
     const t0 = performance.now();
     const r = this.solver.solve(sketch, this.project.sketches, [], {
       diagnostics:false,
+      revertOnFailure:true,
       activeIds: options.activeIds || null
     });
     const t1 = performance.now();
@@ -70,6 +71,7 @@ export class SolveMixin {
     if (!sketch || !activeIds || !activeIds.size) return;
     const r = this.solver.solve(sketch, this.project.sketches, [], {
       diagnostics:true,
+      revertOnFailure:true,
       activeIds
     });
     const overOverall = r.state === 'over';
@@ -93,7 +95,7 @@ export class SolveMixin {
     const sketch = this.activeSketch();
     if (!sketch) { this.requestRender(); return; }
     const t0 = performance.now();
-    const r = this.solver.solve(sketch, this.project.sketches, [], { diagnostics:true });
+    const r = this.solver.solve(sketch, this.project.sketches, [], { diagnostics:true, revertOnFailure:true });
     const t1 = performance.now();
     for (const e of sketch.entities) if (e instanceof Arc) e.syncEnds();
     this._updateConstraintStatus(r);

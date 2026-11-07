@@ -1,3 +1,4 @@
+import { CONSTRAINT_LABELS } from '../core/constraints.js';
 import { Arc, Circle, Line, Point, newId } from '../core/entities.js';
 import { ArcEndpointArcEndpointCoincidentConstraint, ArcEndpointCoincidentConstraint, ArcEndpointFixConstraint, ArcEndpointMidpointConstraint, ArcEndpointOnCircleConstraint, ArcEndpointOnLineConstraint, CoincidentConstraint, FixConstraint, HorizontalConstraint, MidpointConstraint, PointOnCircleConstraint, PointOnLineConstraint, PointRefHorizontalConstraint, PointRefVerticalConstraint, VerticalConstraint } from '../core/constraints.js';
 import { Solver } from '../core/solver.js';
@@ -253,18 +254,84 @@ export class App {
     return find(a.id) === find(b.id);
   }
 
+  /** Constraints that can't mean anything: a point tied to itself, to a
+   *  line or arc it is an end of, or to its own circle's centre; a
+   *  coincidence between the two ends of one line. */
   _isInvalidConstraint(sketch, c) {
     if (!sketch || !c) return false;
-    if (c.kind !== 'coincident') return false;
-    for (const e of sketch.entities) {
-      if (e instanceof Line) {
-        const samePair = (c.p1 === e.p1.id && c.p2 === e.p2.id) ||
-          (c.p1 === e.p2.id && c.p2 === e.p1.id);
-        if (samePair) return true;
+    const lineHas = (l, id) => l && (l.a === id || l.b === id);
+    switch (c.kind) {
+      case 'coincident': {
+        if (c.p1 === c.p2) return true;
+        for (const e of sketch.entities) {
+          if (e instanceof Line && ((c.p1 === e.p1.id && c.p2 === e.p2.id) || (c.p1 === e.p2.id && c.p2 === e.p1.id))) return true;
+        }
+        return false;
       }
+      case 'pointOnLine':
+      case 'midpoint':
+        return lineHas(c.l, c.pointId);
+      case 'pointOnCircle':
+        return c.pointId === c.centerId || c.pointId === c.circleId;
+      case 'arcEndpointCoincident':
+      case 'arcEndpointOnLine':
+      case 'arcEndpointMidpoint':
+      case 'arcEndpointOnCircle': {
+        const arc = this._lookupAny(c.ref?.arcId);
+        const own = arc ? [arc.start?.id, arc.end?.id, arc.center?.id] : [];
+        if (c.pointId && own.includes(c.pointId)) return true;
+        if (c.l && (own.includes(c.l.a) || own.includes(c.l.b))) return true;
+        if (c.circleId && c.circleId === c.ref?.arcId) return true;
+        return false;
+      }
+      case 'arcEndpointArcEndpointCoincident':
+        return c.ref1?.arcId === c.ref2?.arcId && c.ref1?.which === c.ref2?.which;
     }
     return false;
   }
+
+  /**
+   * Add a constraint only if it keeps the sketch solvable: it must not be
+   * meaningless, a duplicate, already implied by other constraints, or in
+   * conflict with them. A trial solve decides; the geometry is put back
+   * afterwards either way (the caller's commit does the real solve).
+   * @returns {boolean} whether it was added
+   */
+  admitConstraint(sketch, c, { quiet = false } = {}) {
+    if (!sketch || !c) return false;
+    if (this._isInvalidConstraint(sketch, c) || this._isDuplicateConstraint(sketch, c)) return false;
+    const before = this._captureSketchParams(sketch);
+    sketch.constraints.push(c);
+    const probe = this.solver.solve(sketch, this.project.sketches, [], { diagnostics: true, activeIds: c.refs() });
+    this._restoreSketchParams(before);
+    for (const e of sketch.entities) if (e instanceof Arc) e.syncEnds();
+    let conflict = !probe.ok || probe.state === 'over';
+    const implied = probe.redundantIds && probe.redundantIds.has(c.id);
+    if (conflict) {
+      // Only blame this constraint if the sketch solved without it.
+      sketch.constraints.pop();
+      const base = this.solver.solve(sketch, this.project.sketches, [], { diagnostics: false, activeIds: c.refs() });
+      this._restoreSketchParams(before);
+      for (const e of sketch.entities) if (e instanceof Arc) e.syncEnds();
+      sketch.constraints.push(c);
+      if (!base.ok) conflict = false;
+    }
+    if (conflict || implied) {
+      sketch.constraints.pop();
+      if (c.kind === 'fix' && !sketch.constraints.some(k => k.kind === 'fix' && k.pointId === c.pointId)) {
+        const p = this._lookupAny(c.pointId);
+        if (p) p.fixed = false;
+      }
+      if (!quiet && conflict) {
+        const label = CONSTRAINT_LABELS[c.kind] || c.kind;
+        document.getElementById('status-hint').textContent =
+          `${label} not added: it conflicts with the existing constraints (the sketch would be over-defined).`;
+      }
+      return false;
+    }
+    return true;
+  }
+
 
   /** Hit test that walks ALL visible sketches. Children (points) win
    *  over their parent entities so endpoint dragging works. */
