@@ -15,6 +15,7 @@ export class Solver {
       if (seen.has(e)) return;
       seen.add(e);
       for (const c of e.children()) walk(c);
+      if (e.locked) return;   // locked geometry is constant (see Project.syncLocks)
       for (const k of e.paramKeys()) params.push({ ent: e, key: k });
     };
     for (const e of editScope.entities) walk(e);
@@ -153,6 +154,7 @@ export class Solver {
 
   solve(activeSketch, allVisibleSketches = [activeSketch], extraConstraints = [], options = {}) {
     const diagnostics = options.diagnostics !== false;
+    if (activeSketch.project) activeSketch.project.syncLocks();
     const constraints = extraConstraints.length
       ? activeSketch.constraints.concat(extraConstraints)
       : activeSketch.constraints;
@@ -273,7 +275,9 @@ export class Solver {
     const entityStatus = new Map();
     const setStatus = (e) => {
       const idx = []; gather(e, idx);
-      const fully = idx.length > 0 && idx.every(i => pinned[i]);
+      // No free parameters (locked, or every point shared with locked
+      // geometry) reads as fully defined.
+      const fully = idx.every(i => pinned[i]);
       entityStatus.set(e.id, fully ? 'fully' : 'under');
     };
     for (const e of activeSketch.entities) {

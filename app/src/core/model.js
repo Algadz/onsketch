@@ -117,6 +117,17 @@ export class Project {
     this.layers.splice(j, 0, l);
     return true;
   }
+  /** Sets the transient `locked` flag on every entity and child point of
+   *  a locked layer. Solvers treat locked parameters as constants, so
+   *  locked geometry never moves while other layers are edited. A point
+   *  shared with locked geometry is locked too. Not serialised. */
+  syncLocks() {
+    const mark = (e, v) => { e.locked = v; for (const c of e.children()) mark(c, v); };
+    for (const s of this.sketches) for (const e of s.entities) mark(e, false);
+    for (const s of this.sketches) {
+      for (const e of s.entities) if (this.layer(e.layerId)?.locked) mark(e, true);
+    }
+  }
   entitiesOnLayer(id) {
     const out = [];
     for (const s of this.sketches) for (const e of s.entities) if (e.layerId === id) out.push(e);

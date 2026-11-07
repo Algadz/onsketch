@@ -124,3 +124,31 @@ test('ownerOf finds the entity a child point belongs to', () => {
   assert.equal(p.ownerOf(l.p2), l);
   assert.equal(p.ownerOf(l), l);
 });
+
+import * as C from '../../app/src/core/constraints.js';
+import { Solver } from '../../app/src/core/solver.js';
+
+test('geometry on a locked layer does not move when other layers are solved', () => {
+  const p = new Project(); const s = p.addSketch('A');
+  const frozen = p.layers[0];
+  const a = new Line(new Point(0, 0), new Point(10, 0)); s.addEntity(a);
+  p.addLayer('Work');
+  const b = new Line(a.p2, new Point(13, 4)); s.addEntity(b);          // shares a corner with a
+  frozen.locked = true;
+  s.constraints.push(new C.DistanceConstraint(b.p1.id, b.p2.id, 8));   // only b's free end can move
+  s.constraints.push(new C.HorizontalConstraint(a.id, a.p1.id, a.p2.id));
+  const r = new Solver().solve(s, [s], [], { diagnostics: true });
+  assert.deepEqual([a.p1.x, a.p1.y, a.p2.x, a.p2.y], [0, 0, 10, 0]);
+  assert.ok(Math.abs(Math.hypot(b.p2.x - 10, b.p2.y) - 8) < 1e-6);
+  assert.equal(r.entityStatus.get(a.id), 'fully');
+
+  // A constraint that could only be met by moving locked geometry is reported, not applied.
+  s.constraints.push(new C.DistanceConstraint(a.p1.id, a.p2.id, 20));
+  const r2 = new Solver().solve(s, [s], [], { diagnostics: true });
+  assert.equal(a.p2.x, 10);
+  assert.equal(r2.state, 'over');
+
+  frozen.locked = false;
+  new Solver().solve(s, [s], [], { diagnostics: true });
+  assert.ok(Math.abs(Math.hypot(a.p2.x - a.p1.x, a.p2.y - a.p1.y) - 20) < 1e-6);
+});

@@ -5,13 +5,17 @@ import { sameLineRefs } from '../editor/relations.js';
 
 export class DragMixin {
 
+  /** Movable parameters of the sketch. Locked geometry is left out, so
+   *  every drag / solve path built on these rows treats it as constant. */
   _captureSketchParams(sketch) {
+    if (sketch.project) sketch.project.syncLocks();
     const rows = [];
     const seen = new Set();
     const walk = (e) => {
       if (seen.has(e)) return;
       seen.add(e);
       for (const c of e.children()) walk(c);
+      if (e.locked) return;
       for (const key of e.paramKeys()) rows.push({ ent:e, id:e.id, key, value:e[key] });
     };
     for (const e of sketch.entities) walk(e);
@@ -439,7 +443,7 @@ export class DragMixin {
     for (const id of component) {
       if (!activeIds.has(id)) return true;
       const p = pointById.get(id);
-      if (p && p.fixed) return true;
+      if (p && (p.fixed || p.locked)) return true;
     }
     for (const c of sketch.constraints) {
       if (c.kind === 'fix' && component.has(c.pointId)) return true;
@@ -468,7 +472,7 @@ export class DragMixin {
         else return null;
       }
       const p = pointById.get(id);
-      if (p && p.fixed) addPoint(p);
+      if (p && (p.fixed || p.locked)) addPoint(p);
     }
     for (const c of sketch.constraints) {
       if (c.kind === 'fix' && component.has(c.pointId)) addPoint(pointById.get(c.pointId) || this._lookupAny(c.pointId));
@@ -1068,7 +1072,7 @@ export class DragMixin {
     if (!drag || !snap) return false;
     if ((drag.mode === 'rotate' || drag.mode === 'similarity' || drag.mode === 'dof') && snap.kind === 'origin') {
       if (drag.anchor && Math.hypot(drag.anchor.x, drag.anchor.y) < EPS) return true;
-      const fixedAtOrigin = (drag.state || []).some(r => r.ent instanceof Point && Math.hypot(r.ent.x, r.ent.y) < EPS && r.ent.fixed);
+      const fixedAtOrigin = (drag.state || []).some(r => r.ent instanceof Point && Math.hypot(r.ent.x, r.ent.y) < EPS && (r.ent.fixed || r.ent.locked));
       if (fixedAtOrigin) return true;
     }
     if (!snap.entity || !snap.entity.id) return false;

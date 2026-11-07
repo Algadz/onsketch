@@ -191,6 +191,36 @@ const lockHit = await page.evaluate(() => {
 });
 check(lockHit.before && lockHit.locked && lockHit.snapHidden, `lock / hide exclude picking and snapping (${JSON.stringify(lockHit)})`);
 
+// Locked layer stays put while a connected line on another layer is dragged.
+const lockDrag = await page.evaluate(() => {
+  const a = window._app, base = a.project.layers[0];
+  const rectLine = a.project.entitiesOnLayer(base.id).find(e => e.constructor.kind === 'line');
+  a.project.activeLayerId = a.project.layers[1].id;
+  const tool = a.tool; a.setTool('line');
+  return { id: rectLine.id, p: [rectLine.p2.x, rectLine.p2.y], baseId: base.id, tool: !!tool };
+});
+// draw a line starting on the locked rectangle's corner
+await page.evaluate(() => { const a = window._app; a.project.layers[0].locked = true; a.commit(); a.refreshUI(); });
+const corner = await page.evaluate((id) => {
+  const a = window._app, l = a.project.sketches[0].entities.find(e => e.id === id);
+  return a.view.worldToScreen(l.p2);
+}, lockDrag.id);
+await page.mouse.click(box.x + corner.x, box.y + corner.y);
+await page.mouse.click(box.x + corner.x + 80, box.y + corner.y + 90);
+await page.keyboard.press('Escape'); await page.keyboard.press('Escape'); await page.keyboard.press('s');
+const end = await page.evaluate(() => { const s = window._app.activeSketch(); const l = s.entities[s.entities.length - 1]; return window._app.view.worldToScreen(l.p2); });
+await page.mouse.move(box.x + end.x, box.y + end.y);
+await page.mouse.down();
+await page.mouse.move(box.x + end.x - 120, box.y + end.y + 40, { steps: 6 });
+await page.mouse.up();
+const after2 = await page.evaluate((id) => {
+  const a = window._app, l = a.project.sketches[0].entities.find(e => e.id === id);
+  const last = a.activeSketch().entities[a.activeSketch().entities.length - 1];
+  return { p: [l.p2.x, l.p2.y], shared: last.p1 === l.p2 || a.activeSketch().constraints.some(c => c.kind === 'coincident') };
+}, lockDrag.id);
+check(after2.p[0] === lockDrag.p[0] && after2.p[1] === lockDrag.p[1], `locked layer did not move during drag (${JSON.stringify({ before: lockDrag.p, after: after2 })})`);
+await page.evaluate(() => { const a = window._app; a.project.layers[0].locked = false; a.commit(); a.refreshUI(); });
+
 // Colour mode + theme toggles.
 await page.click('#topbar [data-action="color-mode"]');
 await page.click('#topbar [data-action="theme"]');

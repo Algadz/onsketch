@@ -80,7 +80,7 @@ export class SelectTool extends Tool {
         for (const e of s.entities) {
           const walk = (x, inheritSel) => {
             const sel = inheritSel || x.selected;
-            if (x instanceof Point && sel && !x.fixed && !seen.has(x)) { seen.add(x); pts.push({ p:x, x:x.x, y:x.y }); }
+            if (x instanceof Point && sel && !x.fixed && !x.locked && !seen.has(x)) { seen.add(x); pts.push({ p:x, x:x.x, y:x.y }); }
             for (const c of x.children()) walk(c, sel);
           };
           walk(e, e.selected);
