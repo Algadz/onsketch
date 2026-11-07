@@ -54,9 +54,11 @@ cached modules after a deploy. `npm test` fails if the stamp is out of date.
 
 ## Layers
 
-Picking only sees the active layer. A locked layer never moves (the solver
-holds its geometry still), its row is marked in amber, its vertices are grey,
-and while it is active a banner offers to unlock it; drawing on it is blocked.
+Only the active layer is editable, and it is highlighted in the Layers
+window. Geometry on every other layer is held still by the solver (points
+shared with it too), can't be picked, and shows grey vertices; snapping still
+uses all visible layers, so new geometry can attach to it. Switch layers to
+edit them. Layers have a name, visibility, opacity and order.
 
 ## Source layout
 
@@ -74,7 +76,7 @@ and while it is active a banner offers to unlock it; drawing on it is blocked.
 
 ```
 Project
-├─ layers[]        bottom → top: name, opacity, visible, locked (no colours)
+├─ layers[]        bottom → top: name, opacity, visible (no colours)
 ├─ background      canvas colour from the fill tool, or null
 └─ sketches[0]     the single parametric sketch
    ├─ entities[]   Point / Line / Circle / Arc, each with layerId and style

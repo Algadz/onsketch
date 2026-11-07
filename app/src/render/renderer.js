@@ -78,7 +78,7 @@ export class Renderer {
   /** Stroke style for one entity. Colour always shows state, as in
    *  SolidWorks: blue under-defined, black fully defined, red over-defined,
    *  pink construction, orange hover / selection, grey on other sketches
-   *  and for vertices on locked layers. Weight and line type come from
+   *  and for vertices on layers other than the active one (not editable). Weight and line type come from
    *  the entity's own style. */
   styleFor(entity, isActive, owner = null) {
     const t = this.theme;

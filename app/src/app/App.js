@@ -96,11 +96,11 @@ export class App {
   /** Entity's layer is shown (hidden layers are still solved). */
   isEntityVisible(e) { const l = this.project.layerOf(e); return !l || l.visible; }
   /** Entity can be hovered, picked and box-selected: only geometry on the
-   *  active layer, and only while that layer is visible and unlocked.
+   *  active layer, and only while that layer is visible.
    *  (Snapping still uses every visible layer.) */
   isEntityInteractive(e) {
     const l = this.project.layerOf(e);
-    return !!l && l.id === this.project.activeLayerId && l.visible && !l.locked;
+    return !!l && l.id === this.project.activeLayerId && l.visible;
   }
 
   makeOrReusePoint(world, snap, sketch) {

@@ -100,23 +100,18 @@ export class LayersPanelMixin {
     list.innerHTML = '';
     for (const layer of [...project.layers].reverse()) {
       const row = document.createElement('div');
-      row.className = 'lyr-row' + (layer.id === project.activeLayerId ? ' active' : '') + (layer.visible ? '' : ' hidden-layer') + (layer.locked ? ' locked' : '');
+      const isActive = layer.id === project.activeLayerId;
+      row.className = 'lyr-row' + (isActive ? ' active' : '') + (layer.visible ? '' : ' hidden-layer');
+      row.title = isActive ? 'Active layer: the only one you can edit' : 'Click to edit this layer';
       row.dataset.layerId = layer.id;
       row.innerHTML = `
         <button class="icon-btn" data-k="vis" title="${layer.visible ? 'Hide' : 'Show'} layer" aria-label="Toggle visibility">${uiIcon(layer.visible ? 'eye' : 'eyeOff')}</button>
-        <button class="icon-btn${layer.locked ? ' on' : ''}" data-k="lock" title="${layer.locked ? 'Unlock' : 'Lock'} layer (locked geometry never moves)" aria-label="Toggle lock">${uiIcon(layer.locked ? 'lock' : 'unlock')}</button>
-        <span class="name" title="Double-click to rename">${esc(layer.name)}${layer.locked ? '<span class="lock-tag">Locked</span>' : ''}</span>
+        <span class="name" title="Double-click to rename">${esc(layer.name)}</span>
         <span class="count">${counts.get(layer.id) || 0}</span>`;
       row.querySelector('[data-k="vis"]').addEventListener('click', (ev) => {
         ev.stopPropagation();
         layer.visible = !layer.visible;
         if (!layer.visible) this._deselectLayer(layer.id);
-        this._layerChanged();
-      });
-      row.querySelector('[data-k="lock"]').addEventListener('click', (ev) => {
-        ev.stopPropagation();
-        layer.locked = !layer.locked;
-        if (layer.locked) this._deselectLayer(layer.id);
         this._layerChanged();
       });
       const name = row.querySelector('.name');
@@ -141,6 +136,7 @@ export class LayersPanelMixin {
       row.addEventListener('click', () => {
         if (project.activeLayerId === layer.id) return;
         project.activeLayerId = layer.id;
+        project.syncLocks();            // the other layers are now held still
         this.clearSelection();          // selection is limited to the active layer
       });
       list.appendChild(row);
@@ -160,34 +156,11 @@ export class LayersPanelMixin {
     const active = project.activeLayer();
     const status = document.getElementById('status-layer');
     if (status) {
-      status.textContent = 'Layer: ' + active.name + (active.locked ? ' — locked' : '');
-      status.classList.toggle('locked', active.locked);
+      status.textContent = 'Layer: ' + active.name;
     }
-    this._refreshLockBanner();
   }
 
-  /** Banner over the canvas while the active layer is locked. */
-  _refreshLockBanner() {
-    const banner = document.getElementById('lock-banner');
-    if (!banner) return;
-    const layer = this.project.activeLayer();
-    banner.hidden = !layer.locked;
-    if (!layer.locked) return;
-    banner.innerHTML = `${uiIcon('lock')}<span>Layer <b>${esc(layer.name)}</b> is locked: its geometry can't move or be edited.</span>
-      <button class="unlock">${uiIcon('unlock')}Unlock</button>`;
-    banner.querySelector('.unlock').addEventListener('click', () => {
-      layer.locked = false;
-      this._layerChanged();
-    });
-  }
-  _flashLockBanner() {
-    this._refreshLockBanner();
-    const banner = document.getElementById('lock-banner');
-    banner.classList.remove('flash');
-    void banner.offsetWidth;            // restart the animation
-    banner.classList.add('flash');
-    document.getElementById('status-hint').textContent = 'The active layer is locked. Unlock it or pick another layer to draw.';
-  }
+
 
   _deselectLayer(layerId) {
     for (const s of this.project.sketches) {

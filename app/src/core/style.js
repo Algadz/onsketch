@@ -7,8 +7,8 @@
    it was drawn. Colour is added by the Fill tool. Layers are display
    groups only: visibility, lock, opacity, order.
 
-   Layers never affect solving (except that locked geometry is held
-   still): constraints may freely link entities on different layers.
+   Layers never affect solving, except that only the active layer is
+   editable: geometry on every other layer is held still: constraints may freely link entities on different layers.
    ============================================================ */
 import { newId } from './entities.js';
 
@@ -50,10 +50,9 @@ export class Layer {
     this.name = name;
     this.opacity = Number.isFinite(props.opacity) ? props.opacity : 1;
     this.visible = props.visible !== false;
-    this.locked = !!props.locked;
   }
   toJSON() {
-    return { id: this.id, name: this.name, opacity: this.opacity, visible: this.visible, locked: this.locked };
+    return { id: this.id, name: this.name, opacity: this.opacity, visible: this.visible };
   }
   static fromJSON(o) { return new Layer(o.name || 'Layer', o); }
 }

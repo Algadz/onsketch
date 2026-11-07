@@ -46,14 +46,14 @@ test('removeLayer deletes its geometry and keeps at least one layer', () => {
 test('layers and entity line styles survive a JSON round trip', () => {
   const p = new Project(); const s = p.addSketch('A');
   const ly = p.addLayer('Holes');
-  ly.locked = true; ly.opacity = 0.5;
+  ly.visible = false; ly.opacity = 0.5;
   const c = new Circle(new Point(0, 0), 3);
   c.style = { lineWidth: 3, lineStyle: 'center' };
   s.addEntity(c);
   const q = Project.fromJSON(JSON.parse(JSON.stringify(p.toJSON())));
   const ly2 = q.layer(ly.id);
-  assert.equal(ly2.locked, true); assert.equal(ly2.opacity, 0.5);
-  assert.deepEqual(Object.keys(ly2.toJSON()).sort(), ['id', 'locked', 'name', 'opacity', 'visible']);
+  assert.equal(ly2.visible, false); assert.equal(ly2.opacity, 0.5);
+  assert.deepEqual(Object.keys(ly2.toJSON()).sort(), ['id', 'name', 'opacity', 'visible']);
   const c2 = q.sketches[0].entities[0];
   assert.equal(c2.layerId, ly.id);
   assert.deepEqual(c2.style, c.style);
@@ -153,13 +153,12 @@ test('ownerOf finds the entity a child point belongs to', () => {
 import * as C from '../../app/src/core/constraints.js';
 import { Solver } from '../../app/src/core/solver.js';
 
-test('geometry on a locked layer does not move when other layers are solved', () => {
+test('geometry on layers other than the active one does not move', () => {
   const p = new Project(); const s = p.addSketch('A');
   const frozen = p.layers[0];
   const a = new Line(new Point(0, 0), new Point(10, 0)); s.addEntity(a);
-  p.addLayer('Work');
+  p.addLayer('Work');                                                  // becomes the active layer
   const b = new Line(a.p2, new Point(13, 4)); s.addEntity(b);          // shares a corner with a
-  frozen.locked = true;
   s.constraints.push(new C.DistanceConstraint(b.p1.id, b.p2.id, 8));   // only b's free end can move
   s.constraints.push(new C.HorizontalConstraint(a.id, a.p1.id, a.p2.id));
   const r = new Solver().solve(s, [s], [], { diagnostics: true });
@@ -167,14 +166,15 @@ test('geometry on a locked layer does not move when other layers are solved', ()
   assert.ok(Math.abs(Math.hypot(b.p2.x - 10, b.p2.y) - 8) < 1e-6);
   assert.equal(r.entityStatus.get(a.id), 'fully');
 
-  // A constraint that could only be met by moving locked geometry is reported, not applied.
+  // A constraint that could only be met by moving inactive geometry is reported, not applied.
   s.constraints.push(new C.DistanceConstraint(a.p1.id, a.p2.id, 20));
   const r2 = new Solver().solve(s, [s], [], { diagnostics: true });
   assert.equal(a.p2.x, 10);
   assert.equal(r2.state, 'over');
 
-  frozen.locked = false;
+  p.activeLayerId = frozen.id;                                         // now 'a' is editable, 'b' is held
   new Solver().solve(s, [s], [], { diagnostics: true });
+  assert.ok(Math.abs(Math.hypot(b.p2.x - b.p1.x, b.p2.y - b.p1.y) - 8) < 1e-6);
   assert.ok(Math.abs(Math.hypot(a.p2.x - a.p1.x, a.p2.y - a.p1.y) - 20) < 1e-6);
 });
 

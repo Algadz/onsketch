@@ -214,22 +214,21 @@ const activeOnly = await page.evaluate(() => {
 });
 check(activeOnly.other && activeOnly.own, `picking limited to the active layer (${JSON.stringify(activeOnly)})`);
 
-// Lock: geometry on a locked layer can't be picked; hide: can't be snapped either.
-const lockHit = await page.evaluate(() => {
+// Hidden layers can't be picked or snapped to.
+const hideHit = await page.evaluate(() => {
   const a = window._app, ly = a.project.activeLayer();
   const line = a.project.entitiesOnLayer(ly.id)[0];
   const mid = { x: (line.p1.x + line.p2.x) / 2, y: (line.p1.y + line.p2.y) / 2 };
   const before = a.hitTestAcrossLayers(mid) === line;
-  ly.locked = true;
-  const locked = a.hitTestAcrossLayers(mid);
-  ly.locked = false; ly.visible = false;
+  ly.visible = false;
+  const hidden = a.hitTestAcrossLayers(mid);
   const snap = a.snap.find(line.p1, a.view, a.visibleSketches());
   ly.visible = true;
-  return { before, locked: locked === null, snapHidden: !snap || snap.entity !== line.p1 };
+  return { before, hidden: hidden === null, snapHidden: !snap || snap.entity !== line.p1 };
 });
-check(lockHit.before && lockHit.locked && lockHit.snapHidden, `lock / hide exclude picking and snapping (${JSON.stringify(lockHit)})`);
+check(hideHit.before && hideHit.hidden && hideHit.snapHidden, `hidden layers excluded from picking and snapping (${JSON.stringify(hideHit)})`);
 
-// Locked layer stays put while a connected line on another layer is dragged.
+// Inactive layers stay put while a connected line on the active layer is dragged.
 const lockDrag = await page.evaluate(() => {
   const a = window._app, base = a.project.layers[0];
   const rectLine = a.project.entitiesOnLayer(base.id).find(e => e.constructor.kind === 'line');
@@ -237,8 +236,8 @@ const lockDrag = await page.evaluate(() => {
   const tool = a.tool; a.setTool('line');
   return { id: rectLine.id, p: [rectLine.p2.x, rectLine.p2.y], baseId: base.id, tool: !!tool };
 });
-// draw a line starting on the locked rectangle's corner
-await page.evaluate(() => { const a = window._app; a.project.layers[0].locked = true; a.commit(); a.refreshUI(); });
+// draw a line starting on the (inactive) rectangle's corner
+await page.evaluate(() => { const a = window._app; a.commit(); a.refreshUI(); });
 const corner = await page.evaluate((id) => {
   const a = window._app, l = a.project.sketches[0].entities.find(e => e.id === id);
   return a.view.worldToScreen(l.p2);
@@ -256,8 +255,7 @@ const after2 = await page.evaluate((id) => {
   const last = a.activeSketch().entities[a.activeSketch().entities.length - 1];
   return { p: [l.p2.x, l.p2.y], shared: last.p1 === l.p2 || a.activeSketch().constraints.some(c => c.kind === 'coincident') };
 }, lockDrag.id);
-check(after2.p[0] === lockDrag.p[0] && after2.p[1] === lockDrag.p[1], `locked layer did not move during drag (${JSON.stringify({ before: lockDrag.p, after: after2 })})`);
-await page.evaluate(() => { const a = window._app; a.project.layers[0].locked = false; a.commit(); a.refreshUI(); });
+check(after2.p[0] === lockDrag.p[0] && after2.p[1] === lockDrag.p[1], `inactive layer did not move during drag (${JSON.stringify({ before: lockDrag.p, after: after2 })})`);
 
 // Fill tool: fill the Layer 1 rectangle (boundary on another layer), then the background, then erase.
 await page.evaluate(() => window._app._setPen('lineStyle', 'solid', true));
@@ -386,22 +384,14 @@ const bad = await page.evaluate(() => { const i = document.querySelector('#works
 await page.keyboard.press('Escape');
 check(bad && /Unknown name/.test(bad), `bad formula is flagged (${bad})`);
 
-// Locked active layer: banner shows and drawing is blocked.
-await page.evaluate(() => { const a = window._app; a.project.activeLayer().locked = true; a._layerChanged(); });
-const nBefore = await page.evaluate(() => window._app.activeSketch().entities.length);
-await page.keyboard.press('l');
-await page.mouse.click(cx + 120, cy - 120);
-await page.mouse.click(cx + 200, cy - 120);
-await page.keyboard.press('Escape'); await page.keyboard.press('s');
-const lockUi = await page.evaluate(() => ({
-  banner: !document.getElementById('lock-banner').hidden,
-  row: !!document.querySelector('#layer-list .lyr-row.active.locked .lock-tag'),
-  n: window._app.activeSketch().entities.length,
+// Only the active layer is highlighted; no lock controls anywhere.
+const layerUi = await page.evaluate(() => ({
+  active: document.querySelectorAll('#layer-list .lyr-row.active').length,
+  lockButtons: document.querySelectorAll('#layer-list [data-k="lock"], #lock-banner, .lock-tag').length,
+  activeName: document.querySelector('#layer-list .lyr-row.active .name').textContent,
+  current: window._app.project.activeLayer().name,
 }));
-check(lockUi.banner && lockUi.row && lockUi.n === nBefore, `locked layer is obvious and blocks drawing (${JSON.stringify(lockUi)})`);
-await page.click('#lock-banner .unlock');
-const unlocked = await page.evaluate(() => !window._app.project.activeLayer().locked && document.getElementById('lock-banner').hidden);
-check(unlocked, 'banner Unlock button unlocks the layer');
+check(layerUi.active === 1 && layerUi.lockButtons === 0 && layerUi.activeName === layerUi.current, `active layer highlighted, no lock UI (${JSON.stringify(layerUi)})`);
 
 // Colour mode + theme toggles (end in Colors mode for the screenshot).
 await page.click('#menubar [data-action="theme"]');
