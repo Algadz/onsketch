@@ -345,7 +345,7 @@ export function sampleRegion(region, n = 49) {
  * Carry fill colours over to the closed areas the shapes form now.
  *
  * References are every area at the reference moment (drag start / last
- * commit), painted or not, plus dormant paint. Each current area R
+ * commit), painted or not. Each current area R
  * (bounded by entity set S) takes its colour from, in order:
  *   1. a reference bounded by exactly S: the same area moved, resized or
  *      flipped (an unpainted one, e.g. a hole, stays unpainted);
@@ -356,23 +356,18 @@ export function sampleRegion(region, n = 49) {
  *      covered most of it (splits and re-cuts);
  *   4. a reference sharing most of its boundary (Jaccard ≥ 0.5, e.g. a
  *      lobe of a quad dragged into a bowtie).
- * Otherwise R stays unpainted. Paint that wins nothing is dropped if a
- * current area swallowed it (merge), else kept dormant with its outline
- * and boundary ids, ready to come back.
+ * Otherwise R stays unpainted. Paint that wins no area is dropped (its
+ * area no longer exists).
  *
  * @param refs  [{ ids:[...], region:{outer,holes}, fill:{id,layerId,color,opacity}|null }]
  *              all reference areas of one layer (fill null = unpainted)
- * @param dormant  dormant fills of that layer ({..., ids, outline})
  * @param entities  current shapes of the layer
  * @param makeId  () => new fill id
- * @returns {{ fills: Array, dormant: number }}
+ * @returns {{ fills: Array, removed: number }}
  */
-export function reconcileRegions(refs, dormant, entities, makeId) {
+export function reconcileRegions(refs, entities, makeId) {
   const regions = allRegions(entities);
-  const all = [
-    ...refs.map(r => ({ ids: new Set(r.ids), idLen: r.idLen || r.region?.idLen, region: r.region, fill: r.fill })),
-    ...dormant.map(f => ({ ids: new Set(f.ids || []), idLen: f.idLen || null, region: f.outline ? { outer: f.outline, holes: [] } : null, fill: f, wasDormant: true })),
-  ];
+  const all = refs.map(r => ({ ids: new Set(r.ids), idLen: r.idLen || r.region?.idLen, region: r.region, fill: r.fill }));
   for (const r of all) r.bbox = r.region ? bboxOf(r.region.outer) : null;
   const setKey = (ids) => [...ids].sort().join('\u0001');
   const byKey = new Map();            // exact boundary set → references
@@ -441,32 +436,18 @@ export function reconcileRegions(refs, dormant, entities, makeId) {
       seed: interiorPoint(reg) || samples()[0], region: reg });
   }
 
-  let hidden = 0;
-  for (const r of all) {
-    if (!r.fill || won.has(r.fill)) continue;
-    // Swallowed by a current area (its boundary is part of it, or most of
-    // it lies inside one): dropped. Otherwise kept, hidden.
-    const swallowed = regions.some(reg => subset(r.ids, new Set(reg.ids)))
-      || (r.region && (() => {
-        const pts = sampleRegion(r.region);
-        const near = regions.filter(reg => bboxMeet(reg.bbox, r.bbox));
-        return pts.filter(p => near.some(reg => bboxHas(reg.bbox, p) && regionContains(reg, p))).length * 2 >= pts.length;
-      })());
-    if (swallowed && !r.wasDormant) continue;
-    hidden++;
-    const f = r.fill;
-    out.push({ id: f.id, layerId: f.layerId, color: f.color, opacity: f.opacity, seed: f.seed, dormant: true,
-      ids: [...r.ids], idLen: r.idLen || null,
-      outline: r.region ? r.region.outer.map(p => ({ x: +p.x.toFixed(4), y: +p.y.toFixed(4) })) : (f.outline || null) });
-  }
-  return { fills: out, dormant: hidden };
+  // Paint that won no area is gone: its area no longer exists. Undo
+  // brings it back; during a drag nothing is stored, so dragging back
+  // restores it too.
+  const removed = all.filter(r => r.fill && !won.has(r.fill)).length;
+  return { fills: out, removed };
 }
 
 /** References for reconcileRegions from stored fills: every current area
  *  of the layer, coloured by the fill whose seed lies in it. */
 export function referenceRegions(fills, entities) {
   const regions = allRegions(entities);
-  const painted = fills.filter(f => !f.dormant);
+  const painted = fills;
   return regions.map(reg => {
     const f = painted.find(x => regionContains(reg, x.seed)) || null;
     return { ids: reg.ids, idLen: reg.idLen, region: reg, fill: f };
@@ -476,9 +457,9 @@ export function referenceRegions(fills, entities) {
 /** Single-step convenience (tests, simple callers): reference = the
  *  fills' own regions as given, against the current shapes. */
 export function reconcileFills(fills, entities, makeId) {
-  const refs = fills.filter(f => !f.dormant && f.region)
+  const refs = fills.filter(f => f.region)
     .map(f => ({ ids: f.region.ids || [], idLen: f.region.idLen, region: f.region, fill: f }));
-  return reconcileRegions(refs, fills.filter(f => f.dormant), entities, makeId);
+  return reconcileRegions(refs, entities, makeId);
 }
 
 /** True when pt is inside the region (outer, not in a hole). */

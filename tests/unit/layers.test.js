@@ -200,20 +200,17 @@ test('new entities take the drawing style; loaded ones keep their own', () => {
   assert.equal(q.sketches[0].entities[0].style, null);
 });
 
-test('fill-tool fills and background survive save/load (hidden ones keep their outline)', () => {
+test('fill-tool fills and background survive save/load; hidden paint from older files is dropped', () => {
   const p = new Project(); const s = p.addSketch('A');
   const a = new Line(new Point(0, 0), new Point(4, 0)), b = new Line(a.p2, new Point(0, 3)), c = new Line(b.p2, a.p1);
   for (const e of [a, b, c]) s.addEntity(e);
   s.fills.push({ id: 'f900', layerId: p.layers[0].id, color: '#8a4fd1', opacity: 0.5, seed: { x: 1, y: 1 }, region: { outer: [], holes: [] } });
-  s.fills.push({ id: 'f901', layerId: p.layers[0].id, color: '#14946b', opacity: 1, seed: { x: 9, y: 9 }, dormant: true, outline: [{ x: 8, y: 8 }, { x: 10, y: 8 }, { x: 9, y: 10 }] });
   p.background = '#e5e7eb';
-  const q = Project.fromJSON(JSON.parse(JSON.stringify(p.toJSON())));
+  const j = JSON.parse(JSON.stringify(p.toJSON()));
+  j.sketches[0].fills.push({ id: 'f901', layerId: p.layers[0].id, color: '#14946b', opacity: 1, seed: { x: 9, y: 9 }, dormant: true, outline: [] });
+  const q = Project.fromJSON(j);
   assert.equal(q.background, '#e5e7eb');
-  const [f0, f1] = q.sketches[0].fills;
-  assert.deepEqual(f0, { id: 'f900', layerId: p.layers[0].id, color: '#8a4fd1', opacity: 0.5, seed: { x: 1, y: 1 } });
-  assert.equal(f1.dormant, true); assert.equal(f1.outline.length, 3);
-  s.removeEntity(b);
-  assert.equal(s.fills.length, 2, 'deleting a shape does not delete paint; recolouring decides');
+  assert.deepEqual(q.sketches[0].fills, [{ id: 'f900', layerId: p.layers[0].id, color: '#8a4fd1', opacity: 0.5, seed: { x: 1, y: 1 } }]);
 });
 
 test('fills saved in the older outline format get an inside point on load', () => {

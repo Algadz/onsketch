@@ -38,7 +38,7 @@ function isSelfReferential(c) {
  *  outline as {outer:[ids], holes:[[ids]]}; an inside point is worked
  *  out from that outline. */
 function reviveFill(f, sketch) {
-  if (!f || typeof f !== 'object') return null;
+  if (!f || typeof f !== 'object' || f.dormant) return null;     // hidden paint (older files) is dropped
   if (f.seed && Number.isFinite(f.seed.x)) return fillToJSON(f);
   if (!Array.isArray(f.outer)) return null;
   const byId = new Map(sketch.entities.map(e => [e.id, e]));
@@ -60,13 +60,6 @@ function reviveFill(f, sketch) {
 /** Saved form of a fill (drops the transient region). */
 export function fillToJSON(f) {
   const o = { id: f.id, layerId: f.layerId, color: f.color, opacity: f.opacity ?? 1, seed: { x: f.seed.x, y: f.seed.y } };
-  if (f.dormant) {
-    o.dormant = true;
-    if (Array.isArray(f.outline)) o.outline = f.outline.map(p => ({ x: p.x, y: p.y }));
-    // Boundary identity, so hidden paint can come back on the same shapes.
-    if (Array.isArray(f.ids)) o.ids = [...f.ids];
-    if (f.idLen) o.idLen = Object.fromEntries(Object.entries(f.idLen).map(([k, v]) => [k, +v.toFixed(4)]));
-  }
   return o;
 }
 import { AngleConstraint, ArcEndpointArcEndpointCoincidentConstraint, ArcEndpointCoincidentConstraint, ArcEndpointFixConstraint, ArcEndpointMidpointConstraint, ArcEndpointOnCircleConstraint, ArcEndpointOnLineConstraint, CoincidentConstraint, CollinearConstraint, ConcentricConstraint, CurveDistanceConstraint, DirectedAngleConstraint, DistanceConstraint, EqualLengthConstraint, EqualRadiusConstraint, FixConstraint, HorizontalConstraint, MidpointConstraint, OffsetConstraint, OffsetDistanceConstraint, ParallelConstraint, PerpendicularConstraint, PointLineDistanceConstraint, PointOnCircleConstraint, PointOnLineConstraint, PointRefHorizontalConstraint, PointRefVerticalConstraint, RadiusConstraint, SymmetricConstraint, TangentCircleCircleConstraint, TangentLineCircleConstraint, VerticalConstraint } from './constraints.js';
@@ -83,8 +76,8 @@ export class Sketch {
     // Fill-tool fills: { id, layerId, color, opacity, seed:{x,y} } where the
     // seed is a point inside the painted area; the area is whatever closed
     // region the layer's shapes form around it. When shapes change, colours
-    // are carried over by overlap (core/regions.js reconcileFills). Paint
-    // whose area opened up is kept as { dormant:true, outline:[...] }.
+    // are carried over to the areas (core/regions.js reconcileRegions);
+    // paint whose area no longer exists is removed (undo brings it back).
     // A transient `region` (current outline) is attached at run time.
     this.fills = [];
     this.dirtyIds = new Set();

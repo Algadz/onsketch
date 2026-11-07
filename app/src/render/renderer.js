@@ -102,7 +102,7 @@ export class Renderer {
 
   /** Draws fills, then strokes, layer by layer (bottom to top). Hidden
    *  layers and sketches are skipped; layer opacity multiplies in. */
-  /** @param fillDisplay  layerId → { painted:[{color,opacity,region}], ghosts:[{color,outline}] } */
+  /** @param fillDisplay  layerId → { painted:[{color,opacity,region}] } */
   drawEntities(project, fillDisplay = new Map()) {
     const ctx = this.ctx, v = this.view;
     const activeId = project.activeSketchId;
@@ -126,7 +126,7 @@ export class Renderer {
         const alpha = layer.opacity * (isActive ? 1 : 0.55);
         ctx.globalAlpha = alpha;
         const paint = s === paintSketch ? fillDisplay.get(layer.id) : null;
-        if (paint) { for (const p of paint.painted) this._drawPaint(p); for (const g of paint.ghosts) this._drawGhost(g); }
+        if (paint) for (const p of paint.painted) this._drawPaint(p);
         for (const e of ents) {
           e.draw(ctx, v, this.styleFor(e, isActive));
           for (const c of e.children()) c.draw(ctx, v, this.styleFor(c, isActive, e));
@@ -150,29 +150,8 @@ export class Renderer {
     ctx.restore();
   }
 
-  /** Paint whose area has opened up, while dragging: hatched ghost of
-   *  its last outline so it is clearly kept, not lost. */
-  _drawGhost(g) {
-    const ctx = this.ctx, v = this.view;
-    const pts = g.outline.map(q => v.worldToScreen(q));
-    if (pts.length < 3) return;
-    ctx.save();
-    ctx.beginPath();
-    pts.forEach((s, i) => { if (i) ctx.lineTo(s.x, s.y); else ctx.moveTo(s.x, s.y); });
-    ctx.closePath();
-    ctx.globalAlpha *= 0.55;
-    ctx.fillStyle = withAlpha(g.color === INK ? this.theme.ink : g.color, 0.12);
-    ctx.fill();
-    ctx.clip();
-    ctx.strokeStyle = withAlpha(g.color === INK ? this.theme.ink : g.color, 0.5);
-    ctx.lineWidth = 1;
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    for (const s of pts) { minX = Math.min(minX, s.x); minY = Math.min(minY, s.y); maxX = Math.max(maxX, s.x); maxY = Math.max(maxY, s.y); }
-    ctx.beginPath();
-    for (let x = minX - (maxY - minY); x < maxX; x += 7) { ctx.moveTo(x, maxY); ctx.lineTo(x + (maxY - minY), minY); }
-    ctx.stroke();
-    ctx.restore();
-  }
+
+
 
 
 

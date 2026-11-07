@@ -273,7 +273,7 @@ await page.keyboard.press('b');
 await page.mouse.click(cx - 120, cy - 20);
 const bucket = await page.evaluate(() => {
   const a = window._app, s = a.activeSketch();
-  return { fills: s.fills.map(f => ({ layer: f.layerId === a.project.activeLayerId, color: f.color, painted: !f.dormant })) };
+  return { fills: s.fills.map(f => ({ layer: f.layerId === a.project.activeLayerId, color: f.color, painted: !!f.region })) };
 });
 check(bucket.fills.length === 1 && bucket.fills[0].layer && bucket.fills[0].color === '#8a4fd1' && bucket.fills[0].painted,
   `fill tool fills the clicked region (${JSON.stringify(bucket)})`);
@@ -565,7 +565,7 @@ const fillScene = await page.evaluate(() => {
             { id: 'f22', layerId: 'ly1', color: '#8a4fd1', opacity: 1, seed: { x: 100, y: 7 } }] }] });
   a._afterStateSwap(); a.view.zoom = 4; a.view.panX = -180; a.view.panY = 60; a.commit({ diagnostics: 'sync' });
   for (const w of ['equations', 'props', 'colors']) a.windows.toggle(w, false);
-  return a.activeSketch().fills.map(f => f.color + (f.dormant ? '(hidden)' : '')).sort().join(',');
+  return a.activeSketch().fills.map(f => f.color).sort().join(',');
 });
 check(fillScene === '#14946b,#8a4fd1,#c9a400', `fill scene loads with three painted areas (${fillScene})`);
 await page.keyboard.press('s');
@@ -573,25 +573,23 @@ const drag2 = async (from, to, holdCheck) => {
   const A = await W(from[0], from[1]), B = await W(to[0], to[1]);
   await page.mouse.move(box.x + A.x, box.y + A.y); await page.mouse.down();
   for (let i = 1; i <= 10; i++) await page.mouse.move(box.x + A.x + (B.x - A.x) * i / 10, box.y + A.y + (B.y - A.y) * i / 10);
-  const during = holdCheck ? await page.evaluate(() => { const d = [...window._app.fillDisplay().values()][0]; return { painted: d.painted.length, ghosts: d.ghosts.length }; }) : null;
+  const during = holdCheck ? await page.evaluate(() => { const d = [...window._app.fillDisplay().values()][0]; return { painted: d.painted.length }; }) : null;
   await page.mouse.up();
   return during;
 };
 await drag2([75, -20], [40, 20]);          // diagonal end inside the rectangle: no longer splits it
-const merged = await page.evaluate(() => window._app.activeSketch().fills.filter(f => !f.dormant).map(f => f.color));
+const merged = await page.evaluate(() => window._app.activeSketch().fills.map(f => f.color));
 check(merged.length === 2 && merged.includes('#14946b') && !merged.includes('#c9a400'),
   `merge on release keeps the majority colour, green 1400 mm² over yellow 1000 mm² (${merged.join(',')})`);
 const unmerged = await page.evaluate(() => { const a = window._app; a.undo(); return a.activeSketch().fills.map(f => f.color).sort().join(','); });
 check(unmerged === '#14946b,#8a4fd1,#c9a400', `undo brings both colours back (${unmerged})`);
-// Open the triangle: the side now passes left of the base (x≈83 < 86).
-const ghostDuring = await drag2([92, 0], [70, -15], true);
-const hidden = await page.evaluate(() => ({ n: window._app.dormantFillCount(), hint: document.getElementById('status-hint').textContent }));
-check(ghostDuring && ghostDuring.ghosts === 1 && hidden.n === 1 && /hidden/.test(hidden.hint),
-  `opened area: ghost while dragging, hidden after release (${JSON.stringify({ ghostDuring, hidden })})`);
-await page.keyboard.press('b');
-await page.click('#optbar [data-opt="delete-hidden-fills"]');
-const afterDelete = await page.evaluate(() => window._app.dormantFillCount());
-check(afterDelete === 0, 'Fill tool: delete hidden fills');
+// Open the triangle (its side now passes left of the base): its paint is
+// gone from the display while dragging and removed on release; undo restores it.
+const openDuring = await drag2([92, 0], [70, -15], true);
+const afterOpen = await page.evaluate(() => window._app.activeSketch().fills.map(f => f.color).sort().join(','));
+const undoOpen = await page.evaluate(() => { const a = window._app; a.undo(); return a.activeSketch().fills.map(f => f.color).sort().join(','); });
+check(openDuring.painted === 2 && afterOpen === '#14946b,#c9a400' && undoOpen === '#14946b,#8a4fd1,#c9a400',
+  `opened area: paint removed on release, undo restores it (${JSON.stringify({ openDuring, afterOpen, undoOpen })})`);
 await page.keyboard.press('s');
 
 // Dimensions belong to a layer; status colours are per layer.
@@ -634,7 +632,7 @@ const dimLayerStates = await page.evaluate(() => { const a = window._app; return
 check(dimLayerStates === 'D1:hidden,D2:hidden,D3:active', `hidden layer hides its dimensions (${dimLayerStates})`);
 await page.evaluate(() => { const a = window._app; a.project.layer('ly1').visible = true; a.requestRender(); });
 
-// Fill follows shapes moved by real drags; undo; hidden paint survives save/load.
+// Fill follows shapes moved by real drags; undo; opened areas.
 {
   const loadP = (proj) => page.evaluate((proj) => {
     const a = window._app; a.project = a.project.constructor.fromJSON(proj); a._afterStateSwap();
@@ -687,15 +685,52 @@ await page.evaluate(() => { const a = window._app; a.project.layer('ly1').visibl
     { type: 'line', id: 'l2', layerId: 'L', p1: pt('b', 40, 0, true), p2: pt('c', 20, 30, true) },
     { type: 'line', id: 'l3', layerId: 'L', p1: pt('c', 20, 30, true), p2: pt('d', 4, 0) }], constraints: [],
     fills: [{ id: 'f1', layerId: 'L', color: '#14946b', opacity: 1, seed: { x: 20, y: 8 } }] }] });
-  await dragW([4, 0], [-20, 20]);
-  const hiddenNow = await page.evaluate(() => window._app.dormantFillCount());
-  const saved = await page.evaluate(() => JSON.stringify(window._app.project.toJSON()));
-  await loadP(JSON.parse(saved));
-  const hiddenLoaded = await page.evaluate(() => window._app.dormantFillCount());
-  await dragW([-20, 20], [6, 0]);
-  const back = await colourAtW(20, 8), hiddenEnd = await page.evaluate(() => window._app.dormantFillCount());
-  check(hiddenNow === 1 && hiddenLoaded === 1 && back === '#14946b' && hiddenEnd === 0,
-    `hidden paint survives save/load and returns when the area closes (${hiddenNow}/${hiddenLoaded}/${back}/${hiddenEnd})`);
+  // Open and close again within one drag: the paint is still there.
+  const A0 = await W(4, 0), A1 = await W(-20, 20), A2 = await W(6, 0);
+  await page.mouse.move(box.x + A0.x, box.y + A0.y); await page.mouse.down();
+  for (let i = 1; i <= 8; i++) await page.mouse.move(box.x + A0.x + (A1.x - A0.x) * i / 8, box.y + A0.y + (A1.y - A0.y) * i / 8);
+  const openMid = await colourAtW(20, 8);
+  for (let i = 1; i <= 8; i++) await page.mouse.move(box.x + A1.x + (A2.x - A1.x) * i / 8, box.y + A1.y + (A2.y - A1.y) * i / 8);
+  await page.mouse.up();
+  const sameDrag = await colourAtW(20, 8);
+  // Open it and release: removed; undo brings it back.
+  await dragW([6, 0], [-20, 20]);
+  const removed = await page.evaluate(() => window._app.activeSketch().fills.length);
+  await page.evaluate(() => window._app.undo());
+  const undone = await colourAtW(20, 8);
+  check(openMid === null && sameDrag === '#14946b' && removed === 0 && undone === '#14946b',
+    `opening a filled area: gone while open, back if closed in the same drag, removed on release, undo restores (${openMid}/${sameDrag}/${removed}/${undone})`);
+}
+
+// Dragging overlapping painted circles around: the circles keep their
+// colours and nothing is left behind.
+{
+  const pt = (id, x, y) => ({ type: 'point', id, x, y });
+  await page.evaluate((proj) => {
+    const a = window._app; a.project = a.project.constructor.fromJSON(proj); a._afterStateSwap();
+    a.view.zoom = 4; a.view.panX = 0; a.view.panY = 0; a.commit({ diagnostics: 'sync' });
+    for (const w of ['equations', 'props', 'colors', 'tools', 'layers']) a.windows.toggle(w, false);
+    a.setTool('select');
+  }, { version: 3, layers: [{ id: 'L', name: 'L' }], activeLayerId: 'L', sketches: [{ id: 's', name: 'S', entities: [
+    { type: 'circle', id: 'A', layerId: 'L', center: pt('ca', -10, 0), r: 20 },
+    { type: 'circle', id: 'B', layerId: 'L', center: pt('cb', 15, 0), r: 20 }], constraints: [],
+    fills: [{ id: 'f1', layerId: 'L', color: '#5b5fd6', opacity: 1, seed: { x: -20, y: 0 } },
+            { id: 'f2', layerId: 'L', color: '#5b5fd6', opacity: 1, seed: { x: 25, y: 0 } },
+            { id: 'f3', layerId: 'L', color: '#c9a400', opacity: 1, seed: { x: 2.5, y: 0 } }] }] });
+  // Pull A far left, B far right, then wander with B: the painted pieces'
+  // old places end up empty, as in the reported sketch.
+  const moves = [[[-10, 0], [-70, 0]], [[15, 0], [80, 0]], [[80, 0], [60, 45]], [[60, 45], [90, -40]]];
+  for (const [from, to] of moves) {
+    const A = await W(...from), B = await W(...to);
+    await page.mouse.move(box.x + A.x, box.y + A.y); await page.mouse.down();
+    for (let i = 1; i <= 8; i++) {
+      await page.mouse.move(box.x + A.x + (B.x - A.x) * i / 8, box.y + A.y + (B.y - A.y) * i / 8);
+    }
+    await page.mouse.up();
+  }
+  const after = await page.evaluate(() => window._app.activeSketch().fills.map(f => f.color));
+  check(after.length === 2 && after.every(c => c === '#5b5fd6'),
+    `overlapping painted circles pulled apart: each keeps its colour, the lens paint is gone (${after})`);
 }
 
 await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));

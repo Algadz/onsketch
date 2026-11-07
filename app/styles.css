@@ -923,4 +923,3 @@
   .pc-legend span { font: 11px ui-monospace, monospace; color: var(--text-muted); }
   .palette .sw.on { outline: 2px solid var(--accent); outline-offset: 1px; }
 
-  .opt-warn { color: var(--overc); font-weight: 600; }

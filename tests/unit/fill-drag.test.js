@@ -13,7 +13,7 @@ const rect = (x, y, w, h) => {
   return [0, 1, 2, 3].map(i => new Line(p[i], p[(i + 1) % 4]));
 };
 const paint = (ents, pt, color) => ({ id: color, layerId: 'L', color, opacity: 1, seed: pt, region: findFaceAt(ents, pt) });
-const colourAt = (fills, pt) => fills.find(f => !f.dormant && f.region && regionContains(f.region, pt))?.color ?? null;
+const colourAt = (fills, pt) => fills.find(f => f.region && regionContains(f.region, pt))?.color ?? null;
 const moveShape = (ents, dx, dy) => { const seen = new Set(); for (const e of ents) for (const c of e.children()) if (!seen.has(c)) { seen.add(c); c.x += dx; c.y += dy; } };
 
 function run(name, setup, frames, expect) {
@@ -23,7 +23,7 @@ function run(name, setup, frames, expect) {
   const bad = [];
   frames.forEach((frame, i) => {
     frame(ents);
-    const { fills: out } = reconcileRegions(refs, [], ents, mk);
+    const { fills: out } = reconcileRegions(refs, ents, mk);
     for (const [pt, want, note] of expect(i)) {
       const got = colourAt(out, pt);
       if (got !== want) bad.push(`frame ${i}: at (${pt.x},${pt.y}) ${note || ''} want ${want} got ${got}`);
@@ -189,3 +189,42 @@ run('three-colour overlapping circles pulled apart', () => {
 }, steps(6, (ents) => { ents[0].center.x -= 6; ents[1].center.x += 6; }),
    (i) => [[{ x: -6 * (i + 1), y: 0 }, 'red', 'A centre'], [{ x: 6 + 6 * (i + 1), y: 0 }, 'blue', 'B centre']]);
 
+
+/* ---- Paint whose area no longer exists is removed ---- */
+test('fill drag: painted pieces of overlapping circles pulled apart: colours go with the circles', () => {
+  const A = new Circle(new Point(0, 0), 5), B = new Circle(new Point(6, 0), 5);
+  const ents = [A, B];
+  const fills = [paint(ents, { x: -3, y: 0 }, 'red'), paint(ents, { x: 9, y: 0 }, 'blue'), paint(ents, { x: 3, y: 0 }, 'green')];
+  const refs = referenceRegions(fills, ents);
+  A.center.x -= 40; B.center.x += 40;
+  const { fills: out, removed } = reconcileRegions(refs, ents, mk);
+  assert.equal(removed, 1, 'the lens no longer exists');
+  assert.deepEqual(out.map(f => f.color).sort(), ['blue', 'red']);
+  assert.equal(colourAt(out, { x: -40, y: 0 }), 'red');
+  assert.equal(colourAt(out, { x: 46, y: 0 }), 'blue');
+});
+
+test('fill drag: an opened area loses its paint; closing it again during the same drag restores it', () => {
+  const a = new Point(0, 0), b = new Point(10, 0), c = new Point(5, 8), loose = new Point(1, 0);
+  const ents = [new Line(a, b), new Line(b, c), new Line(c, loose)];
+  const fills = [paint(ents, { x: 5, y: 2 }, 'red')];
+  const refs = referenceRegions(fills, ents);          // drag start
+  loose.x = -5; loose.y = 6;                           // pulled away: nothing closed
+  const open = reconcileRegions(refs, ents, mk);
+  assert.equal(open.fills.length, 0); assert.equal(open.removed, 1);
+  loose.x = 2; loose.y = 0;                            // back onto the base, same drag
+  const back = reconcileRegions(refs, ents, mk);
+  assert.equal(colourAt(back.fills, { x: 5, y: 2 }), 'red');
+});
+
+test('fill drag: a circle dragged off the chord that split it keeps the larger piece colour', () => {
+  const c = new Circle(new Point(0, 0), 10);
+  const chord = new Line(new Point(6, -12), new Point(6, 12));
+  const ents = [c, chord];
+  const fills = [paint(ents, { x: -2, y: 0 }, 'blue'), paint(ents, { x: 8, y: 0 }, 'yellow')];
+  const refs = referenceRegions(fills, ents);
+  c.center.x = -40;
+  const { fills: out } = reconcileRegions(refs, ents, mk);
+  assert.deepEqual(out.map(f => f.color), ['blue']);
+  assert.equal(colourAt(out, { x: -40, y: 0 }), 'blue');
+});

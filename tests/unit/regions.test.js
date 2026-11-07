@@ -119,7 +119,7 @@ test('interiorPoint lands inside the region and outside its holes', () => {
 let nid = 0;
 const mk = () => 'n' + (nid++);
 const paint = (ents, pt, color, id) => ({ id, layerId: 'L', color, opacity: 1, seed: pt, region: findFaceAt(ents, pt) });
-const colourAt = (fills, pt) => fills.find(f => !f.dormant && f.region && regionContains(f.region, pt))?.color ?? null;
+const colourAt = (fills, pt) => fills.find(f => f.region && regionContains(f.region, pt))?.color ?? null;
 
 test('split: both pieces keep the colour', () => {
   const r = rect(0, 0, 10, 10);
@@ -135,9 +135,9 @@ test('merge: the colour that covered most of the merged area wins', () => {
   const cut = new Line(new Point(3, 0), new Point(3, 10));
   const ents = [...r, cut];
   const fills = [paint(ents, { x: 1, y: 5 }, 'green', 'g'), paint(ents, { x: 6, y: 5 }, 'yellow', 'y')];
-  const { fills: out, dormant } = reconcileFills(fills, r, mk);       // the cut is gone
+  const { fills: out, removed } = reconcileFills(fills, r, mk);       // the cut is gone
   assert.equal(colourAt(out, { x: 1, y: 5 }), 'yellow');
-  assert.equal(out.length, 1); assert.equal(dormant, 0);
+  assert.equal(out.length, 1); assert.equal(removed, 1);
 });
 
 test('re-cut: each new piece takes the colour that covered most of it', () => {
@@ -158,16 +158,11 @@ test('a newly closed area that was never painted stays empty', () => {
   assert.equal(colourAt(out, { x: 5, y: 5 }), 'red');
 });
 
-test('paint whose area opens becomes hidden, and comes back when it closes again', () => {
+test('paint whose area opens is removed', () => {
   const r = rect(0, 0, 10, 10);
   const fills = [paint(r, { x: 5, y: 5 }, 'red', 'f1')];
-  const open = r.slice(0, 3);                                          // one side removed
-  const a = reconcileFills(fills, open, mk);
-  assert.equal(a.dormant, 1);
-  assert.equal(a.fills[0].dormant, true); assert.ok(a.fills[0].outline.length >= 4);
-  const b = reconcileFills(a.fills, r, mk);                            // closed again
-  assert.equal(b.dormant, 0);
-  assert.equal(colourAt(b.fills, { x: 5, y: 5 }), 'red'); assert.equal(b.fills[0].id, 'f1');
+  const { fills: out, removed } = reconcileFills(fills, r.slice(0, 3), mk);   // one side removed
+  assert.equal(out.length, 0); assert.equal(removed, 1);
 });
 
 test('allRegions lists every closed area with its holes', () => {

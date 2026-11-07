@@ -109,7 +109,6 @@ Project
    │               (line weight, line type)
    ├─ constraints[]
    └─ fills[]      fill-tool paint: colour, opacity, layer, a point inside the area
-                   (hidden ones also keep their last outline)
 ```
 
 New geometry takes the current line weight and type. Files from earlier
@@ -129,11 +128,10 @@ area finds its colour by comparing with every area at the reference moment
    (split, re-cut);
 4. mostly the same boundary by outline length → that colour (e.g. a bowtie
    lobe, or circles pulled apart);
-otherwise it stays empty. Paint whose area opens up is kept hidden (ghosted
-while dragging, saved with its boundary) and returns when the area closes
-again; the Fill tool's options can delete hidden fills. During a drag nothing
-is stored, so dragging back restores the colours exactly; the result is kept
-on release (after the final solve) and can be undone. The scenarios live in
+otherwise it stays empty. Paint whose area no longer exists (opened up,
+re-shaped away) is removed; Undo brings it back. During a drag nothing is
+stored, so dragging back restores the colours exactly; the result is kept on
+release (after the final solve) and can be undone. The scenarios live in
 `tests/unit/fill-drag.test.js`.
 
 
