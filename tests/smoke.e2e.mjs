@@ -161,6 +161,22 @@ const pixel = (x, y) => page.evaluate(async ([x, y]) => {
 const filled = await pixel(cx + 130, cy + 110);
 check(filled[3] > 0 && filled[0] > filled[2], `shape fill painted (rgba ${filled.join(',')})`);
 
+// Fill shows while drawing, and overlapping filled shapes keep their colour.
+await page.evaluate(() => window._app._setPen('fillShapes', true, true));
+await page.keyboard.press('r');
+await page.mouse.click(cx + 150, cy + 100);
+await page.mouse.move(cx + 270, cy + 210, { steps: 4 });
+const previewPx = await pixel(cx + 245, cy + 195);
+check(previewPx[3] > 0 && previewPx[0] > previewPx[2], `fill shows while drawing (rgba ${previewPx.join(',')})`);
+await page.mouse.click(cx + 270, cy + 210);
+await page.keyboard.press('Escape');
+await page.keyboard.press('s');
+await page.evaluate(() => window._app._setPen('fillShapes', false, true));
+const overlapPx = await pixel(cx + 175, cy + 130);
+const soloPx = await pixel(cx + 95, cy + 145);   // off the grid lines (every 40px here)
+check(overlapPx[3] > 0 && overlapPx.every((v, i) => Math.abs(v - soloPx[i]) <= 3),
+  `overlap stays filled, same colour (overlap ${overlapPx.join(',')} vs ${soloPx.join(',')})`);
+
 // Changing colours never touches existing geometry; "Apply drawing style" does.
 await page.evaluate(() => {
   const a = window._app, ly = a.project.activeLayer();

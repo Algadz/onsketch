@@ -175,28 +175,52 @@ export class Renderer {
       if (!groups.has(key)) groups.set(key, { fill: st.fill, opacity: st.fillOpacity, ents: [] });
       groups.get(key).ents.push(e);
     }
-    if (!groups.size) return;
-    const ctx = this.ctx, v = this.view;
     for (const g of groups.values()) {
       const { loops, circles } = findClosedProfiles(g.ents);
-      if (!loops.length && !circles.length) continue;
-      ctx.save();
-      ctx.beginPath();
-      for (const loop of loops) {
-        loop.forEach((p, i) => { const q = v.worldToScreen(p); if (i) ctx.lineTo(q.x, q.y); else ctx.moveTo(q.x, q.y); });
-        ctx.closePath();
-      }
-      for (const c of circles) {
-        const q = v.worldToScreen(c.center);
-        ctx.moveTo(q.x + c.r * v.zoom, q.y);
-        ctx.arc(q.x, q.y, c.r * v.zoom, 0, TAU);
-        ctx.closePath();
-      }
-      ctx.fillStyle = withAlpha(g.fill === INK ? this.theme.ink : g.fill, g.opacity);
-      ctx.fill('evenodd');
-      ctx.restore();
+      this._fillUnion(loops, circles.map(c => ({ center: c.center, r: c.r })), g.fill, g.opacity);
     }
   }
+
+  /** Fills closed outlines as a union: every outline is wound the same
+   *  way and filled non-zero, so overlapping shapes stay coloured (no
+   *  cancelled overlap, no darker double coat). Holes are only made by
+   *  the Fill tool, on purpose. */
+  _fillUnion(loops, circles, color, opacity) {
+    if (!loops.length && !circles.length) return;
+    const ctx = this.ctx, v = this.view;
+    ctx.save();
+    ctx.beginPath();
+    for (const loop of loops) {
+      let pts = loop.map(p => v.worldToScreen(p));
+      let area = 0;
+      for (let i = 0; i < pts.length; i++) {
+        const p = pts[i], q = pts[(i + 1) % pts.length];
+        area += p.x * q.y - q.x * p.y;
+      }
+      if (area < 0) pts = pts.reverse();
+      pts.forEach((q, i) => { if (i) ctx.lineTo(q.x, q.y); else ctx.moveTo(q.x, q.y); });
+      ctx.closePath();
+    }
+    for (const c of circles) {
+      const q = v.worldToScreen(c.center);
+      ctx.moveTo(q.x + c.r * v.zoom, q.y);
+      ctx.arc(q.x, q.y, c.r * v.zoom, 0, TAU, false);   // same winding as the loops
+      ctx.closePath();
+    }
+    ctx.fillStyle = withAlpha(color === INK ? this.theme.ink : color, opacity);
+    ctx.fill('nonzero');
+    ctx.restore();
+  }
+
+  /** Fill preview while drawing: closed preview paths, plus circles when
+   *  the circle is the shape being drawn. */
+  drawPreviewFill(prev, color, opacity, fillCircles) {
+    const loops = (prev.paths || []).filter(p => p.length > 3
+      && Math.abs(p[0].x - p[p.length - 1].x) < 1e-9 && Math.abs(p[0].y - p[p.length - 1].y) < 1e-9)
+      .map(p => p.slice(0, -1));
+    this._fillUnion(loops, fillCircles ? (prev.circles || []) : [], color, opacity);
+  }
+
 
   drawSnapMarker(snap) {
     if (!snap) return;
@@ -213,11 +237,11 @@ export class Renderer {
     ctx.restore();
   }
 
-  drawTempPath(pathPoints, dashed=false) {
+  drawTempPath(pathPoints, dashed=false, color=null) {
     if (!pathPoints || pathPoints.length < 2) return;
     const v = this.view, ctx = this.ctx;
     ctx.save();
-    ctx.strokeStyle = this.theme.preview; ctx.lineWidth = 1.2;
+    ctx.strokeStyle = color ? (color === INK ? this.theme.ink : color) : this.theme.preview; ctx.lineWidth = color ? 1.6 : 1.2;
     if (dashed) ctx.setLineDash([5, 4]);
     ctx.beginPath();
     const a = v.worldToScreen(pathPoints[0]);
@@ -230,12 +254,12 @@ export class Renderer {
     ctx.restore();
   }
 
-  drawTempCircle(center, radius) {
+  drawTempCircle(center, radius, color=null) {
     const v = this.view, ctx = this.ctx;
     const c = v.worldToScreen(center);
     ctx.save();
-    ctx.strokeStyle = this.theme.preview; ctx.lineWidth = 1.2;
-    ctx.setLineDash([5, 4]);
+    ctx.strokeStyle = color ? (color === INK ? this.theme.ink : color) : this.theme.preview; ctx.lineWidth = color ? 1.6 : 1.2;
+    if (!color) ctx.setLineDash([5, 4]);
     ctx.beginPath();
     ctx.arc(c.x, c.y, radius * v.zoom, 0, TAU);
     ctx.stroke();

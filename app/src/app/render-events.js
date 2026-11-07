@@ -1,4 +1,4 @@
-import { toolDef } from '../ui/tool-defs.js';
+import { DRAW_TOOLS, toolDef } from '../ui/tool-defs.js';
 import { Arc, Circle, Line, Point } from '../core/entities.js';
 import { SelectTool } from '../tools/select.js';
 import { ArcTool, CenterLineTool, CenterRectangleTool, CircleTool, HexagonTool, LineTool, PointTool, RectangleTool, ThreePointCircleTool } from '../tools/draw.js';
@@ -28,9 +28,15 @@ export class RenderEventsMixin {
 
     const prev = this.tool.getPreview && this.tool.getPreview();
     if (prev) {
-      if (prev.paths)      for (const p of prev.paths) this.renderer.drawTempPath(p, prev.dashed);
+      // Drawing tools preview in the drawing style: fill colour (when
+      // "Outline + fill" is on) and stroke colour (in Colors mode).
+      const drawing = DRAW_TOOLS.has(this.toolName) && !this.constructionMode && this.pen;
+      const circleTool = this.toolName === 'circle' || this.toolName === 'threePointCircle';
+      const stroke = drawing && this.colorMode === 'style' ? this.pen.color : null;
+      if (drawing && this.pen.fillShapes) this.renderer.drawPreviewFill(prev, this.pen.fillColor, this.pen.fillOpacity, circleTool);
+      if (prev.paths)      for (const p of prev.paths) this.renderer.drawTempPath(p, prev.dashed, stroke);
       if (prev.dashedPaths) for (const p of prev.dashedPaths) this.renderer.drawTempPath(p, true);
-      if (prev.circles)    for (const c of prev.circles) this.renderer.drawTempCircle(c.center, c.r);
+      if (prev.circles)    for (const c of prev.circles) this.renderer.drawTempCircle(c.center, c.r, circleTool ? stroke : null);
       if (prev.arcs)       for (const a of prev.arcs) this.renderer.drawTempArc(a.center, a.r, a.a0, a.a1, !!a.clockwise);
       if (prev.points)     for (const p of prev.points) this.renderer.drawTempPoint(p);
       if (prev.box)        this.renderer.drawSelectionBox(prev.box);
