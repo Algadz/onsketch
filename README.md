@@ -49,6 +49,8 @@ cached modules after a deploy. `npm test` fails if the stamp is out of date.
   keep an equation, as in SolidWorks: `=D1/2 + 5mm`, `=width*2`,
   `=sqrt(D3^2 + D4^2)`. Equations are re-evaluated before every solve, in
   dependency order; cycles and unknown names are flagged, not applied.
+  Equations are global: when they change a value, every layer is solved, not
+  just the active one.
 - Editing a dimension shows its equation (Σ marks equation-driven labels).
 - The Equations window (Σ in the menu bar) lists global variables and all
   dimensions: rename them (references follow), edit equations, see values.

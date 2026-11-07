@@ -444,6 +444,42 @@ const joined = await page.evaluate(() => {
 });
 check(joined.coincident && joined.e7[0] === 40 && joined.e7[1] === 20, `free point dropped on a target connects (${JSON.stringify(joined)})`);
 
+// A global variable drives dimensions on every layer, not just the active one.
+await page.evaluate(() => {
+  const a = window._app, P = a.project.constructor;
+  const pt = (id, x, y, fixed = false) => ({ type: 'point', id, x, y, fixed });
+  a.project = P.fromJSON({ version: 3, activeLayerId: 'ly2', variables: [{ name: 'w', expr: '40' }],
+    layers: [{ id: 'ly1', name: 'Base' }, { id: 'ly2', name: 'Top' }],
+    sketches: [{ id: 's1', name: 'S', entities: [
+      { type: 'line', id: 'e3', layerId: 'ly1', p1: pt('e1', 0, 0, true), p2: pt('e2', 40, 0) },
+      { type: 'circle', id: 'e5', layerId: 'ly2', center: pt('e4', 0, 30, true), r: 10 }],
+    constraints: [
+      { id: 'c6', kind: 'fix', pointId: 'e1', x: 0, y: 0 },
+      { id: 'c7', kind: 'horizontal', lineId: 'e3', p1: 'e1', p2: 'e2' },
+      { id: 'c8', kind: 'distance', p1: 'e1', p2: 'e2', value: 40, name: 'D1', expr: 'w' },
+      { id: 'c9', kind: 'fix', pointId: 'e4', x: 0, y: 30 },
+      { id: 'c10', kind: 'radius', circleId: 'e5', value: 10, isDiameter: true, name: 'D2', expr: 'w/2' }] }] });
+  a._afterStateSwap(); a.commit({ diagnostics: 'sync' });
+  if (a.windows && !a.windows.isOpen('equations')) a.windows.toggle('equations', true);
+  a._refreshEquationsPanel();
+});
+const varInput = page.locator('#equations-body input[data-k="var-expr"]').first();
+await varInput.fill('3in');
+await varInput.press('Tab');
+const allLayers = await page.evaluate(() => {
+  const a = window._app, s = a.activeSketch();
+  const l = s.entities.find(e => e.id === 'e3'), c = s.entities.find(e => e.id === 'e5');
+  return { active: a.project.activeLayer().name, len: Math.hypot(l.p2.x - l.p1.x, l.p2.y - l.p1.y), dia: c.r * 2 };
+});
+check(allLayers.active === 'Top' && Math.abs(allLayers.len - 76.2) < 1e-6 && Math.abs(allLayers.dia - 38.1) < 1e-6,
+  `variable change updates every layer (${JSON.stringify(allLayers)})`);
+const undone = await page.evaluate(() => {
+  const a = window._app; a.undo();
+  const s = a.activeSketch(), l = s.entities.find(e => e.id === 'e3'), c = s.entities.find(e => e.id === 'e5');
+  return { len: Math.hypot(l.p2.x - l.p1.x, l.p2.y - l.p1.y), dia: c.r * 2 };
+});
+check(Math.abs(undone.len - 40) < 1e-6 && Math.abs(undone.dia - 20) < 1e-6, `undo restores every layer (${JSON.stringify(undone)})`);
+
 // Colour mode + theme toggles (end in Colors mode for the screenshot).
 await page.click('#menubar [data-action="theme"]');
 const prefs = await page.evaluate(() => ({ theme: document.documentElement.dataset.theme }));

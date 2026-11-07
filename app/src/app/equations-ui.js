@@ -19,12 +19,31 @@ export class EquationsMixin {
    *  Called before every commit / solve. */
   _applyEquations() {
     ensureDimensionNames(this.project);
+    let changed = 0;
     const errors = solveEquations(this.project, (c, v) => {
       if (c.kind === 'offsetDistance') this._setOffsetDistanceValue(c, v);
       else c.value = internalValue(c, v);
+      changed++;
     });
     if (errors) document.getElementById('status-hint').textContent = `${errors} equation error${errors > 1 ? 's' : ''}: see the Equations window.`;
-    return errors;
+    return { errors, changed };
+  }
+
+  /** Equations are global: when they change dimension values, solve once
+   *  with every layer editable so the change reaches geometry on all
+   *  layers, not just the active one. Groups that can't be solved stay as
+   *  they were. */
+  _solveAllLayers() {
+    const sketch = this.activeSketch();
+    if (!sketch) return;
+    this.project.editAllLayers = true;
+    try {
+      this.solver.solve(sketch, this.project.sketches, [], { diagnostics: false, revertOnFailure: true });
+      for (const e of sketch.entities) if (e.syncEnds) e.syncEnds();
+    } finally {
+      this.project.editAllLayers = false;
+      this.project.syncLocks();
+    }
   }
 
   /**

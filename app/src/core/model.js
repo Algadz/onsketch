@@ -204,6 +204,7 @@ export class Project {
   syncLocks() {
     const mark = (e, v) => { e.locked = v; for (const c of e.children()) mark(c, v); };
     for (const s of this.sketches) for (const e of s.entities) mark(e, false);
+    if (this.editAllLayers) return;     // set briefly while equations update every layer
     for (const s of this.sketches) {
       for (const e of s.entities) if (this.layerOf(e).id !== this.activeLayerId) mark(e, true);
     }

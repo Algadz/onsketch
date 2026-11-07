@@ -4,7 +4,9 @@ export class SolveMixin {
 
   /* ---- Solving ---- */
   commit(options = {}) {
-    this._applyEquations();
+    // Equation changes (variables, formulas) reach every layer, and are
+    // solved before the undo snapshot so undo restores a consistent state.
+    if (this._applyEquations().changed) this._solveAllLayers();
     const diagnostics = options.diagnostics || 'defer';
     const sketch = this.activeSketch();
     const activeIds = options.activeIds
