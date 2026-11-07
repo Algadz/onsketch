@@ -2,7 +2,6 @@ import { LINE_STYLES, LINE_WEIGHTS, PALETTE } from '../core/style.js';
 import { clamp } from '../core/math.js';
 import { ACTION_ICONS, DRAW_TOOLS, TOOLS, TOOL_ICONS, WINDOW_ICONS, toolDef } from '../ui/tool-defs.js';
 import { WindowManager } from '../ui/windows.js';
-import { FILL_CURSORS } from '../ui/cursors.js';
 
 /* =============== APP CHROME ====================================
    Menu bar, tool options bar, and the floating Tools and Colors
@@ -175,8 +174,7 @@ export class ChromeMixin {
     } else if (t.id === 'fill') {
       html += sep + `<span class="seg"><button class="${this.fillErase ? '' : 'on'}" data-opt="fill-mode">Fill</button><button class="${this.fillErase ? 'on' : ''}" data-opt="erase-mode">Erase fill</button></span>`;
       html += `<label class="opt">Colour <i class="opt-sw" style="--sw:${p.fillColor}"></i></label>`;
-      html += `<label class="opt">Cursor <select data-opt="cursor">${Object.entries(FILL_CURSORS).map(([k, v]) => `<option value="${k}"${this.fillCursorDesign === k ? ' selected' : ''}>${v}</option>`).join('')}</select></label>`;
-      html += sep + '<span class="opt-hint">Click an area: a closed region is filled; anywhere else fills the background.</span>';
+      html += sep + '<span class="opt-hint">Click an area of the active layer: a region closed by its shapes is filled; anywhere else fills the background. Other layers are ignored.</span>';
     }
     bar.innerHTML = html;
 
@@ -187,10 +185,6 @@ export class ChromeMixin {
     }));
     bar.querySelectorAll('[data-opt]').forEach(el => {
       const k = el.dataset.opt;
-      if (k === 'cursor') {
-        el.addEventListener('change', () => { this.fillCursorDesign = el.value; this._savePrefs(); this._updateCanvasCursor(); });
-        return;
-      }
       if (k === 'sides') {
         el.addEventListener('input', () => {
           const n = Math.round(parseFloat(el.value));

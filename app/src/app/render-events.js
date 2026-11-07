@@ -59,12 +59,12 @@ export class RenderEventsMixin {
     }
   }
 
-  /** Canvas cursor for the active tool. The Fill tool shows the chosen
-   *  fill cursor in the current fill colour (with × in erase mode). */
+  /** Canvas cursor for the active tool. The Fill tool shows a paint drop
+   *  in the current fill colour (with × in erase mode). */
   _updateCanvasCursor() {
     const name = this.toolName;
     this.canvas.style.cursor = name === 'select' ? 'default'
-      : name === 'fill' ? fillCursor(this.fillCursorDesign, this.pen?.fillColor, this.fillErase)
+      : name === 'fill' ? fillCursor(this.pen?.fillColor, this.fillErase)
       : 'crosshair';
   }
 

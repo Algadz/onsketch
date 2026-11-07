@@ -16,7 +16,7 @@ const DEFAULT_PEN = { lineWidth: 1.4, lineStyle: 'solid', fillColor: '#1f7ad6', 
    colours of their own.
 
    Also owns per-browser preferences: theme, dimension visibility, the
-   drawing style (line weight / type, fill colour) and the fill cursor.
+   drawing style (line weight / type, fill colour).
    ============================================================ */
 export class LayersPanelMixin {
   _setupLayersPanel() {
@@ -52,7 +52,6 @@ export class LayersPanelMixin {
     const saved = prefs.pen || {};
     this.pen = { ...DEFAULT_PEN };
     for (const k of Object.keys(DEFAULT_PEN)) if (saved[k] !== undefined) this.pen[k] = saved[k];
-    this.fillCursorDesign = prefs.fillCursor || 'bucket';
     this.fillErase = false;
     this._penChanged(false);
     this.setTheme(prefs.theme || (systemDark ? 'dark' : 'light'), false);
@@ -61,7 +60,7 @@ export class LayersPanelMixin {
   }
   _savePrefs() {
     try {
-      localStorage.setItem(PREFS_KEY, JSON.stringify({ theme: this.themeName, pen: this.pen, fillCursor: this.fillCursorDesign, showDimensions: this.showDimensions, showDimNames: !!this.showDimNames }));
+      localStorage.setItem(PREFS_KEY, JSON.stringify({ theme: this.themeName, pen: this.pen, showDimensions: this.showDimensions, showDimNames: !!this.showDimNames }));
     } catch { /* storage unavailable */ }
   }
   setTheme(name, save = true) {

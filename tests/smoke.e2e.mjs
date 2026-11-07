@@ -257,9 +257,18 @@ const after2 = await page.evaluate((id) => {
 }, lockDrag.id);
 check(after2.p[0] === lockDrag.p[0] && after2.p[1] === lockDrag.p[1], `inactive layer did not move during drag (${JSON.stringify({ before: lockDrag.p, after: after2 })})`);
 
-// Fill tool: fill the Layer 1 rectangle (boundary on another layer), then the background, then erase.
+// Fill tool is blind to other layers: with Layer 2 active, clicking inside
+// Layer 1's rectangle finds no region there, so it fills the background.
 await page.evaluate(() => window._app._setPen('lineStyle', 'solid', true));
 await page.click('.palette .sw[data-c="#8a4fd1"]', { button: 'right' });
+await page.keyboard.press('b');
+await page.mouse.click(cx - 120, cy - 20);
+const blind = await page.evaluate(() => ({ fills: window._app.activeSketch().fills.length, bg: window._app.project.background }));
+check(blind.fills === 0 && blind.bg === '#8a4fd1', `fill ignores other layers' shapes (${JSON.stringify(blind)})`);
+await page.evaluate(() => window._app.undo());
+
+// On Layer 1 the same click fills its rectangle; then background; then erase.
+await page.click('#layer-list .lyr-row:last-child');
 await page.keyboard.press('b');
 await page.mouse.click(cx - 120, cy - 20);
 const bucket = await page.evaluate(() => {

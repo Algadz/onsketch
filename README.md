@@ -29,16 +29,17 @@ cached modules after a deploy. `npm test` fails if the stamp is out of date.
 - **Options bar** (second row): settings for the active tool, as in Paint.NET.
   Line weight, line type and construction while drawing; Mirror, Offset,
   *Apply line style* and *Pick line style* with Select; step-by-step help for
-  Smart Dimension; Fill / Erase and the cursor design for the Fill tool.
+  Smart Dimension; Fill / Erase for the Fill tool.
 - **Floating windows** over the canvas, dragged by their title bar and
   remembered per browser: Tools, Colors, Layers, Properties (selection,
   relations, dimensions), Equations. *Reset window layout* puts them back.
 - **Line colour always shows state**, as in SolidWorks: blue under-defined,
   black fully defined, red over-defined, pink construction, orange selected.
 - **Colors** window: the Fill tool's colour and opacity. Shapes are never
-  filled when drawn; the Fill tool (B) fills the area you click (a closed
-  region, or the background anywhere else). Its cursor shows the fill colour;
-  pick Bucket, Crosshair or Drop in the options bar.
+  filled when drawn; the Fill tool (B) fills the area you click, using only
+  the active layer's shapes (a region they close, or the background anywhere
+  else); other layers are ignored. Its cursor is a paint drop in the fill
+  colour, pointing at the click spot.
 
 ## Dimensions, units and equations
 

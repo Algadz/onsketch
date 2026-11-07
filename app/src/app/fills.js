@@ -2,16 +2,20 @@ import { newId } from '../core/entities.js';
 import { findFaceAt, regionContains } from '../core/regions.js';
 
 /* =============== FILL TOOL =====================================
-   Click inside any closed region made by existing geometry, including
-   regions bounded by several shapes that share or cross edges. The
-   fill stores the entities around the region and a point inside it,
-   so it follows the geometry when it moves. Boundaries come from every
-   visible, non-construction line / arc / circle; the fill itself lives
-   on the active layer.
+   Click inside any closed region made by the active layer's shapes,
+   including regions bounded by several shapes that share or cross
+   edges. Other layers are ignored entirely. The fill stores the
+   entities around the region and a point inside it, so it follows the
+   geometry when it moves. Clicking outside every region fills the
+   background.
    ============================================================ */
 export class FillsMixin {
+  /** Shapes the Fill tool sees: lines, arcs and circles on the active
+   *  layer only. Other layers are invisible to it, so their shapes never
+   *  bound or split a region. */
   _fillBoundaryEntities(sketch) {
-    return sketch.entities.filter(e => !e.construction && this.isEntityVisible(e)
+    const layerId = this.project.activeLayerId;
+    return sketch.entities.filter(e => !e.construction && e.layerId === layerId
       && (e.constructor.kind === 'line' || e.constructor.kind === 'arc' || e.constructor.kind === 'circle'));
   }
 
