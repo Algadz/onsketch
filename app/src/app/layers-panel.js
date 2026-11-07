@@ -1,24 +1,22 @@
 import { cleanStyle } from '../core/style.js';
-import { getTheme, INK } from '../render/theme.js';
+import { getTheme } from '../render/theme.js';
 import { uiIcon } from '../ui/icons.js';
 
 const PREFS_KEY = 'onsketch:prefs';
 const esc = (t) => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-/** Drawing style used by the tools, like Paint.NET's palette: stroke
- *  (primary) and fill (secondary) colours plus line settings. */
-const DEFAULT_PEN = {
-  color: INK, lineWidth: 1.4, lineStyle: 'solid',
-  fillColor: '#1f7ad6', fillOpacity: 0.35, fillShapes: false,
-};
+/** Drawing style used by the tools: line weight and line type for new
+ *  geometry, and the colour the Fill tool paints with. Stroke colour is
+ *  never chosen: it always shows the geometry's state. */
+const DEFAULT_PEN = { lineWidth: 1.4, lineStyle: 'solid', fillColor: '#1f7ad6', fillOpacity: 0.35 };
 
 /* =============== LAYERS + STYLE PANELS =========================
    Right-hand sidebar. "Layers" lists project layers top-most first
    (as in Paint.NET): visibility, lock, opacity, order. Layers carry no
    colours of their own.
 
-   Also owns per-browser preferences: theme, colour mode, dimension
-   visibility and the drawing style (pen) used for new shapes.
+   Also owns per-browser preferences: theme, dimension visibility, the
+   drawing style (line weight / type, fill colour) and the fill cursor.
    ============================================================ */
 export class LayersPanelMixin {
   _setupLayersPanel() {
@@ -51,17 +49,19 @@ export class LayersPanelMixin {
     let prefs = {};
     try { prefs = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}') || {}; } catch { prefs = {}; }
     const systemDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-    this.pen = { ...DEFAULT_PEN, ...(prefs.pen || {}) };
+    const saved = prefs.pen || {};
+    this.pen = { ...DEFAULT_PEN };
+    for (const k of Object.keys(DEFAULT_PEN)) if (saved[k] !== undefined) this.pen[k] = saved[k];
+    this.fillCursorDesign = prefs.fillCursor || 'bucket';
     this.fillErase = false;
     this._penChanged(false);
     this.setTheme(prefs.theme || (systemDark ? 'dark' : 'light'), false);
-    this.setColorMode(prefs.colorMode === 'status' ? 'status' : 'style', false);
     this.setDimensionsVisible(prefs.showDimensions !== false, false);
     this.showDimNames = !!prefs.showDimNames;
   }
   _savePrefs() {
     try {
-      localStorage.setItem(PREFS_KEY, JSON.stringify({ theme: this.themeName, colorMode: this.colorMode, pen: this.pen, showDimensions: this.showDimensions, showDimNames: !!this.showDimNames }));
+      localStorage.setItem(PREFS_KEY, JSON.stringify({ theme: this.themeName, pen: this.pen, fillCursor: this.fillCursorDesign, showDimensions: this.showDimensions, showDimNames: !!this.showDimNames }));
     } catch { /* storage unavailable */ }
   }
   setTheme(name, save = true) {
@@ -73,21 +73,11 @@ export class LayersPanelMixin {
     if (save) this._savePrefs();
     this.requestRender();
   }
-  setColorMode(mode, save = true) {
-    this.colorMode = mode === 'status' ? 'status' : 'style';
-    this.renderer.colorMode = this.colorMode;
-    const b = document.querySelector('#menubar [data-action="color-mode"]');
-    if (b) b.classList.toggle('on', this.colorMode === 'status');
-    if (save) this._savePrefs();
-    this.requestRender();
-  }
+
 
   /** Entity style handed to new geometry. */
   _penStyle() {
-    const p = this.pen;
-    const st = { color: p.color, lineWidth: p.lineWidth, lineStyle: p.lineStyle };
-    if (p.fillShapes) { st.fill = p.fillColor; st.fillOpacity = p.fillOpacity; }
-    return cleanStyle(st);
+    return cleanStyle({ lineWidth: this.pen.lineWidth, lineStyle: this.pen.lineStyle });
   }
   _penChanged(save = true) {
     if (this.project) this.project.drawStyle = this._penStyle();

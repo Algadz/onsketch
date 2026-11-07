@@ -43,12 +43,12 @@ test('removeLayer deletes its geometry and keeps at least one layer', () => {
   assert.ok(!p.removeLayer(keep.id));
 });
 
-test('layers and entity styles survive a JSON round trip', () => {
+test('layers and entity line styles survive a JSON round trip', () => {
   const p = new Project(); const s = p.addSketch('A');
   const ly = p.addLayer('Holes');
   ly.locked = true; ly.opacity = 0.5;
   const c = new Circle(new Point(0, 0), 3);
-  c.style = { color: '#14946b', lineWidth: 3, lineStyle: 'center' };
+  c.style = { lineWidth: 3, lineStyle: 'center' };
   s.addEntity(c);
   const q = Project.fromJSON(JSON.parse(JSON.stringify(p.toJSON())));
   const ly2 = q.layer(ly.id);
@@ -60,17 +60,30 @@ test('layers and entity styles survive a JSON round trip', () => {
   assert.equal(q.activeLayerId, ly.id);
 });
 
-test('files from when layers had colours move that look onto their entities', () => {
+test('older files: stroke colours are dropped, shape and layer fills become Fill-tool fills', () => {
   const pt = (id, x, y) => ({ type: 'point', id, x, y });
-  const v3 = { version: 3, layers: [{ id: 'ly1', name: 'Red', color: '#d63a3a', lineWidth: 3, lineStyle: 'dashed', fill: '#e07b00', fillOpacity: 0.4 }],
+  const ln = (id, a, b, extra = {}) => ({ type: 'line', id, layerId: 'ly1', p1: a, p2: b, ...extra });
+  const A = pt('e1', 0, 0), B = pt('e2', 10, 0), Cc = pt('e3', 10, 10), D = pt('e4', 0, 10);
+  const filled = { style: { color: '#14946b', fill: '#e07b00', fillOpacity: 0.4, lineWidth: 2 } };
+  const v3 = { version: 3, layers: [{ id: 'ly1', name: 'Red', color: '#d63a3a', lineWidth: 3, lineStyle: 'dashed', fill: '#8a4fd1', fillOpacity: 0.5 }],
     sketches: [{ id: 's1', name: 'S', entities: [
-      { type: 'circle', id: 'e2', layerId: 'ly1', center: pt('e1', 0, 0), r: 2 },
-      { type: 'circle', id: 'e4', layerId: 'ly1', style: { color: '#14946b' }, center: pt('e3', 5, 0), r: 2 }], constraints: [] }] };
+      ln('e5', A, B, filled), ln('e6', B, Cc, filled), ln('e7', Cc, D, filled), ln('e8', D, A, filled),
+      { type: 'circle', id: 'e10', layerId: 'ly1', center: pt('e9', 30, 0), r: 2 }], constraints: [] }] };
   const p = Project.fromJSON(v3);
-  const [a, b] = p.sketches[0].entities;
-  assert.deepEqual(a.style, { color: '#d63a3a', lineWidth: 3, lineStyle: 'dashed', fill: '#e07b00', fillOpacity: 0.4 });
-  assert.deepEqual(b.style, { color: '#14946b' });
-  assert.equal(p.layers[0].color, undefined);
+  const [e5] = p.sketches[0].entities;
+  const circle = p.sketches[0].entities[4];
+  assert.deepEqual(e5.style, { lineWidth: 2 });
+  assert.deepEqual(circle.style, { lineWidth: 3, lineStyle: 'dashed' });
+  const fills = p.sketches[0].fills;
+  assert.equal(fills.length, 2);
+  const sq = fills.find(f => f.color === '#e07b00');
+  assert.equal(sq.opacity, 0.4); assert.deepEqual(new Set(sq.ids), new Set(['e5', 'e6', 'e7', 'e8']));
+  assert.ok(sq.seed.x > 0 && sq.seed.x < 10);
+  const disc = fills.find(f => f.color === '#8a4fd1');
+  assert.deepEqual(disc.ids, ['e10']);
+  assert.ok(Math.hypot(disc.seed.x - 30, disc.seed.y) < 2);
+  const ids = new Set([...p.sketches[0].entities.map(e => e.id), ...fills.map(f => f.id)]);
+  assert.equal(ids.size, 5 + 2, 'new fill ids do not collide');
 });
 
 test('v2 files without layers migrate onto a default layer', () => {
@@ -81,18 +94,15 @@ test('v2 files without layers migrate onto a default layer', () => {
   assert.equal(p.sketches[0].entities[0].layerId, p.layers[0].id);
 });
 
-test('resolveStyle fills in defaults; fill "none" means no fill', () => {
-  const d = resolveStyle({ style: null });
-  assert.equal(d.color, '#111418'); assert.equal(d.fill, null); assert.equal(d.lineStyle, 'solid');
-  const r = resolveStyle({ style: { color: '#d63a3a', fill: 'none', lineWidth: 3 } });
-  assert.equal(r.color, '#d63a3a'); assert.equal(r.fill, null); assert.equal(r.lineWidth, 3);
-  assert.equal(resolveStyle({ style: { fill: '#e07b00' } }).fill, '#e07b00');
+test('resolveStyle fills in line defaults', () => {
+  assert.deepEqual(resolveStyle({ style: null }), { lineWidth: 1.4, lineStyle: 'solid' });
+  assert.deepEqual(resolveStyle({ style: { lineWidth: 3 } }), { lineWidth: 3, lineStyle: 'solid' });
 });
 
-test('cleanStyle drops junk and empty objects', () => {
+test('cleanStyle keeps only line weight and line type', () => {
   assert.equal(cleanStyle({}), null);
-  assert.equal(cleanStyle({ color: 'red', lineStyle: 'wavy' }), null);
-  assert.deepEqual(cleanStyle({ color: '#AABBCC', lineWidth: 2, bogus: 1 }), { color: '#AABBCC', lineWidth: 2 });
+  assert.equal(cleanStyle({ color: '#AABBCC', fill: '#112233', lineStyle: 'wavy' }), null);
+  assert.deepEqual(cleanStyle({ color: '#AABBCC', lineWidth: 2, lineStyle: 'dashed', bogus: 1 }), { lineWidth: 2, lineStyle: 'dashed' });
 });
 
 test('dash patterns and alpha helper', () => {
@@ -170,9 +180,9 @@ test('geometry on a locked layer does not move when other layers are solved', ()
 
 test('new entities take the drawing style; loaded ones keep their own', () => {
   const p = new Project(); const s = p.addSketch('A');
-  p.drawStyle = { color: '#14946b', lineWidth: 2 };
+  p.drawStyle = { lineWidth: 2 };
   const c = new Circle(new Point(0, 0), 1); s.addEntity(c);
-  assert.deepEqual(c.style, { color: '#14946b', lineWidth: 2 });
+  assert.deepEqual(c.style, { lineWidth: 2 });
   c.style = null;
   const q = Project.fromJSON(JSON.parse(JSON.stringify(p.toJSON())));
   assert.equal(q.sketches[0].entities[0].style, null);

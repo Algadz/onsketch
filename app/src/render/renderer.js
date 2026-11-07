@@ -2,7 +2,7 @@ import { EPS, TAU, angleArcFromPoints, angleSectorForValue, drawDirectedArcPath,
 import { Arc, Circle, Line, Point } from '../core/entities.js';
 import { resolveStyle, dashFor, withAlpha } from '../core/style.js';
 import { getTheme, INK } from './theme.js';
-import { boundedFaces, findFaceAt, geometryKey, interiorPoint } from '../core/regions.js';
+import { findFaceAt, geometryKey, interiorPoint } from '../core/regions.js';
 
 export class Renderer {
   constructor(canvas, view) {
@@ -12,9 +12,7 @@ export class Renderer {
     this.dpr = window.devicePixelRatio || 1;
     this.lastDimRects = [];
     this._regionCache = new Map();   // fill id → { key, region }
-    this._faceCache = new Map();     // fill group + geometry → faces
     this.theme = getTheme('light');
-    this.colorMode = 'style';      // 'style' (own colours) | 'status' (SolidWorks scheme)
   }
   resize() {
     const r = this.canvas.getBoundingClientRect();
@@ -77,30 +75,20 @@ export class Renderer {
     ctx.stroke();
   }
 
-  /** Stroke style for one entity.
-   *  colorMode 'status' is the SolidWorks scheme (blue under-defined,
-   *  black fully defined); 'style' uses each entity's own colour. Errors,
-   *  construction, hover and selection read the same in both. */
+  /** Stroke style for one entity. Colour always shows state, as in
+   *  SolidWorks: blue under-defined, black fully defined, red over-defined,
+   *  pink construction, orange hover / selection, grey on other sketches
+   *  and for vertices on locked layers. Weight and line type come from
+   *  the entity's own style. */
   styleFor(entity, isActive, owner = null) {
     const t = this.theme;
     const st = resolveStyle(owner && !entity.style ? owner : entity);
     const construction = entity.construction || (owner && owner.construction);
-    let color;
-    if (this.colorMode === 'style' && owner && entity instanceof Point) {
-      // Vertices keep the status colours so under-defined geometry stays
-      // visible while strokes show their own colour.
-      color = entity.status === 'fully' ? t.fully : entity.status === 'over' ? t.over : t.under;
-      if (!isActive) color = t.inactive;
-    } else if (this.colorMode === 'style') {
-      color = st.color === INK ? t.ink : st.color;
-      if (entity.status === 'over') color = t.over;
-    } else {
-      color = t.under;
-      if (entity.status === 'fully') color = t.fully;
-      if (entity.status === 'over')  color = t.over;
-      if (!isActive) color = t.inactive;
-    }
-    if (entity.locked && entity instanceof Point) color = t.inactive;   // locked layer: vertices greyed
+    let color = t.under;
+    if (entity.status === 'fully') color = t.fully;
+    if (entity.status === 'over')  color = t.over;
+    if (!isActive) color = t.inactive;
+    if (entity.locked && entity instanceof Point) color = t.inactive;
     if (construction)    color = t.construction;
     if (entity.hover)    color = t.hover;
     if (entity.selected) color = t.selected;
@@ -112,6 +100,7 @@ export class Renderer {
       dash: construction ? [6, 4] : dashFor(st.lineStyle, width),
     };
   }
+
 
   /** Draws fills, then strokes, layer by layer (bottom to top). Hidden
    *  layers and sketches are skipped; layer opacity multiplies in. */
@@ -138,7 +127,6 @@ export class Renderer {
         const alpha = layer.opacity * (isActive ? 1 : 0.55);
         ctx.globalAlpha = alpha;
         for (const f of fills) this._drawRegionFill(f, byId);
-        this._drawFills(ents);
         for (const e of ents) {
           e.draw(ctx, v, this.styleFor(e, isActive));
           for (const c of e.children()) c.draw(ctx, v, this.styleFor(c, isActive, e));
@@ -177,70 +165,11 @@ export class Renderer {
     ctx.restore();
   }
 
-  /** Shape fills: entities with the same fill colour are grouped, and
-   *  every closed region they form (shared edges, crossings and all) is
-   *  filled as a union, so overlaps stay coloured. */
-  _drawFills(ents) {
-    const groups = new Map();
-    for (const e of ents) {
-      if (e.construction || e instanceof Point) continue;
-      const st = resolveStyle(e);
-      if (!st.fill) continue;
-      const key = st.fill + '|' + st.fillOpacity;
-      if (!groups.has(key)) groups.set(key, { key, fill: st.fill, opacity: st.fillOpacity, ents: [] });
-      groups.get(key).ents.push(e);
-    }
-    for (const g of groups.values()) {
-      const gk = g.key + '|' + geometryKey(g.ents);
-      let faces = this._faceCache.get(gk);
-      if (!faces) {
-        faces = boundedFaces(g.ents);
-        if (this._faceCache.size > 200) this._faceCache.clear();
-        this._faceCache.set(gk, faces);
-      }
-      this._fillUnion(faces, [], g.fill, g.opacity);
-    }
-  }
 
-  /** Fills closed outlines as a union: every outline is wound the same
-   *  way and filled non-zero, so overlapping shapes stay coloured (no
-   *  cancelled overlap, no darker double coat). Holes are only made by
-   *  the Fill tool, on purpose. */
-  _fillUnion(loops, circles, color, opacity) {
-    if (!loops.length && !circles.length) return;
-    const ctx = this.ctx, v = this.view;
-    ctx.save();
-    ctx.beginPath();
-    for (const loop of loops) {
-      let pts = loop.map(p => v.worldToScreen(p));
-      let area = 0;
-      for (let i = 0; i < pts.length; i++) {
-        const p = pts[i], q = pts[(i + 1) % pts.length];
-        area += p.x * q.y - q.x * p.y;
-      }
-      if (area < 0) pts = pts.reverse();
-      pts.forEach((q, i) => { if (i) ctx.lineTo(q.x, q.y); else ctx.moveTo(q.x, q.y); });
-      ctx.closePath();
-    }
-    for (const c of circles) {
-      const q = v.worldToScreen(c.center);
-      ctx.moveTo(q.x + c.r * v.zoom, q.y);
-      ctx.arc(q.x, q.y, c.r * v.zoom, 0, TAU, false);   // same winding as the loops
-      ctx.closePath();
-    }
-    ctx.fillStyle = withAlpha(color === INK ? this.theme.ink : color, opacity);
-    ctx.fill('nonzero');
-    ctx.restore();
-  }
 
-  /** Fill preview while drawing: closed preview paths, plus circles when
-   *  the circle is the shape being drawn. */
-  drawPreviewFill(prev, color, opacity, fillCircles) {
-    const loops = (prev.paths || []).filter(p => p.length > 3
-      && Math.abs(p[0].x - p[p.length - 1].x) < 1e-9 && Math.abs(p[0].y - p[p.length - 1].y) < 1e-9)
-      .map(p => p.slice(0, -1));
-    this._fillUnion(loops, fillCircles ? (prev.circles || []) : [], color, opacity);
-  }
+
+
+
 
 
   drawSnapMarker(snap) {

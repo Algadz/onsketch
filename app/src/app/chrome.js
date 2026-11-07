@@ -2,21 +2,22 @@ import { LINE_STYLES, LINE_WEIGHTS, PALETTE } from '../core/style.js';
 import { clamp } from '../core/math.js';
 import { ACTION_ICONS, DRAW_TOOLS, TOOLS, TOOL_ICONS, WINDOW_ICONS, toolDef } from '../ui/tool-defs.js';
 import { WindowManager } from '../ui/windows.js';
+import { FILL_CURSORS } from '../ui/cursors.js';
 
 /* =============== APP CHROME ====================================
    Menu bar, tool options bar, and the floating Tools and Colors
    windows (Layers and Properties content live in layers-panel.js
    and panels.js).
 
-   Colours work like Paint.NET: a primary (stroke) and secondary (fill)
-   colour that apply to the next shapes drawn. Left-click a swatch for
-   stroke, right-click for fill. Nothing here edits existing geometry;
-   that is an explicit "Apply drawing style" on the selection.
+   Line colours always show state (as in SolidWorks); the only colour
+   picked here is the Fill tool's. New geometry takes the current line
+   weight and line type; existing geometry changes only through an
+   explicit "Apply line style" on the selection.
    ============================================================ */
 export class ChromeMixin {
   _setupChrome() {
     // Menu bar icons + labels.
-    const labels = { grid: 'Grid', snap: 'Snap', dimensions: 'Dimensions', 'color-mode': 'Status colours' };
+    const labels = { grid: 'Grid', snap: 'Snap', dimensions: 'Dimensions' };
     document.querySelectorAll('#menubar [data-action]').forEach(b => {
       const a = b.dataset.action;
       b.innerHTML = (ACTION_ICONS[a] || '') + (labels[a] ? `<span class="btn-label">${labels[a]}</span>` : '');
@@ -60,7 +61,6 @@ export class ChromeMixin {
       case 'dimensions':   this.setDimensionsVisible(!this.showDimensions); break;
       case 'zoom-fit':     this.zoomFit(); break;
       case 'zoom-reset':   this.view.zoom = 4; this.view.panX = 0; this.view.panY = 0; this.requestRender(); break;
-      case 'color-mode':   this.setColorMode(this.colorMode === 'status' ? 'style' : 'status'); break;
       case 'theme':        this.setTheme(this.themeName === 'dark' ? 'light' : 'dark'); break;
       case 'reset-layout': this.windows.reset(); break;
       case 'apply-style':  this.applyDrawingStyleToSelection(); break;
@@ -104,42 +104,29 @@ export class ChromeMixin {
     body.querySelectorAll('[data-action]').forEach(b => b.addEventListener('click', () => this._runAction(b.dataset.action, b)));
   }
 
-  /* ---- Colors window ---- */
+  /** Colors window: the fill colour the Fill tool paints with. Stroke
+   *  colour isn't chosen; lines always show their state. */
   _refreshColorsPanel() {
     const body = document.getElementById('colors-body');
     if (!body) return;
     const p = this.pen;
-    const target = this.colorTarget === 'fill' ? 'fill' : 'stroke';
     body.innerHTML = `
       <div class="pc-wrap">
-        <div class="pc">
-          <label class="pc-sw pc-secondary${target === 'fill' ? ' target' : ''}" style="--sw:${p.fillColor}" title="Fill (secondary). Click to choose; right-click a swatch to set.">
-            <input type="color" value="${p.fillColor}" data-pen="fillColor"></label>
-          <label class="pc-sw pc-primary${target === 'stroke' ? ' target' : ''}" style="--sw:${p.color}" title="Stroke (primary). Click to choose; left-click a swatch to set.">
-            <input type="color" value="${p.color}" data-pen="color"></label>
-          <button class="pc-swap" title="Swap stroke and fill" aria-label="Swap stroke and fill">⇄</button>
-        </div>
-        <div class="pc-legend"><span><i style="--sw:${p.color}"></i>Stroke</span><span><i style="--sw:${p.fillColor}"></i>Fill</span></div>
+        <label class="pc-sw pc-fill" style="--sw:${p.fillColor}" title="Fill colour: click to choose any colour">
+          <input type="color" value="${p.fillColor}" data-pen="fillColor"></label>
+        <div class="pc-legend"><b>Fill colour</b><span>${p.fillColor.toUpperCase()}</span></div>
       </div>
       <div class="palette">
-        ${PALETTE.map(c => `<button class="sw" data-c="${c}" style="--sw:${c}" title="${c}: left-click stroke, right-click fill"></button>`).join('')}
+        ${PALETTE.map(c => `<button class="sw${c === p.fillColor ? ' on' : ''}" data-c="${c}" style="--sw:${c}" title="${c}"></button>`).join('')}
       </div>
-      <div class="prop-row"><label>fill opacity</label>
+      <div class="prop-row"><label>opacity</label>
         <div class="range-row"><input type="range" min="0.05" max="1" step="0.05" value="${p.fillOpacity}" data-pen="fillOpacity"><span>${Math.round(p.fillOpacity * 100)}%</span></div></div>
-      <div class="hint">For the next shapes and the Fill tool. Existing geometry keeps its colours.</div>`;
-    body.querySelectorAll('.pc-sw').forEach(l => l.addEventListener('pointerdown', () => {
-      this.colorTarget = l.classList.contains('pc-secondary') ? 'fill' : 'stroke';
-    }));
-    body.querySelectorAll('input[type=color][data-pen]').forEach(inp => {
-      inp.addEventListener('input', () => this._setPen(inp.dataset.pen, inp.value, false));
-      inp.addEventListener('change', () => this._setPen(inp.dataset.pen, inp.value, true));
-    });
-    body.querySelector('.pc-swap').addEventListener('click', () => {
-      const c = p.color; p.color = p.fillColor; p.fillColor = c;
-      this._penChanged(); this._refreshPenUI();
-    });
+      <div class="hint">Used by the Fill tool (B). Line colours show constraint status.</div>`;
+    const inp = body.querySelector('input[type=color]');
+    inp.addEventListener('input', () => this._setPen('fillColor', inp.value, false));
+    inp.addEventListener('change', () => this._setPen('fillColor', inp.value, true));
     body.querySelectorAll('.palette .sw').forEach(b => {
-      b.addEventListener('click', () => this._setPen('color', b.dataset.c, true));
+      b.addEventListener('click', () => this._setPen('fillColor', b.dataset.c, true));
       b.addEventListener('contextmenu', (e) => { e.preventDefault(); this._setPen('fillColor', b.dataset.c, true); });
     });
     const r = body.querySelector('input[type=range]');
@@ -148,9 +135,12 @@ export class ChromeMixin {
     r.addEventListener('change', () => this._setPen('fillOpacity', read(), true));
   }
 
+
+
   _setPen(key, value, final) {
     this.pen[key] = value;
     this._penChanged(final);
+    if (key === 'fillColor') this._updateCanvasCursor();
     if (final) this._refreshPenUI();
   }
   _refreshPenUI() {
@@ -168,10 +158,8 @@ export class ChromeMixin {
     let html = `<span class="opt-tool">${TOOL_ICONS[t.id] || ''}<b>${t.label}</b></span>`;
     const sep = '<span class="opt-sep"></span>';
     if (DRAW_TOOLS.has(t.id)) {
-      html += sep + `<label class="opt">Stroke <i class="opt-sw" style="--sw:${p.color}"></i></label>`;
-      html += `<label class="opt">Weight <select data-pen="lineWidth">${LINE_WEIGHTS.map(w => `<option value="${w}"${p.lineWidth === w ? ' selected' : ''}>${w} px</option>`).join('')}</select></label>`;
+      html += sep + `<label class="opt">Weight <select data-pen="lineWidth">${LINE_WEIGHTS.map(w => `<option value="${w}"${p.lineWidth === w ? ' selected' : ''}>${w} px</option>`).join('')}</select></label>`;
       html += `<label class="opt">Line <select data-pen="lineStyle">${Object.entries(LINE_STYLES).map(([k, v]) => `<option value="${k}"${p.lineStyle === k ? ' selected' : ''}>${v.label}</option>`).join('')}</select></label>`;
-      html += `<label class="opt">Fill <select data-pen="fillShapes"><option value="0"${p.fillShapes ? '' : ' selected'}>Outline only</option><option value="1"${p.fillShapes ? ' selected' : ''}>Outline + fill</option></select> <i class="opt-sw" style="--sw:${p.fillColor}"></i></label>`;
       html += sep + `<button class="tbtn toggle${this.constructionMode ? ' on' : ''}" data-opt="construction" title="Draw construction (reference) geometry">${ACTION_ICONS.construction}<span class="btn-label">Construction</span></button>`;
       if (t.id === 'hexagon') {
         html += sep + `<label class="opt">Sides <input type="number" min="3" max="64" step="1" value="${this.polygonSides}" data-opt="sides"></label>`;
@@ -179,25 +167,30 @@ export class ChromeMixin {
     } else if (t.id === 'select') {
       html += sep + `<button class="tbtn" data-opt="mirror">${ACTION_ICONS.mirror}<span class="btn-label">Mirror</span></button>`;
       html += `<button class="tbtn" data-opt="offset">${ACTION_ICONS.offset}<span class="btn-label">Offset</span></button>`;
-      html += sep + `<button class="tbtn" data-opt="apply-style" title="Give the selected entities the current stroke, line and fill settings">${ACTION_ICONS['apply-style']}<span class="btn-label">Apply drawing style</span></button>`;
-      html += `<button class="tbtn" data-opt="pick-style" title="Copy the selected entity's style into the drawing style">${ACTION_ICONS['pick-style']}<span class="btn-label">Pick style</span></button>`;
+      html += sep + `<button class="tbtn" data-opt="apply-style" title="Give the selected entities the current line weight and line type">${ACTION_ICONS['apply-style']}<span class="btn-label">Apply line style</span></button>`;
+      html += `<button class="tbtn" data-opt="pick-style" title="Copy the selected entity's line weight and line type">${ACTION_ICONS['pick-style']}<span class="btn-label">Pick line style</span></button>`;
       html += sep + '<span class="opt-hint">Click to select, Ctrl-click to add, drag a box to select many, drag geometry to move it.</span>';
     } else if (t.id === 'smartdim') {
       html += sep + '<span class="opt-hint"><b>1.</b> Click one or two entities &nbsp; <b>2.</b> Click to place the dimension &nbsp; <b>3.</b> Type a value, Enter. Click an existing dimension to edit it.</span>';
     } else if (t.id === 'fill') {
       html += sep + `<span class="seg"><button class="${this.fillErase ? '' : 'on'}" data-opt="fill-mode">Fill</button><button class="${this.fillErase ? 'on' : ''}" data-opt="erase-mode">Erase fill</button></span>`;
       html += `<label class="opt">Colour <i class="opt-sw" style="--sw:${p.fillColor}"></i></label>`;
-      html += sep + '<span class="opt-hint">Click inside a closed region; outside every region fills the background.</span>';
+      html += `<label class="opt">Cursor <select data-opt="cursor">${Object.entries(FILL_CURSORS).map(([k, v]) => `<option value="${k}"${this.fillCursorDesign === k ? ' selected' : ''}>${v}</option>`).join('')}</select></label>`;
+      html += sep + '<span class="opt-hint">Click an area: a closed region is filled; anywhere else fills the background.</span>';
     }
     bar.innerHTML = html;
 
     bar.querySelectorAll('select[data-pen]').forEach(sel => sel.addEventListener('change', () => {
       const k = sel.dataset.pen;
-      const v = k === 'lineWidth' ? parseFloat(sel.value) : k === 'fillShapes' ? sel.value === '1' : sel.value;
+      const v = k === 'lineWidth' ? parseFloat(sel.value) : sel.value;
       this._setPen(k, v, true);
     }));
     bar.querySelectorAll('[data-opt]').forEach(el => {
       const k = el.dataset.opt;
+      if (k === 'cursor') {
+        el.addEventListener('change', () => { this.fillCursorDesign = el.value; this._savePrefs(); this._updateCanvasCursor(); });
+        return;
+      }
       if (k === 'sides') {
         el.addEventListener('input', () => {
           const n = Math.round(parseFloat(el.value));
@@ -212,6 +205,7 @@ export class ChromeMixin {
         else if (k === 'fill-mode' || k === 'erase-mode') {
           this.fillErase = k === 'erase-mode';
           this._refreshOptionsBar();
+          this._updateCanvasCursor();
           document.getElementById('status-hint').textContent = (this.tool.hint && this.tool.hint()) || '';
         } else this._runAction(k);
       });
@@ -226,7 +220,7 @@ export class ChromeMixin {
   }
   applyDrawingStyleToSelection() {
     const targets = this._selectedTopEntities();
-    if (!targets.length) { document.getElementById('status-hint').textContent = 'Select entities first, then Apply drawing style.'; return; }
+    if (!targets.length) { document.getElementById('status-hint').textContent = 'Select entities first, then Apply line style.'; return; }
     const st = this._penStyle();
     for (const e of targets) e.style = st ? { ...st } : null;
     this.commit();
@@ -236,11 +230,8 @@ export class ChromeMixin {
     const e = this._selectedTopEntities()[0];
     if (!e || !e.style) return;
     const s = e.style;
-    if (s.color) this.pen.color = s.color;
     if (s.lineWidth) this.pen.lineWidth = s.lineWidth;
     if (s.lineStyle) this.pen.lineStyle = s.lineStyle;
-    if (s.fill && s.fill !== 'none') { this.pen.fillColor = s.fill; this.pen.fillShapes = true; } else this.pen.fillShapes = false;
-    if (Number.isFinite(s.fillOpacity)) this.pen.fillOpacity = s.fillOpacity;
     this._penChanged();
     this._refreshPenUI();
   }

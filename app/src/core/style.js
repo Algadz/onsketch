@@ -1,8 +1,10 @@
 /* =============== STYLE + LAYERS ================================
    Display attributes, kept separate from geometry and constraints.
 
-   Every entity carries its own style (`entity.style`), taken from the
-   drawing style when it was drawn, as in Paint.NET. Layers are display
+   Stroke colour always shows an entity's state (constraint status,
+   construction, selection), as in SolidWorks. An entity's own style is
+   only its line weight and line type, taken from the drawing style when
+   it was drawn. Colour is added by the Fill tool. Layers are display
    groups only: visibility, lock, opacity, order.
 
    Layers never affect solving (except that locked geometry is held
@@ -29,12 +31,15 @@ export const PALETTE = [
   '#e07b00', '#d63a3a', '#c2307a', '#8a4fd1', '#5b5fd6',
 ];
 
-export const STYLE_KEYS = ['color', 'lineWidth', 'lineStyle', 'fill', 'fillOpacity'];
+/** What an entity's own style may set. Stroke colour always comes from
+ *  the entity's state (constraint status, construction, selection);
+ *  colour is added only by the Fill tool. */
+export const STYLE_KEYS = ['lineWidth', 'lineStyle'];
 
 const isHex = (c) => typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c);
 
 /** Style of an entity that has none of its own. */
-export const DEFAULT_STYLE = { color: '#111418', lineWidth: 1.4, lineStyle: 'solid', fill: null, fillOpacity: 0.35 };
+export const DEFAULT_STYLE = { lineWidth: 1.4, lineStyle: 'solid' };
 
 /** A layer is a display group only: it carries no colours or line
  *  settings (those belong to each entity, set from the drawing style
@@ -58,26 +63,25 @@ export class Layer {
 export function cleanStyle(style) {
   if (!style || typeof style !== 'object') return null;
   const out = {};
-  if (isHex(style.color)) out.color = style.color;
   if (Number.isFinite(style.lineWidth) && style.lineWidth > 0) out.lineWidth = style.lineWidth;
   if (LINE_STYLES[style.lineStyle]) out.lineStyle = style.lineStyle;
-  if (style.fill === 'none' || isHex(style.fill)) out.fill = style.fill;
-  if (Number.isFinite(style.fillOpacity)) out.fillOpacity = Math.min(1, Math.max(0, style.fillOpacity));
   return Object.keys(out).length ? out : null;
 }
 
-/** Effective style for an entity: its own style over the defaults.
- *  `fill` resolves to a colour or null. */
+/** Effective line style for an entity: its own over the defaults. */
 export function resolveStyle(entity) {
   const s = entity?.style || {};
-  const fill = s.fill !== undefined ? s.fill : DEFAULT_STYLE.fill;
   return {
-    color: s.color ?? DEFAULT_STYLE.color,
     lineWidth: s.lineWidth ?? DEFAULT_STYLE.lineWidth,
     lineStyle: s.lineStyle ?? DEFAULT_STYLE.lineStyle,
-    fill: fill === 'none' ? null : (fill || null),
-    fillOpacity: s.fillOpacity ?? DEFAULT_STYLE.fillOpacity,
   };
+}
+
+/** Fill colour an older file gave an entity (shape fill or layer fill),
+ *  or null. Used once, on load, to turn it into a Fill-tool fill. */
+export function legacyFill(style) {
+  if (!style || !isHex(style.fill)) return null;
+  return { color: style.fill, opacity: Number.isFinite(style.fillOpacity) ? Math.min(1, Math.max(0, style.fillOpacity)) : 0.35 };
 }
 
 /** Dash array in screen pixels for a line style at a given width. */

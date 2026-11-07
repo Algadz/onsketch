@@ -1,7 +1,7 @@
 # OnSketch
 
 Browser-based parametric 2D sketcher: SolidWorks-style geometric constraints
-and dimensions, with Paint.NET-style layers, colours and a fill tool.
+and dimensions, with Paint.NET-style layers and a fill tool.
 
 - `index.html` is the landing page; `app/` is the editor.
 - No build step. `app/index.html` loads `app/src/main.js` as native ES modules,
@@ -25,18 +25,20 @@ cached modules after a deploy. `npm test` fails if the stamp is out of date.
 ## Interface
 
 - **Menu bar**: file and edit actions, project name, view toggles (grid, snap,
-  dimensions `M`, status colours, zoom, theme) and toggles for each window.
+  dimensions `M`, zoom, theme) and toggles for each window.
 - **Options bar** (second row): settings for the active tool, as in Paint.NET.
-  Line weight, line type, outline / outline + fill and construction while
-  drawing; Mirror, Offset, *Apply drawing style* and *Pick style* with Select;
-  step-by-step help for Smart Dimension; Fill / Erase for the Fill tool.
+  Line weight, line type and construction while drawing; Mirror, Offset,
+  *Apply line style* and *Pick line style* with Select; step-by-step help for
+  Smart Dimension; Fill / Erase and the cursor design for the Fill tool.
 - **Floating windows** over the canvas, dragged by their title bar and
   remembered per browser: Tools, Colors, Layers, Properties (selection,
   relations, dimensions), Equations. *Reset window layout* puts them back.
-- **Colors**: primary (stroke) and secondary (fill) colour. Left-click a
-  swatch for stroke, right-click for fill. They apply to the next shapes and
-  the Fill tool only; existing geometry changes only through *Apply drawing
-  style*.
+- **Line colour always shows state**, as in SolidWorks: blue under-defined,
+  black fully defined, red over-defined, pink construction, orange selected.
+- **Colors** window: the Fill tool's colour and opacity. Shapes are never
+  filled when drawn; the Fill tool (B) fills the area you click (a closed
+  region, or the background anywhere else). Its cursor shows the fill colour;
+  pick Bucket, Crosshair or Drop in the options bar.
 
 ## Dimensions, units and equations
 
@@ -76,12 +78,14 @@ Project
 ├─ background      canvas colour from the fill tool, or null
 └─ sketches[0]     the single parametric sketch
    ├─ entities[]   Point / Line / Circle / Arc, each with layerId and style
-   │               (stroke colour, weight, line type, optional fill)
+   │               (line weight, line type)
    ├─ constraints[]
    └─ fills[]      fill-tool regions: colour, boundary entity ids, a point inside
 ```
 
-New geometry takes the current drawing style (saved per browser). Regions are
+New geometry takes the current line weight and type. Files from earlier
+versions drop stroke colours, and shapes they filled through their style
+become Fill-tool fills. Regions are
 found on a planar arrangement of the geometry (segments split where they touch
 or cross, overlaps merged), so shapes sharing or crossing edges fill correctly.
 A fill-tool fill is re-found each time from its boundary entities around its

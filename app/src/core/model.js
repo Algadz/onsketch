@@ -1,6 +1,27 @@
 import { Arc, Circle, Line, Point, ensureIdAbove, newId } from './entities.js';
-import { Layer, cleanStyle } from './style.js';
-import { findClosedProfiles, interiorPoint } from './regions.js';
+import { Layer, cleanStyle, legacyFill } from './style.js';
+import { findClosedProfiles, interiorPoint, planarCycles } from './regions.js';
+
+/** Older files filled shapes through their style. Each closed region
+ *  formed by same-colour shapes on a layer becomes one Fill-tool fill. */
+function convertLegacyFills(items, sketch) {
+  const groups = new Map();
+  for (const it of items) {
+    if (it.e.construction || !sketch.entities.includes(it.e)) continue;
+    const key = it.e.layerId + '|' + it.color + '|' + it.opacity;
+    if (!groups.has(key)) groups.set(key, { layerId: it.e.layerId, color: it.color, opacity: it.opacity, ents: [] });
+    groups.get(key).ents.push(it.e);
+  }
+  const out = [];
+  for (const g of groups.values()) {
+    for (const c of planarCycles(g.ents)) {
+      if (c.area <= 1e-9) continue;
+      const seed = interiorPoint({ outer: c.pts, holes: [] });
+      if (seed) out.push({ id: newId('f'), layerId: g.layerId, color: g.color, opacity: g.opacity, ids: c.ids, seed });
+    }
+  }
+  return out;
+}
 import { ensureDimensionNames } from './equations.js';
 
 /** Fill from a file. Fills saved before seeds existed stored their
@@ -216,9 +237,8 @@ export class Project {
     const layerLook = new Map();
     if (Array.isArray(o.layers)) {
       for (const lj of o.layers) {
-        const look = cleanStyle({ color: lj.color, lineWidth: lj.lineWidth, lineStyle: lj.lineStyle,
-          ...(lj.fill ? { fill: lj.fill, fillOpacity: lj.fillOpacity } : {}) });
-        if (look) layerLook.set(lj.id, look);
+        const look = { lineWidth: lj.lineWidth, lineStyle: lj.lineStyle, fill: lj.fill, fillOpacity: lj.fillOpacity };
+        if (cleanStyle(look) || legacyFill(look)) layerLook.set(lj.id, look);
       }
     }
     if (Array.isArray(o.layers) && o.layers.length) {
@@ -238,6 +258,7 @@ export class Project {
       // copy was walked last, leaving the other copy uncoupled — which
       // looks like "undo broke all the constraints".
       const idMap = new Map();
+      const legacyFills = [];
       const reviveEntity = (ej) => {
         if (ej.id && idMap.has(ej.id)) return idMap.get(ej.id);
         let e;
@@ -252,7 +273,10 @@ export class Project {
         if (ej.layerId) e.layerId = ej.layerId;
         // Files from when layers had styles: the layer's look moves onto
         // its entities so nothing changes on screen.
-        e.style = cleanStyle(ej.style) || (ej.layerId ? layerLook.get(ej.layerId) || null : null);
+        const look = ej.style || (ej.layerId ? layerLook.get(ej.layerId) : null) || null;
+        e.style = cleanStyle(look);
+        const lf = legacyFill(look);
+        if (lf) legacyFills.push({ e, ...lf });
         if (e instanceof Arc) e.clockwise = !!ej.clockwise;
         if (ej.id) idMap.set(ej.id, e);
         return e;
@@ -263,6 +287,7 @@ export class Project {
       }
       s.dirtyIds.clear();
       s.fills = s.fills.map(f => reviveFill(f, s)).filter(Boolean);
+      s._legacyFills = legacyFills;     // converted once ids are bumped (below)
       for (const cj of (sj.constraints || [])) {
         let c = null;
         switch (cj.kind) {
@@ -334,6 +359,11 @@ export class Project {
       for (const c of s.constraints) noteId(c.id);
     }
     ensureIdAbove(maxN);
+    // Shapes filled at creation (older files) become Fill-tool fills.
+    for (const s of p.sketches) {
+      if (s._legacyFills?.length) s.fills.unshift(...convertLegacyFills(s._legacyFills, s));
+      delete s._legacyFills;
+    }
     p._mergeSketches(!(Array.isArray(o.layers) && o.layers.length));
     ensureDimensionNames(p);
     return p;

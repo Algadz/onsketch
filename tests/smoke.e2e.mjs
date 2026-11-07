@@ -35,7 +35,7 @@ page.route(/umami/, r => r.abort());
 let failed = 0;
 const check = (cond, msg) => { console.log((cond ? 'ok   ' : 'FAIL ') + msg); if (!cond) failed++; };
 
-await page.addInitScript(() => { try { localStorage.setItem('onsketch:prefs', JSON.stringify({ theme: 'light', colorMode: 'style' })); } catch {} });
+await page.addInitScript(() => { try { localStorage.setItem('onsketch:prefs', JSON.stringify({ theme: 'light' })); } catch {} });
 await page.goto(`http://localhost:${port}/app/`);
 await page.waitForFunction(() => window._app);
 const box = await page.locator('#canvas').boundingBox();
@@ -132,13 +132,10 @@ const layerInfo = await page.evaluate(() => {
 });
 check(layerInfo.n === 2 && layerInfo.rows === 2 && layerInfo.active === 'Layer 2', `add layer (${JSON.stringify(layerInfo)})`);
 
-// Drawing style: pick a stroke colour and turn on shape fill, then draw.
+// New shapes: no fill at creation, line colour from state only.
 await page.evaluate(() => window._app.clearSelection());
-// Paint.NET style: left-click a swatch = stroke, right-click = fill.
-await page.click('.palette .sw[data-c="#14946b"]');
-await page.click('.palette .sw[data-c="#e07b00"]', { button: 'right' });
+await page.click('.palette .sw[data-c="#e07b00"]');            // fill colour, for the Fill tool only
 await page.keyboard.press('r');
-await page.selectOption('#optbar select[data-pen="fillShapes"]', '1');
 await page.mouse.click(cx + 60, cy + 60);
 await page.mouse.click(cx + 200, cy + 160);
 await page.keyboard.press('Escape');
@@ -146,63 +143,62 @@ await page.keyboard.press('s');
 const onLayer2 = await page.evaluate(() => {
   const a = window._app, ly = a.project.activeLayer();
   const ents = a.project.entitiesOnLayer(ly.id);
-  return { count: ents.length, style: ents[0]?.style };
+  const t = a.renderer.theme;
+  return { count: ents.length, style: ents[0]?.style, fills: a.activeSketch().fills.length,
+    stateColour: [t.under, t.fully, t.over].includes(a.renderer.styleFor(ents[0], true).color) };
 });
-check(onLayer2.count === 4 && onLayer2.style?.color === '#14946b' && onLayer2.style?.fill === '#e07b00',
-  `new shapes use the drawing style (${JSON.stringify(onLayer2)})`);
-await page.evaluate(() => window._app._setPen('fillShapes', false, true));
+check(onLayer2.count === 4 && !('color' in (onLayer2.style || {})) && !('fill' in (onLayer2.style || {})) && onLayer2.fills === 0 && onLayer2.stateColour,
+  `new shapes: no fill, colour from state (${JSON.stringify(onLayer2)})`);
 
 const pixel = (x, y) => page.evaluate(async ([x, y]) => {
   await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
   const c = document.getElementById('canvas'), r = c.getBoundingClientRect(), d = window.devicePixelRatio || 1;
   return Array.from(c.getContext('2d').getImageData((x - r.left) * d, (y - r.top) * d, 1, 1).data);
 }, [x, y]);
-// Fill pixels actually painted inside the rectangle.
-const filled = await pixel(cx + 130, cy + 110);
-check(filled[3] > 0 && filled[0] > filled[2], `shape fill painted (rgba ${filled.join(',')})`);
+const empty = await pixel(cx + 130, cy + 110);
+check(empty[3] === 0, `nothing filled at creation (rgba ${empty.join(',')})`);
 
-// Fill shows while drawing, and overlapping filled shapes keep their colour.
-await page.evaluate(() => window._app._setPen('fillShapes', true, true));
+// Fill tool on overlapping shapes fills just the clicked area.
 await page.keyboard.press('r');
 await page.mouse.click(cx + 150, cy + 100);
-await page.mouse.move(cx + 270, cy + 210, { steps: 4 });
-const previewPx = await pixel(cx + 245, cy + 195);
-check(previewPx[3] > 0 && previewPx[0] > previewPx[2], `fill shows while drawing (rgba ${previewPx.join(',')})`);
 await page.mouse.click(cx + 270, cy + 210);
 await page.keyboard.press('Escape');
-await page.keyboard.press('s');
-await page.evaluate(() => window._app._setPen('fillShapes', false, true));
+await page.keyboard.press('b');
+const cursor = await page.evaluate(() => document.getElementById('canvas').style.cursor);
+check(/^url\("data:image\/svg\+xml/.test(cursor) && cursor.includes(encodeURIComponent('#e07b00')), 'fill tool shows a fill cursor in the fill colour');
+await page.mouse.click(cx + 175, cy + 130);
 const overlapPx = await pixel(cx + 175, cy + 130);
 const soloPx = await pixel(cx + 95, cy + 145);   // off the grid lines (every 40px here)
-check(overlapPx[3] > 0 && overlapPx.every((v, i) => Math.abs(v - soloPx[i]) <= 3),
-  `overlap stays filled, same colour (overlap ${overlapPx.join(',')} vs ${soloPx.join(',')})`);
+check(overlapPx[3] > 0 && soloPx[3] === 0, `fill tool fills only the clicked area (overlap ${overlapPx.join(',')}, rest ${soloPx.join(',')})`);
+await page.evaluate(() => window._app.undo());
+await page.keyboard.press('s');
 
-// Changing colours never touches existing geometry; "Apply drawing style" does.
+// Line style changes never touch existing geometry; "Apply line style" does.
 await page.evaluate(() => {
   const a = window._app, ly = a.project.activeLayer();
   a.clearSelection();
   a.setSelected(a.project.entitiesOnLayer(ly.id)[0], true);
   a.refreshUI();
 });
-await page.click('.palette .sw[data-c="#d63a3a"]');
 await page.evaluate(() => window._app._setPen('lineStyle', 'center', true));
 const untouched = await page.evaluate(() => {
   const a = window._app, ly = a.project.activeLayer();
   return a.project.entitiesOnLayer(ly.id)[0].style;
 });
-check(untouched.color === '#14946b' && untouched.lineStyle !== 'center', `colour picks leave the selection alone (${JSON.stringify(untouched)})`);
+check(untouched.lineStyle !== 'center', `pen changes leave the selection alone (${JSON.stringify(untouched)})`);
 await page.click('#optbar [data-opt="apply-style"]');
 const ov = await page.evaluate(() => {
   const a = window._app, ly = a.project.activeLayer();
   return a.project.entitiesOnLayer(ly.id)[0].style;
 });
-check(ov && ov.color === '#d63a3a' && ov.lineStyle === 'center', `entity style override (${JSON.stringify(ov)})`);
+check(ov && ov.lineStyle === 'center', `apply line style (${JSON.stringify(ov)})`);
 const undoStyle = await page.evaluate(() => {
   const a = window._app; a.undo();
   const ly = a.project.activeLayer();
   return a.project.entitiesOnLayer(ly.id)[0].style;
 });
-check(undoStyle && undoStyle.lineStyle !== 'center' && undoStyle.color === '#14946b', `style change is undoable (${JSON.stringify(undoStyle)})`);
+check(undoStyle && undoStyle.lineStyle !== 'center', `style change is undoable (${JSON.stringify(undoStyle)})`);
+await page.evaluate(() => window._app._setPen('lineStyle', 'solid', true));
 
 // Only the active layer is pickable.
 const activeOnly = await page.evaluate(() => {
@@ -408,11 +404,9 @@ const unlocked = await page.evaluate(() => !window._app.project.activeLayer().lo
 check(unlocked, 'banner Unlock button unlocks the layer');
 
 // Colour mode + theme toggles (end in Colors mode for the screenshot).
-await page.click('#menubar [data-action="color-mode"]');
 await page.click('#menubar [data-action="theme"]');
-const prefs = await page.evaluate(() => ({ mode: window._app.renderer.colorMode, theme: document.documentElement.dataset.theme }));
-check(prefs.mode === 'status' && prefs.theme === 'dark', `colour mode + theme (${JSON.stringify(prefs)})`);
-await page.click('#menubar [data-action="color-mode"]');
+const prefs = await page.evaluate(() => ({ theme: document.documentElement.dataset.theme }));
+check(prefs.theme === 'dark', `theme toggle (${JSON.stringify(prefs)})`);
 // Editing a dimension in dark mode: the input text must be readable.
 await page.keyboard.press('s');
 const dimRect = await page.evaluate(() => { const r = window._app.renderer.lastDimRects[0]; return r && { x: r.x + r.w / 2, y: r.y + r.h / 2 }; });

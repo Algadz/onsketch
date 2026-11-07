@@ -936,3 +936,9 @@
 
   #statusbar > span { white-space: nowrap; flex: 0 0 auto; }
   #statusbar > #status-hint { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+  /* Colors window: single fill chip */
+  .pc-sw.pc-fill { position: relative; left: auto; top: auto; width: 44px; height: 44px; flex: 0 0 auto; }
+  .pc-legend b { font-size: 12px; color: var(--text); }
+  .pc-legend span { font: 11px ui-monospace, monospace; color: var(--text-muted); }
+  .palette .sw.on { outline: 2px solid var(--accent); outline-offset: 1px; }

@@ -1,4 +1,5 @@
-import { DRAW_TOOLS, toolDef } from '../ui/tool-defs.js';
+import { toolDef } from '../ui/tool-defs.js';
+import { fillCursor } from '../ui/cursors.js';
 import { Arc, Circle, Line, Point } from '../core/entities.js';
 import { SelectTool } from '../tools/select.js';
 import { ArcTool, CenterLineTool, CenterRectangleTool, CircleTool, HexagonTool, LineTool, PointTool, RectangleTool, ThreePointCircleTool } from '../tools/draw.js';
@@ -28,15 +29,9 @@ export class RenderEventsMixin {
 
     const prev = this.tool.getPreview && this.tool.getPreview();
     if (prev) {
-      // Drawing tools preview in the drawing style: fill colour (when
-      // "Outline + fill" is on) and stroke colour (in Colors mode).
-      const drawing = DRAW_TOOLS.has(this.toolName) && !this.constructionMode && this.pen;
-      const circleTool = this.toolName === 'circle' || this.toolName === 'threePointCircle';
-      const stroke = drawing && this.colorMode === 'style' ? this.pen.color : null;
-      if (drawing && this.pen.fillShapes) this.renderer.drawPreviewFill(prev, this.pen.fillColor, this.pen.fillOpacity, circleTool);
-      if (prev.paths)      for (const p of prev.paths) this.renderer.drawTempPath(p, prev.dashed, stroke);
+      if (prev.paths)      for (const p of prev.paths) this.renderer.drawTempPath(p, prev.dashed);
       if (prev.dashedPaths) for (const p of prev.dashedPaths) this.renderer.drawTempPath(p, true);
-      if (prev.circles)    for (const c of prev.circles) this.renderer.drawTempCircle(c.center, c.r, circleTool ? stroke : null);
+      if (prev.circles)    for (const c of prev.circles) this.renderer.drawTempCircle(c.center, c.r);
       if (prev.arcs)       for (const a of prev.arcs) this.renderer.drawTempArc(a.center, a.r, a.a0, a.a1, !!a.clockwise);
       if (prev.points)     for (const p of prev.points) this.renderer.drawTempPoint(p);
       if (prev.box)        this.renderer.drawSelectionBox(prev.box);
@@ -62,6 +57,15 @@ export class RenderEventsMixin {
         this.renderer.drawSnapMarker(this.lastSnap);
       }
     }
+  }
+
+  /** Canvas cursor for the active tool. The Fill tool shows the chosen
+   *  fill cursor in the current fill colour (with × in erase mode). */
+  _updateCanvasCursor() {
+    const name = this.toolName;
+    this.canvas.style.cursor = name === 'select' ? 'default'
+      : name === 'fill' ? fillCursor(this.fillCursorDesign, this.pen?.fillColor, this.fillErase)
+      : 'crosshair';
   }
 
   /* ---- Tool selection ---- */
@@ -90,7 +94,7 @@ export class RenderEventsMixin {
     if (name === 'smartdim' && !this.showDimensions) this.setDimensionsVisible(true);
     this._refreshOptionsBar();
     document.getElementById('status-hint').textContent = (this.tool.hint && this.tool.hint()) || '';
-    this.canvas.style.cursor = name === 'select' ? 'default' : name === 'fill' ? 'cell' : 'crosshair';
+    this._updateCanvasCursor();
     this.refreshToolOptions();
     this.requestRender();
   }
@@ -171,7 +175,7 @@ export class RenderEventsMixin {
     c.addEventListener('pointerup', (ev) => {
       if (ev.button === 2) return;
       const { world } = getWorld(ev);
-      if (panning) { panning = false; c.style.cursor = this.toolName === 'select' ? 'default' : 'crosshair'; return; }
+      if (panning) { panning = false; this._updateCanvasCursor(); return; }
       const snap = this._snapForCurrentTool(world);
       this.tool.onPointerUp(world, snap, ev);
     });
