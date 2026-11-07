@@ -24,7 +24,7 @@ export class RenderEventsMixin {
     for (const s of this.project.visibleSketches()) for (const e of s.entities) walk(e);
     const sketch = this.activeSketch();
     if (sketch && this.showDimensions) {
-      this.renderer.drawDimensions(sketch, entMap, this._lastSolve?.redundantIds);
+      this.renderer.drawDimensions(sketch, entMap, this._lastSolve?.redundantIds, (c) => this.constraintLayerState(c));
     }
 
     const prev = this.tool.getPreview && this.tool.getPreview();

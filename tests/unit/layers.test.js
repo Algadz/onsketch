@@ -231,3 +231,35 @@ test('fills saved in the older outline format get an inside point on load', () =
   assert.ok(Math.hypot(f.seed.x - 5, f.seed.y - 5) > 2, 'seed is outside the hole');
   assert.equal(f.outer, undefined);
 });
+
+test('constraints belong to a layer: saved, inferred for older files, removed with their layer', () => {
+  const pt = (id, x, y) => ({ type: 'point', id, x, y });
+  const old = { version: 3, activeLayerId: 'ly2', layers: [{ id: 'ly1', name: 'A' }, { id: 'ly2', name: 'B' }],
+    sketches: [{ id: 's1', name: 'S', entities: [
+      { type: 'line', id: 'e3', layerId: 'ly1', p1: pt('e1', 0, 0), p2: pt('e2', 10, 0) },
+      { type: 'circle', id: 'e5', layerId: 'ly2', center: pt('e4', 30, 0), r: 2 }],
+    constraints: [
+      { id: 'c6', kind: 'distance', p1: 'e1', p2: 'e2', value: 10 },
+      { id: 'c7', kind: 'radius', circleId: 'e5', value: 2 },
+      { id: 'c8', kind: 'horizontal', lineId: 'e3', p1: 'e1', p2: 'e2', layerId: 'ly2' }] }] };
+  const p = Project.fromJSON(old);
+  const by = Object.fromEntries(p.sketches[0].constraints.map(c => [c.id, c.layerId]));
+  assert.deepEqual(by, { c6: 'ly1', c7: 'ly2', c8: 'ly2' }, 'inferred from geometry unless already set');
+  const q = Project.fromJSON(JSON.parse(JSON.stringify(p.toJSON())));
+  assert.equal(q.sketches[0].constraints.find(c => c.id === 'c6').layerId, 'ly1');
+  q.removeLayer('ly2');
+  assert.deepEqual(q.sketches[0].constraints.map(c => c.id), ['c6']);
+});
+
+test('editLayerId lets another layer be checked as if active', () => {
+  const p = new Project(); const s = p.addSketch('A');
+  const a = new Line(new Point(0, 0), new Point(1, 0)); s.addEntity(a);
+  const top = p.addLayer('Top');
+  const b = new Line(new Point(0, 5), new Point(1, 5)); s.addEntity(b);
+  p.syncLocks();
+  assert.equal(a.locked, true); assert.equal(b.locked, false);
+  p.editLayerId = p.layers[0].id; p.syncLocks();
+  assert.equal(a.locked, false); assert.equal(b.locked, true);
+  p.editLayerId = null; p.syncLocks();
+  assert.equal(p.activeLayerId, top.id); assert.equal(a.locked, true);
+});

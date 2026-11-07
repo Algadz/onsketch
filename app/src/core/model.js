@@ -123,6 +123,7 @@ export class Sketch {
       entities:this.entities.map(e => e.toJSON()),
       constraints:this.constraints.map(c => {
         const o = c.toJSON();
+        if (c.layerId) o.layerId = c.layerId; // layer the constraint / dimension belongs to
         if (c.name) o.name = c.name;          // dimension name for equations (D1…)
         if (c.expr) o.expr = c.expr;          // equation driving this dimension
         return o;
@@ -184,6 +185,7 @@ export class Project {
     const i = this.layers.findIndex(l => l.id === id);
     if (i < 0) return false;
     for (const s of this.sketches) s.fills = s.fills.filter(f => f.layerId !== id);
+    for (const s of this.sketches) s.constraints = s.constraints.filter(c => c.layerId !== id);
     for (const s of this.sketches) {
       for (const e of s.entities.filter(e => e.layerId === id)) s.removeEntity(e);
     }
@@ -209,8 +211,11 @@ export class Project {
     const mark = (e, v) => { e.locked = v; for (const c of e.children()) mark(c, v); };
     for (const s of this.sketches) for (const e of s.entities) mark(e, false);
     if (this.editAllLayers) return;     // set briefly while equations update every layer
+    // editLayerId: set briefly to compute another layer's status as if it
+    // were the active one.
+    const editable = this.editLayerId || this.activeLayerId;
     for (const s of this.sketches) {
-      for (const e of s.entities) if (this.layerOf(e).id !== this.activeLayerId) mark(e, true);
+      for (const e of s.entities) if (this.layerOf(e).id !== editable) mark(e, true);
     }
   }
   entitiesOnLayer(id) {
@@ -230,6 +235,7 @@ export class Project {
     return null;
   }
   toJSON() {
+    this.assignConstraintLayers();      // every constraint saved with its layer
     return {
       version: 3, name:this.name, units:this.units,
       ...(this.background ? { background: this.background } : {}),
@@ -351,6 +357,7 @@ export class Project {
           if (cj.labelMidAngle != null) c.labelMidAngle = cj.labelMidAngle;
           if (cj.isDiameter)            c.isDiameter    = true;
           if (cj.driven)                c.driven        = true;
+          if (typeof cj.layerId === 'string') c.layerId = cj.layerId;
           if (typeof cj.name === 'string') c.name = cj.name;
           if (typeof cj.expr === 'string' && cj.expr.trim()) c.expr = cj.expr;
           s.constraints.push(c);
@@ -383,6 +390,7 @@ export class Project {
     }
     p._mergeSketches(!(Array.isArray(o.layers) && o.layers.length));
     ensureDimensionNames(p);
+    p.assignConstraintLayers();
     return p;
   }
 
@@ -413,6 +421,23 @@ export class Project {
     }
     base.visible = true;          // sketch visibility has no UI any more
     this.activeSketchId = base.id;
+  }
+
+  /** Give every constraint without a layer one: the layer of the first
+   *  geometry it refers to (older files), else the active layer. */
+  assignConstraintLayers() {
+    for (const s of this.sketches) {
+      let byId = null;
+      for (const c of s.constraints) {
+        if (c.layerId && this.layer(c.layerId)) continue;
+        if (!byId) {
+          byId = new Map();
+          for (const e of s.entities) { byId.set(e.id, e); for (const ch of e.children()) if (!byId.has(ch.id)) byId.set(ch.id, e); }
+        }
+        const owner = c.refs().map(id => byId.get(id)).find(Boolean);
+        c.layerId = owner ? this.layerOf(owner).id : this.activeLayerId;
+      }
+    }
   }
 
   /** Top-level entity that owns e (e itself, or the line / circle / arc a

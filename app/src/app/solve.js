@@ -4,6 +4,9 @@ export class SolveMixin {
 
   /* ---- Solving ---- */
   commit(options = {}) {
+    // New constraints and dimensions belong to the layer they were made on.
+    const activeLayer = this.project.activeLayerId;
+    for (const s of this.project.sketches) for (const c of s.constraints) if (!c.layerId) c.layerId = activeLayer;
     // Equation changes (variables, formulas) reach every layer, and are
     // solved before the undo snapshot so undo restores a consistent state.
     if (this._applyEquations().changed) this._solveAllLayers();
@@ -158,31 +161,48 @@ export class SolveMixin {
     });
   }
 
+  /** Colour every entity by how defined it is on its own layer. The
+   *  active layer uses `result`; every other layer with geometry is
+   *  checked as if it were the active one (its geometry editable, the
+   *  rest held), so a fully defined layer stays black while you work on
+   *  another. Geometry is put back exactly after each check. */
   _updateConstraintStatus(result) {
     const sketch = this.activeSketch(); if (!sketch) return;
-    const entityStatus = result.entityStatus;
-    const overOverall = result.state === 'over';
-    // Per-entity colouring: each entity becomes black ("fully") as soon as
-    // ITS parameters are pinned, regardless of the sketch's overall state.
-    // If the whole sketch is over-defined we still flag every entity as
-    // 'over' (red) — that's a global error.
-    for (const e of sketch.entities) {
-      const s = entityStatus.get(e.id) || 'under';
-      e.status = overOverall ? 'over' : s;
-      for (const c of e.children()) {
-        const cs = entityStatus.get(c.id) || s;
-        c.status = overOverall ? 'over' : cs;
+    const project = this.project;
+    const apply = (r, layerId) => {
+      const over = r.state === 'over';
+      for (const e of sketch.entities) {
+        if (project.layerOf(e).id !== layerId) continue;
+        const s = r.entityStatus?.get(e.id) || 'under';
+        e.status = over ? 'over' : s;
+        for (const c of e.children()) {
+          const cs = r.entityStatus?.get(c.id) || s;
+          c.status = over ? 'over' : cs;
+        }
       }
-    }
-    // Reference geometry from non-active visible sketches is frozen by the
-    // solver, so we draw it in the "fully" colour (black at full alpha is
-    // dimmed elsewhere).
-    for (const s of this.project.sketches) {
-      if (s.id === sketch.id) continue;
-      for (const e of s.entities) {
-        e.status = 'fully';
-        for (const c of e.children()) c.status = 'fully';
+    };
+    apply(result, project.activeLayerId);
+
+    const others = new Set();
+    for (const e of sketch.entities) { const id = project.layerOf(e).id; if (id !== project.activeLayerId) others.add(id); }
+    if (others.size) {
+      const saved = [];
+      const walk = (e) => { for (const k of e.paramKeys()) saved.push([e, k, e[k]]); for (const c of e.children()) walk(c); };
+      for (const e of sketch.entities) walk(e);
+      try {
+        for (const layerId of others) {
+          project.editLayerId = layerId;
+          const r = this.solver.solve(sketch, project.sketches, [], { diagnostics: true, revertOnFailure: true });
+          for (const [e, k, v] of saved) e[k] = v;
+          apply(r, layerId);
+        }
+      } finally {
+        project.editLayerId = null;
+        project.syncLocks();
+        for (const [e, k, v] of saved) e[k] = v;
+        for (const e of sketch.entities) if (e instanceof Arc) e.syncEnds();
       }
     }
   }
+
 }

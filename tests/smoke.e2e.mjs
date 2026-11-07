@@ -486,6 +486,7 @@ const prefs = await page.evaluate(() => ({ theme: document.documentElement.datas
 check(prefs.theme === 'dark', `theme toggle (${JSON.stringify(prefs)})`);
 // Editing a dimension in dark mode: the input text must be readable.
 await page.keyboard.press('s');
+await page.evaluate(async () => { const a = window._app; a.windows.toggle('equations', false); a.requestRender(); await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))); });
 const dimRect = await page.evaluate(() => { const r = window._app.renderer.lastDimRects[0]; return r && { x: r.x + r.w / 2, y: r.y + r.h / 2 }; });
 let dimInput = null;
 if (dimRect) {
@@ -592,6 +593,46 @@ await page.click('#optbar [data-opt="delete-hidden-fills"]');
 const afterDelete = await page.evaluate(() => window._app.dormantFillCount());
 check(afterDelete === 0, 'Fill tool: delete hidden fills');
 await page.keyboard.press('s');
+
+// Dimensions belong to a layer; status colours are per layer.
+await page.evaluate(() => {
+  const a = window._app, P = a.project.constructor;
+  const pt = (id, x, y) => ({ type: 'point', id, x, y });
+  a.project = P.fromJSON({ version: 3, activeLayerId: 'ly1', variables: [{ name: 'w', expr: '40' }],
+    layers: [{ id: 'ly1', name: 'Base' }, { id: 'ly2', name: 'Top' }],
+    sketches: [{ id: 's1', name: 'S', entities: [
+      { type: 'line', id: 'L1', layerId: 'ly1', p1: pt('a', 0, 0), p2: pt('b', 40, 0) },
+      { type: 'line', id: 'L2', layerId: 'ly1', p1: pt('b', 40, 0), p2: pt('c', 40, 20) },
+      { type: 'line', id: 'L3', layerId: 'ly2', p1: pt('d', 0, 50), p2: pt('e', 30, 50) }],
+    constraints: [
+      { id: 'c1', kind: 'fix', pointId: 'a', x: 0, y: 0 },
+      { id: 'c2', kind: 'horizontal', lineId: 'L1', p1: 'a', p2: 'b' },
+      { id: 'c3', kind: 'vertical', lineId: 'L2', p1: 'b', p2: 'c' },
+      { id: 'c4', kind: 'distance', p1: 'a', p2: 'b', value: 40, name: 'D1', expr: 'w', labelOffset: -8 },
+      { id: 'c5', kind: 'distance', p1: 'b', p2: 'c', value: 20, name: 'D2' },
+      { id: 'c6', kind: 'distance', p1: 'd', p2: 'e', value: 30, name: 'D3', labelOffset: 8 }] }] });
+  a._afterStateSwap(); a.view.zoom = 5; a.view.panX = -100; a.view.panY = 120; a.commit({ diagnostics: 'sync' });
+});
+const dimsFor = () => page.evaluate(async () => {
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+  return window._app.renderer.lastDimRects.map(r => r.constraint.name).sort().join(',');
+});
+const onBase = await dimsFor();
+await page.evaluate(() => { const a = window._app; a.project.activeLayerId = 'ly2'; a.project.syncLocks(); a.clearSelection(); a.solveAndRender(); });
+const onTop = await dimsFor();
+check(onBase === 'D1,D2' && onTop === 'D3', `only the active layer's dimensions can be picked (Base: ${onBase} / Top: ${onTop})`);
+await page.evaluate(() => { const a = window._app; a.project.variables[0].expr = '60'; a.commit({ diagnostics: 'sync' }); });
+const layerStatus = await page.evaluate(() => {
+  const s = window._app.activeSketch(), st = (id) => s.entities.find(e => e.id === id);
+  const L1 = st('L1');
+  return { L1: L1.status, L2: st('L2').status, L3: st('L3').status, len: +Math.hypot(L1.p2.x - L1.p1.x, L1.p2.y - L1.p1.y).toFixed(6) };
+});
+check(layerStatus.L1 === 'fully' && layerStatus.L2 === 'fully' && layerStatus.L3 === 'under' && layerStatus.len === 60,
+  `variable changed from Top: Base rebuilt and still shown fully defined (${JSON.stringify(layerStatus)})`);
+await page.evaluate(() => { const a = window._app; a.project.layer('ly1').visible = false; a.requestRender(); });
+const dimLayerStates = await page.evaluate(() => { const a = window._app; return a.activeSketch().constraints.filter(c => c.name).map(c => c.name + ':' + a.constraintLayerState(c)).join(','); });
+check(dimLayerStates === 'D1:hidden,D2:hidden,D3:active', `hidden layer hides its dimensions (${dimLayerStates})`);
+await page.evaluate(() => { const a = window._app; a.project.layer('ly1').visible = true; a.requestRender(); });
 
 await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
 if (shot) await page.screenshot({ path: shot });

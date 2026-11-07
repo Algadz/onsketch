@@ -104,6 +104,17 @@ export class App {
     return !!l && l.id === this.project.activeLayerId && l.visible;
   }
 
+  /** Layer a constraint belongs to (its own layerId, set when created). */
+  constraintLayer(c) {
+    return this.project.layer(c.layerId) || this.project.activeLayer();
+  }
+  /** 'active' (shown, selectable), 'inactive' (shown grey) or 'hidden'. */
+  constraintLayerState(c) {
+    const l = this.constraintLayer(c);
+    if (!l.visible) return 'hidden';
+    return l.id === this.project.activeLayerId ? 'active' : 'inactive';
+  }
+
   makeOrReusePoint(world, snap, sketch) {
     // Endpoint snaps return the snapped Point directly so callers share
     // an existing corner only inside the active sketch. Endpoints from

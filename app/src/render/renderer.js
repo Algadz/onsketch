@@ -293,13 +293,19 @@ export class Renderer {
   }
 
   /* ----- Dimension labels on the canvas ----- */
-  drawDimensions(sketch, entMap, redundantIds) {
+  /** @param layerState (c) => 'active' | 'inactive' | 'hidden': dimensions
+   *  belong to a layer; hidden ones aren't drawn, inactive ones are drawn
+   *  grey and can't be picked (no hit rectangle). */
+  drawDimensions(sketch, entMap, redundantIds, layerState = () => 'active') {
     if (!sketch) return;
     // remember the screen-space rect of every label we draw so the app can
     // hit-test them for click-to-edit / drag-to-move
     this.lastDimRects = [];
     for (const c of sketch.constraints) {
-      const grey = c.driven || (redundantIds && redundantIds.has(c.id));
+      const st = layerState(c);
+      if (st === 'hidden') continue;
+      this._recordRects = st === 'active';
+      const grey = st !== 'active' || c.driven || (redundantIds && redundantIds.has(c.id));
       switch (c.kind) {
         case 'distance':          this._drawDistance(c, entMap, grey); break;
         case 'curveDistance':     this._drawCurveDistance(c, entMap, grey); break;
@@ -309,6 +315,7 @@ export class Renderer {
         case 'angle':             this._drawAngle(c, entMap, grey); break;
       }
     }
+    this._recordRects = true;
   }
 
   /** Draw a SmartDim preview that follows the cursor — synthesises a
@@ -472,7 +479,7 @@ export class Renderer {
     this._drawText(ctx, plab.x, plab.y, text, cols.text, Math.atan2(dys, dxs));
     ctx.restore();
 
-    if (this.lastDimRects) {
+    if (this.lastDimRects && this._recordRects !== false) {
       ctx.font = '11px ui-sans-serif, system-ui, -apple-system, "Segoe UI"';
       const w = ctx.measureText(text).width;
       this.lastDimRects.push({
@@ -631,7 +638,7 @@ export class Renderer {
     this._drawText(ctx, plab.x, plab.y, txt, cols.text, 0);
     ctx.restore();
 
-    if (this.lastDimRects) {
+    if (this.lastDimRects && this._recordRects !== false) {
       ctx.font = '11px ui-sans-serif, system-ui, -apple-system, "Segoe UI"';
       const w = ctx.measureText(txt).width;
       this.lastDimRects.push({ constraint: c, x: plab.x - w/2 - 4, y: plab.y - 9, w: w + 8, h: 18 });
@@ -727,7 +734,7 @@ export class Renderer {
     this._drawText(ctx, tx, ty, txt, cols.text, 0);
     ctx.restore();
 
-    if (this.lastDimRects) {
+    if (this.lastDimRects && this._recordRects !== false) {
       ctx.font = '11px ui-sans-serif, system-ui, -apple-system, "Segoe UI"';
       const w = ctx.measureText(txt).width;
       this.lastDimRects.push({ constraint: c, x: tx - w/2 - 4, y: ty - 9, w: w + 8, h: 18 });

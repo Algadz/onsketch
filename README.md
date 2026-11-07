@@ -79,6 +79,13 @@ shared with it too), can't be picked, and shows grey vertices; snapping still
 uses all visible layers, so new geometry can attach to it. Switch layers to
 edit them. Layers have a name, visibility, opacity and order.
 
+Constraints and dimensions belong to the layer they were created on: a hidden
+layer hides its dimensions, an inactive layer's dimensions are drawn grey and
+can't be picked, and deleting a layer deletes them. Status colours are per
+layer: each layer is checked as if it were the active one, so a fully defined
+layer stays black while you work on another (for example after a global
+variable changed it).
+
 ## Source layout
 
 | Path | Contents |
