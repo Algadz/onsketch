@@ -254,6 +254,47 @@ export class Project {
       for (const c of s.constraints) noteId(c.id);
     }
     ensureIdAbove(maxN);
+    p._mergeSketches(!(Array.isArray(o.layers) && o.layers.length));
     return p;
+  }
+
+  /** The editor works on a single sketch; layers do the grouping. Files
+   *  saved with several sketches are merged into the first one. For files
+   *  from before layers existed, each former sketch becomes a layer of the
+   *  same name so the grouping is kept. Ids are globally unique, so
+   *  constraints carry over untouched. */
+  _mergeSketches(legacy) {
+    if (!this.sketches.length) return;
+    const base = this.sketches[0];
+    if (this.sketches.length > 1) {
+      const wasActive = this.sketches.findIndex(s => s.id === this.activeSketchId);
+      if (legacy) {
+        this.layers = this.sketches.map((s, i) => new Layer(s.name, { color: Layer.nextColor(i), visible: s.visible }));
+        this.activeLayerId = this.layers[Math.max(0, wasActive)].id;
+      }
+      this.sketches.forEach((s, i) => {
+        for (const e of s.entities) {
+          if (legacy) e.layerId = this.layers[i].id;
+          if (s !== base) { e.sketchId = base.id; base.entities.push(e); }
+        }
+        if (s !== base) base.constraints.push(...s.constraints);
+        if (s !== base) base.features.push(...(s.features || []));
+      });
+      this.sketches = [base];
+    }
+    base.visible = true;          // sketch visibility has no UI any more
+    this.activeSketchId = base.id;
+  }
+
+  /** Top-level entity that owns e (e itself, or the line / circle / arc a
+   *  child point belongs to). */
+  ownerOf(e) {
+    for (const s of this.sketches) {
+      for (const top of s.entities) {
+        if (top === e) return top;
+        if (top.children().includes(e)) return top;
+      }
+    }
+    return null;
   }
 }

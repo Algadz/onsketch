@@ -85,3 +85,42 @@ test('dash patterns and alpha helper', () => {
   assert.ok(dashFor('dashed', 4)[0] > dashFor('dashed', 1)[0]);
   assert.equal(withAlpha('#ff0000', 0.5), 'rgba(255,0,0,0.5)');
 });
+
+test('v2 files with several sketches become one sketch with a layer per former sketch', () => {
+  const pt = (id, x, y) => ({ type: 'point', id, x, y });
+  const v2 = { version: 2, name: 'old', activeSketchId: 's20', sketches: [
+    { id: 's10', name: 'Frame', visible: true, entities: [{ type: 'line', id: 'e3', p1: pt('e1', 0, 0), p2: pt('e2', 5, 0) }],
+      constraints: [{ id: 'c4', kind: 'horizontal', lineId: 'e3', p1: 'e1', p2: 'e2' }] },
+    { id: 's20', name: 'Holes', visible: false, entities: [{ type: 'circle', id: 'e6', center: pt('e5', 1, 1), r: 2 }],
+      constraints: [{ id: 'c7', kind: 'radius', circleId: 'e6', value: 2 }] },
+  ] };
+  const p = Project.fromJSON(v2);
+  assert.equal(p.sketches.length, 1);
+  const s = p.sketches[0];
+  assert.equal(s.visible, true);
+  assert.deepEqual(p.layers.map(l => l.name), ['Frame', 'Holes']);
+  assert.equal(p.layers[1].visible, false);
+  assert.equal(p.activeLayer().name, 'Holes');
+  assert.equal(s.entities.length, 2); assert.equal(s.constraints.length, 2);
+  assert.equal(p.layerOf(s.entities[1]).name, 'Holes');
+  assert.equal(s.entities[1].sketchId, s.id);
+  assert.ok(!p.layers.some(l => ['e1', 'e2', 'e3', 'e5', 'e6'].includes(l.id)));
+});
+
+test('v3 files with several sketches keep their layers when merged', () => {
+  const p = new Project(); const a = p.addSketch('A'); const b = p.addSketch('B');
+  const ly = p.addLayer('Second');
+  a.addEntity(new Circle(new Point(0, 0), 1));
+  b.addEntity(new Circle(new Point(9, 0), 1));
+  const q = Project.fromJSON(JSON.parse(JSON.stringify(p.toJSON())));
+  assert.equal(q.sketches.length, 1);
+  assert.equal(q.layers.length, 2);
+  assert.ok(q.sketches[0].entities.every(e => e.layerId === ly.id));
+});
+
+test('ownerOf finds the entity a child point belongs to', () => {
+  const p = new Project(); const s = p.addSketch('A');
+  const l = new Line(new Point(0, 0), new Point(1, 0)); s.addEntity(l);
+  assert.equal(p.ownerOf(l.p2), l);
+  assert.equal(p.ownerOf(l), l);
+});

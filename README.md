@@ -32,12 +32,16 @@ npm run lint
 
 ```
 Project
-├─ layers[]        display groups shared by all sketches (bottom → top):
-│                  colour, line weight, line type, fill, opacity, visible, locked
-└─ sketches[]      parametric containers solved independently
+├─ layers[]        display groups (bottom → top): colour, line weight,
+│                  line type, fill, opacity, visible, locked
+└─ sketches[0]     the single parametric sketch
    ├─ entities[]   Point / Line / Circle / Arc, each with layerId and optional style overrides
    └─ constraints[]
 ```
+
+The UI exposes layers only. `sketches` stays an array in the file format, but
+files with several sketches are merged into one on load (pre-layer files get
+one layer per former sketch).
 
 Layers only affect display and picking. Constraints can link entities on
 different layers, and hidden layers are still solved. Project files are JSON

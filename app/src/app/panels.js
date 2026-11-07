@@ -1,25 +1,20 @@
 import { clamp, dist, normalizeAngleValue } from '../core/math.js';
-import { uiIcon } from '../ui/icons.js';
 import { Arc, Circle, Line, Point } from '../core/entities.js';
 import { CONSTRAINT_LABELS, Constraint, FixConstraint } from '../core/constraints.js';
 import { availableDimensions, availableRelations, constraintAppliesToSelection } from '../editor/relations.js';
+
+const esc = (t) => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 export class PanelsMixin {
 
   /* ---- Sidebar ---- */
   _setupSidebar() {
-    document.getElementById('add-layer').addEventListener('click', () => {
-      this.project.addSketch();
-      this.commit();
-      this.refreshUI();
-    });
     document.getElementById('project-name').addEventListener('input', (e) => {
       this.project.name = e.target.value;
     });
   }
 
   refreshUI() {
-    this._refreshLayers();
     this.refreshToolOptions();
     this._refreshSelectionPanel();
     this._refreshLayerPanel();
@@ -69,53 +64,6 @@ export class PanelsMixin {
     });
   }
 
-  _refreshLayers() {
-    const ul = document.getElementById('layers-list');
-    ul.innerHTML = '';
-    for (const s of this.project.sketches) {
-      const row = document.createElement('div');
-      row.className = 'layer-row' + (s.id === this.project.activeSketchId ? ' active' : '');
-      row.innerHTML = `
-        <button class="icon-btn" title="Toggle sketch visibility" aria-label="Toggle sketch visibility">${uiIcon(s.visible ? 'eye' : 'eyeOff')}</button>
-        <span class="name" title="${s.name}">${s.name}<span class="badge">${s.entities.length}</span></span>
-        <button class="icon-btn" title="Delete" aria-label="Delete sketch">${uiIcon('trash')}</button>
-      `;
-      const [vis, name, del] = row.querySelectorAll(':scope > *');
-      vis.addEventListener('click', (e) => { e.stopPropagation(); s.visible = !s.visible; this.refreshUI(); this.requestRender(); });
-      del.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (this.project.sketches.length <= 1) return alert('A project must have at least one sketch.');
-        if (!confirm(`Delete sketch "${s.name}"?`)) return;
-        this.project.removeSketch(s.id);
-        this.commit();
-        this.refreshUI();
-      });
-      name.addEventListener('dblclick', (e) => {
-        e.stopPropagation();
-        const span = e.currentTarget;
-        span.setAttribute('contenteditable', 'true');
-        span.focus();
-        const range = document.createRange(); range.selectNodeContents(span);
-        const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
-        const finish = () => {
-          span.removeAttribute('contenteditable');
-          s.name = span.textContent.trim() || s.name;
-          span.removeEventListener('blur', finish);
-          this.refreshUI();
-        };
-        span.addEventListener('blur', finish);
-        span.addEventListener('keydown', (ev) => { if (ev.key==='Enter'){ ev.preventDefault(); span.blur(); }});
-      });
-      row.addEventListener('click', () => {
-        this.project.activeSketchId = s.id;
-        this.clearSelection();
-        this.solveAndRender();
-        this.refreshUI();
-      });
-      ul.appendChild(row);
-    }
-  }
-
   _refreshSelectionPanel() {
     const sel = this.selectedEntitiesAndPoints();
     const body = document.getElementById('sel-body');
@@ -126,21 +74,20 @@ export class PanelsMixin {
       return;
     }
 
-    const activeId = this.project.activeSketchId;
     const sketch = this.activeSketch();
     const hasConstraintSelection = sel.some(e => e instanceof Constraint);
 
     // ---- Selection list ----
     let html = '<div class="sb-subhead">Items</div>';
     for (const e of sel) {
-      const owner = this.project.sketchOf(e);
-      const cross = owner && owner.id !== activeId;
+      const owner = e instanceof Constraint ? null : this.project.ownerOf(e);
+      const layer = owner ? this.project.layerOf(owner) : null;
       const glyph = e instanceof Point ? 'P' : e instanceof Line ? 'L' : e instanceof Circle ? 'C' : e instanceof Arc ? 'A' : '?';
       const kind  = e instanceof Constraint ? (CONSTRAINT_LABELS[e.kind] || e.kind) : e.constructor.kind;
-      html += `<div class="sel-item${cross ? ' cross-layer' : ''}">
+      html += `<div class="sel-item">
                  <span class="glyph">${glyph}</span>
                  <span>${kind} ${e.id}</span>
-                 <span class="layer-tag">${owner ? owner.name : '—'}</span>
+                 <span class="layer-tag">${layer ? esc(layer.name) : '—'}</span>
                </div>`;
     }
 

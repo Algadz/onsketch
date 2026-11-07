@@ -182,7 +182,6 @@
     border-bottom: 1px solid var(--border);
   }
   .sb-section:last-child { border-bottom: 0; }
-  .sb-layers   { flex: 0 1 auto; min-height: 88px; max-height: 34%; }
   .sb-tool-options {
     flex: 0 0 auto;
     background: var(--panel-3);
@@ -229,50 +228,6 @@
   }
   .icon-btn:hover { background: var(--hover); color: var(--text); }
   .icon-btn svg { width: 14px; height: 14px; }
-
-  #layers-list {
-    flex: 1;
-    overflow-y: auto;
-    padding: 4px 0;
-  }
-  .layer-row {
-    display: grid;
-    grid-template-columns: 26px minmax(0, 1fr) 26px;
-    align-items: center;
-    gap: 4px;
-    padding: 3px 6px;
-    margin: 2px 6px;
-    border-radius: 6px;
-    cursor: pointer;
-    border: 1px solid transparent;
-  }
-  .layer-row:hover { background: var(--hover); border-color: var(--border-soft); }
-  .layer-row.active {
-    background: var(--accent-softer);
-    border-color: var(--accent-border);
-  }
-  .layer-row .name {
-    font-size: 13px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    padding: 4px 2px;
-    min-width: 0;
-  }
-  .layer-row .name[contenteditable="true"] {
-    background: var(--field);
-    border: 1px solid var(--accent);
-    border-radius: 4px;
-    outline: none;
-  }
-  .layer-row .name .badge {
-    font-size: 10px;
-    color: var(--text-muted);
-    margin-left: 4px;
-    background: transparent;
-    border: 0;
-    padding: 0;
-  }
 
   /* Selection / relations panel body */
   .sb-body {
@@ -336,10 +291,6 @@
     border: 1px solid var(--border-soft);
     border-radius: 999px;
     flex: 0 0 auto;
-  }
-  .sel-item.cross-layer .layer-tag {
-    color: var(--accent);
-    border-color: var(--accent);
   }
 
   /* Relation buttons grid */
@@ -837,3 +788,5 @@
   @media (max-width: 1100px) {
     #app { grid-template-columns: 250px minmax(0, 1fr) 220px; }
   }
+
+  .sb-section[hidden] { display: none; }
