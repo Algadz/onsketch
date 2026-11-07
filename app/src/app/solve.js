@@ -4,6 +4,7 @@ export class SolveMixin {
 
   /* ---- Solving ---- */
   commit(options = {}) {
+    this._applyEquations();
     const diagnostics = options.diagnostics || 'defer';
     const sketch = this.activeSketch();
     const activeIds = options.activeIds

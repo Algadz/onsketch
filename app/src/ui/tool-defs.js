@@ -47,6 +47,7 @@ export const WINDOW_ICONS = {
   colors: svg('<rect x="3" y="3" width="11" height="11" rx="2" fill="currentColor"/><rect x="10" y="10" width="11" height="11" rx="2"/>'),
   layers: svg('<path d="M12 4l9 5-9 5-9-5z"/><path d="M3 14l9 5 9-5"/>'),
   props: svg('<path d="M4 6h16M4 12h16M4 18h10"/>'),
+  equations: svg('<path d="M17 5H7l6 7-6 7h10"/>'),
 };
 
 /** Drawing / editing tools, in Tools-window order. */

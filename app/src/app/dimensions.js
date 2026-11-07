@@ -1,4 +1,4 @@
-import { EPS, angleSectorForCursor, dist, lineIntersection, normalizeAngleValue } from '../core/math.js';
+import { EPS, angleSectorForCursor, dist, lineIntersection } from '../core/math.js';
 import { Line } from '../core/entities.js';
 
 export class DimensionLabelsMixin {
@@ -171,50 +171,9 @@ export class DimensionLabelsMixin {
     if (!c || c.driven) return;
     const rect = (this.renderer.lastDimRects || []).find(r => r.constraint === c);
     if (!rect) return;
-    const cx = rect.x + rect.w / 2, cy = rect.y + rect.h / 2;
-    const input = document.createElement('input');
-    input.type = 'text';
-    Object.assign(input.style, {
-      position: 'absolute',
-      left: cx + 'px', top: cy + 'px',
-      transform: 'translate(-50%, -50%)',
-      zIndex: '30', padding: '2px 5px',
-      border: '1.5px solid var(--accent)', borderRadius: '3px',
-      background: 'var(--field)', color: 'var(--text)', caretColor: 'var(--accent)', font: '12px ui-sans-serif, system-ui',
-      width: '72px', textAlign: 'right', outline: 'none',
-      boxShadow: '0 1px 4px rgba(0,0,0,0.25)'
-    });
-    let initial;
-    if (c.kind === 'angle')                       initial = normalizeAngleValue(c.value) * 180 / Math.PI;
-    else if (c.kind === 'radius' && c.isDiameter) initial = c.value * 2;
-    else                                            initial = c.value;
-    input.value = Number(initial).toFixed(3);
-    document.getElementById('workspace').appendChild(input);
-    setTimeout(() => { input.focus(); input.select(); }, 0);
-
-    const finish = (commit) => {
-      input.removeEventListener('keydown', onKey);
-      input.removeEventListener('blur', onBlur);
-      const raw = input.value;
-      input.remove();
-      if (commit) {
-        const v = parseFloat(raw);
-        if (Number.isFinite(v)) {
-          if (c.kind === 'angle')                       c.value = normalizeAngleValue(v * Math.PI / 180);
-          else if (c.kind === 'radius' && c.isDiameter) c.value = v / 2;
-          else if (c.kind === 'offsetDistance')          this._setOffsetDistanceValue(c, v);
-          else                                            c.value = v;
-          this.commit();
-        }
-      }
-    };
-    const onKey = (e) => {
-      if (e.key === 'Enter')  { e.preventDefault(); e.stopPropagation(); finish(true); }
-      else if (e.key === 'Escape'){ e.preventDefault(); e.stopPropagation(); finish(false); }
-      else                     { e.stopPropagation(); }
-    };
-    const onBlur = () => finish(true);
-    input.addEventListener('keydown', onKey);
-    input.addEventListener('blur', onBlur);
+    // Shows the equation when there is one (like SolidWorks), else the value.
+    this.openValueInput({ x: rect.x + rect.w / 2, y: rect.y + rect.h / 2 }, this.dimensionEditText(c),
+      (text) => this.setDimensionFromText(c, text));
   }
+
 }

@@ -1,3 +1,4 @@
+import { evaluate } from '../core/expr.js';
 import { EPS, TAU, angleOnDirectedArc, directedArcSpan, dist, lineIntersection, mirrorPointAcrossLine, offsetArc, offsetCircle, offsetLine } from '../core/math.js';
 import { uiIcon } from '../ui/icons.js';
 import { Arc, Circle, Line, Point, newId } from '../core/entities.js';
@@ -966,7 +967,8 @@ export class OperationsMixin {
       this.offsetInputEl.remove();
       this.offsetInputEl = null;
       if (commit) {
-        const v = Math.abs(parseFloat(raw));
+        let v = NaN;
+        try { v = Math.abs(evaluate(raw, (n) => this._namedValue(n))); } catch { /* keep previous distance */ }
         if (Number.isFinite(v)) this.offsetDistance = v;
         this.offsetSelection();
       } else {

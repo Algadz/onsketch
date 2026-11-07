@@ -1,3 +1,4 @@
+import { evaluate } from '../core/expr.js';
 import { dist, normalizeAngleValue } from '../core/math.js';
 import { Arc, Circle, Line, Point } from '../core/entities.js';
 import { CONSTRAINT_LABELS, Constraint, FixConstraint } from '../core/constraints.js';
@@ -18,6 +19,7 @@ export class PanelsMixin {
     this.refreshToolOptions();
     this._refreshSelectionPanel();
     this._refreshLayerPanel();
+    this._refreshEquationsPanel();
     this._refreshColorsPanel();
     this._refreshOptionsBar();
     document.getElementById('project-name').value = this.project.name;
@@ -154,7 +156,8 @@ export class PanelsMixin {
     body.querySelectorAll('input[data-edit]').forEach(inp => {
       inp.addEventListener('change', () => {
         const k = inp.dataset.edit;
-        const v = parseFloat(inp.value);
+        let v = NaN;
+        try { v = evaluate(inp.value, (n) => this._namedValue(n)); } catch { /* ignore bad text */ }
         if (!Number.isFinite(v)) return;
         // Snap near-zero values back to exactly zero.
         e[k] = (Math.abs(v) < 1e-12) ? 0 : v;

@@ -57,10 +57,11 @@ export class LayersPanelMixin {
     this.setTheme(prefs.theme || (systemDark ? 'dark' : 'light'), false);
     this.setColorMode(prefs.colorMode === 'status' ? 'status' : 'style', false);
     this.setDimensionsVisible(prefs.showDimensions !== false, false);
+    this.showDimNames = !!prefs.showDimNames;
   }
   _savePrefs() {
     try {
-      localStorage.setItem(PREFS_KEY, JSON.stringify({ theme: this.themeName, colorMode: this.colorMode, pen: this.pen, showDimensions: this.showDimensions }));
+      localStorage.setItem(PREFS_KEY, JSON.stringify({ theme: this.themeName, colorMode: this.colorMode, pen: this.pen, showDimensions: this.showDimensions, showDimNames: !!this.showDimNames }));
     } catch { /* storage unavailable */ }
   }
   setTheme(name, save = true) {
@@ -109,12 +110,12 @@ export class LayersPanelMixin {
     list.innerHTML = '';
     for (const layer of [...project.layers].reverse()) {
       const row = document.createElement('div');
-      row.className = 'lyr-row' + (layer.id === project.activeLayerId ? ' active' : '') + (layer.visible ? '' : ' hidden-layer');
+      row.className = 'lyr-row' + (layer.id === project.activeLayerId ? ' active' : '') + (layer.visible ? '' : ' hidden-layer') + (layer.locked ? ' locked' : '');
       row.dataset.layerId = layer.id;
       row.innerHTML = `
         <button class="icon-btn" data-k="vis" title="${layer.visible ? 'Hide' : 'Show'} layer" aria-label="Toggle visibility">${uiIcon(layer.visible ? 'eye' : 'eyeOff')}</button>
         <button class="icon-btn${layer.locked ? ' on' : ''}" data-k="lock" title="${layer.locked ? 'Unlock' : 'Lock'} layer (locked geometry never moves)" aria-label="Toggle lock">${uiIcon(layer.locked ? 'lock' : 'unlock')}</button>
-        <span class="name" title="Double-click to rename">${esc(layer.name)}</span>
+        <span class="name" title="Double-click to rename">${esc(layer.name)}${layer.locked ? '<span class="lock-tag">Locked</span>' : ''}</span>
         <span class="count">${counts.get(layer.id) || 0}</span>`;
       row.querySelector('[data-k="vis"]').addEventListener('click', (ev) => {
         ev.stopPropagation();
@@ -166,8 +167,36 @@ export class LayersPanelMixin {
       r.addEventListener('input', () => { layer.opacity = read(); this.requestRender(); });
       r.addEventListener('change', () => { layer.opacity = read(); this._layerChanged(); });
     }
+    const active = project.activeLayer();
     const status = document.getElementById('status-layer');
-    if (status) status.textContent = 'Layer: ' + project.activeLayer().name;
+    if (status) {
+      status.textContent = 'Layer: ' + active.name + (active.locked ? ' — locked' : '');
+      status.classList.toggle('locked', active.locked);
+    }
+    this._refreshLockBanner();
+  }
+
+  /** Banner over the canvas while the active layer is locked. */
+  _refreshLockBanner() {
+    const banner = document.getElementById('lock-banner');
+    if (!banner) return;
+    const layer = this.project.activeLayer();
+    banner.hidden = !layer.locked;
+    if (!layer.locked) return;
+    banner.innerHTML = `${uiIcon('lock')}<span>Layer <b>${esc(layer.name)}</b> is locked: its geometry can't move or be edited.</span>
+      <button class="unlock">${uiIcon('unlock')}Unlock</button>`;
+    banner.querySelector('.unlock').addEventListener('click', () => {
+      layer.locked = false;
+      this._layerChanged();
+    });
+  }
+  _flashLockBanner() {
+    this._refreshLockBanner();
+    const banner = document.getElementById('lock-banner');
+    banner.classList.remove('flash');
+    void banner.offsetWidth;            // restart the animation
+    banner.classList.add('flash');
+    document.getElementById('status-hint').textContent = 'The active layer is locked. Unlock it or pick another layer to draw.';
   }
 
   _deselectLayer(layerId) {

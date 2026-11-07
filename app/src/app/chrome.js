@@ -37,6 +37,7 @@ export class ChromeMixin {
       colors: (cw, ch, w, h) => ({ x: 12, y: Math.max(12, ch - h - 12) }),
       layers: (cw, ch, w) => ({ x: cw - w - 12, y: 12 }),
       props:  (cw, ch, w) => ({ x: cw - w - 12, y: 212 }),
+      equations: (cw, ch, w) => ({ x: Math.max(160, (cw - w) / 2), y: 60 }),   // below the lock banner
     }, () => this._syncWindowButtons());
     this._syncWindowButtons();
     requestAnimationFrame(() => this.windows.layout());

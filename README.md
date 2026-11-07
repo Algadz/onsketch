@@ -32,11 +32,29 @@ cached modules after a deploy. `npm test` fails if the stamp is out of date.
   step-by-step help for Smart Dimension; Fill / Erase for the Fill tool.
 - **Floating windows** over the canvas, dragged by their title bar and
   remembered per browser: Tools, Colors, Layers, Properties (selection,
-  relations, dimensions). *Reset window layout* puts them back.
+  relations, dimensions), Equations. *Reset window layout* puts them back.
 - **Colors**: primary (stroke) and secondary (fill) colour. Left-click a
   swatch for stroke, right-click for fill. They apply to the next shapes and
   the Fill tool only; existing geometry changes only through *Apply drawing
   style*.
+
+## Dimensions, units and equations
+
+- Typed dimension values take units: `4in`, `1.5"`, `2ft`, `35cm`, `25mm`,
+  `30deg`, `0.5rad` (stored in mm and degrees). Arithmetic works: `1in + 4mm`.
+- Every dimension is named (D1, D2, …). Start with `=` (or refer to a name) to
+  keep an equation, as in SolidWorks: `=D1/2 + 5mm`, `=width*2`,
+  `=sqrt(D3^2 + D4^2)`. Equations are re-evaluated before every solve, in
+  dependency order; cycles and unknown names are flagged, not applied.
+- Editing a dimension shows its equation (Σ marks equation-driven labels).
+- The Equations window (Σ in the menu bar) lists global variables and all
+  dimensions: rename them (references follow), edit equations, see values.
+
+## Layers
+
+Picking only sees the active layer. A locked layer never moves (the solver
+holds its geometry still), its row is marked in amber, its vertices are grey,
+and while it is active a banner offers to unlock it; drawing on it is blocked.
 
 ## Source layout
 
@@ -69,8 +87,7 @@ or cross, overlaps merged), so shapes sharing or crossing edges fill correctly.
 A fill-tool fill is re-found each time from its boundary entities around its
 inside point, so it follows the geometry.
 
-Picking only sees the active layer. Locked layers never move: the solver
-treats their geometry as constant.
+
 
 The UI exposes layers only. `sketches` stays an array in the file format, but
 files with several sketches are merged into one on load (pre-layer files get

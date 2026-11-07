@@ -331,6 +331,82 @@ const pa = await pixel(cx - 295, cy + 185), pb = await pixel(cx - 205, cy + 185)
 check(shared.fills.length === 2 && pa[3] > 0 && pb[3] > 0 && pa[1] > pa[0] && pb[0] > pb[1],
   `fill tool on shapes sharing a side (${JSON.stringify(shared)} left ${pa.join(',')} right ${pb.join(',')})`);
 
+// Units and equations in dimensions.
+await page.click('#layer-add');
+await page.keyboard.press('l');
+await page.mouse.click(cx + 120, cy - 300);
+await page.mouse.click(cx + 260, cy - 300);
+await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
+await page.keyboard.press('d');
+await page.mouse.click(cx + 190, cy - 300);
+await page.mouse.click(cx + 190, cy - 330);
+await page.locator('#workspace > input.dim-input').fill('1in');
+await page.keyboard.press('Enter');
+const inch = await page.evaluate(() => {
+  const a = window._app, c = a.activeSketch().constraints.filter(k => k.kind === 'distance').pop();
+  const l = a.activeSketch().entities.filter(e => e.constructor.kind === 'line').pop();
+  return { name: c.name, value: c.value, len: Math.hypot(l.p2.x - l.p1.x, l.p2.y - l.p1.y) };
+});
+check(Math.abs(inch.value - 25.4) < 1e-9 && Math.abs(inch.len - 25.4) < 1e-6, `typing 1in makes a 25.4 mm dimension (${JSON.stringify(inch)})`);
+
+await page.keyboard.press('c');
+await page.mouse.click(cx + 200, cy - 200);
+await page.mouse.click(cx + 220, cy - 200);
+await page.keyboard.press('d');
+await page.mouse.click(cx + 220, cy - 200);
+await page.mouse.click(cx + 260, cy - 240);
+await page.locator('#workspace > input.dim-input').fill(`=${inch.name}/2 + 5mm`);
+await page.keyboard.press('Enter');
+const eq = await page.evaluate(() => {
+  const a = window._app, c = a.activeSketch().constraints.filter(k => k.kind === 'radius').pop();
+  return { id: c.id, name: c.name, expr: c.expr, dia: c.isDiameter ? c.value * 2 : c.value };
+});
+check(eq.expr && Math.abs(eq.dia - 17.7) < 1e-9, `formula drives a dimension (${JSON.stringify(eq)})`);
+
+// Changing the referenced dimension updates the formula-driven one.
+await page.evaluate((nm) => {
+  const a = window._app, c = a.activeSketch().constraints.find(k => k.name === nm);
+  a.setDimensionFromText(c, '2in');
+}, inch.name);
+const eq2 = await page.evaluate((id) => {
+  const c = window._app.activeSketch().constraints.find(k => k.id === id);
+  return c.isDiameter ? c.value * 2 : c.value;
+}, eq.id);
+check(Math.abs(eq2 - 30.4) < 1e-9, `formula follows the dimension it uses (${eq2})`);
+
+// Re-editing shows the formula, not the value.
+await page.keyboard.press('s');
+await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
+await page.evaluate((id) => { const a = window._app; a.editDimValue(a.activeSketch().constraints.find(k => k.id === id)); }, eq.id);
+const editText = await page.locator('#workspace > input.dim-input').inputValue();
+await page.keyboard.press('Escape');
+check(editText === `=${inch.name}/2 + 5mm`, `editing shows the formula (${editText})`);
+
+// Bad formula keeps the box open and flags it.
+await page.evaluate((id) => { const a = window._app; a.editDimValue(a.activeSketch().constraints.find(k => k.id === id)); }, eq.id);
+await page.locator('#workspace > input.dim-input').fill('=nope*2');
+await page.keyboard.press('Enter');
+const bad = await page.evaluate(() => { const i = document.querySelector('#workspace > input.dim-input'); return i && i.classList.contains('bad') ? i.title : null; });
+await page.keyboard.press('Escape');
+check(bad && /Unknown name/.test(bad), `bad formula is flagged (${bad})`);
+
+// Locked active layer: banner shows and drawing is blocked.
+await page.evaluate(() => { const a = window._app; a.project.activeLayer().locked = true; a._layerChanged(); });
+const nBefore = await page.evaluate(() => window._app.activeSketch().entities.length);
+await page.keyboard.press('l');
+await page.mouse.click(cx + 120, cy - 120);
+await page.mouse.click(cx + 200, cy - 120);
+await page.keyboard.press('Escape'); await page.keyboard.press('s');
+const lockUi = await page.evaluate(() => ({
+  banner: !document.getElementById('lock-banner').hidden,
+  row: !!document.querySelector('#layer-list .lyr-row.active.locked .lock-tag'),
+  n: window._app.activeSketch().entities.length,
+}));
+check(lockUi.banner && lockUi.row && lockUi.n === nBefore, `locked layer is obvious and blocks drawing (${JSON.stringify(lockUi)})`);
+await page.click('#lock-banner .unlock');
+const unlocked = await page.evaluate(() => !window._app.project.activeLayer().locked && document.getElementById('lock-banner').hidden);
+check(unlocked, 'banner Unlock button unlocks the layer');
+
 // Colour mode + theme toggles (end in Colors mode for the screenshot).
 await page.click('#menubar [data-action="color-mode"]');
 await page.click('#menubar [data-action="theme"]');

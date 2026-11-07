@@ -130,6 +130,11 @@ export class RenderEventsMixin {
         c.style.cursor = 'grabbing';
         return;
       }
+      // Nothing can be drawn, dimensioned or filled on a locked layer.
+      if (ev.button === 0 && this.toolName !== 'select' && this.project.activeLayer().locked) {
+        this._flashLockBanner();
+        return;
+      }
       const snap = this._snapForCurrentTool(world);
       this.lastSnap = snap;
       this.tool.onPointerDown(world, snap, ev);

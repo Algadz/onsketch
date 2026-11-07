@@ -1,6 +1,7 @@
 import { Arc, Circle, Line, Point, ensureIdAbove, newId } from './entities.js';
 import { Layer, cleanStyle } from './style.js';
 import { findClosedProfiles, interiorPoint } from './regions.js';
+import { ensureDimensionNames } from './equations.js';
 
 /** Fill from a file. Fills saved before seeds existed stored their
  *  outline as {outer:[ids], holes:[[ids]]}; an inside point is worked
@@ -85,7 +86,12 @@ export class Sketch {
     const o = {
       id:this.id, name:this.name, visible:this.visible,
       entities:this.entities.map(e => e.toJSON()),
-      constraints:this.constraints.map(c => c.toJSON())
+      constraints:this.constraints.map(c => {
+        const o = c.toJSON();
+        if (c.name) o.name = c.name;          // dimension name for equations (D1…)
+        if (c.expr) o.expr = c.expr;          // equation driving this dimension
+        return o;
+      })
     };
     if (this.features && this.features.length) o.features = this.features;
     if (this.fills.length) o.fills = this.fills.map(f => ({ ...f }));
@@ -97,6 +103,7 @@ export class Project {
   constructor() {
     this.name = 'Untitled';
     this.background = null;       // canvas fill colour set by the fill tool, or null
+    this.variables = [];          // global variables: { name, expr } (value/error are computed)
     this.drawStyle = null;        // style given to new entities (set by the editor; not saved)
     this.units = 'mm';
     this.sketches = [];
@@ -189,6 +196,7 @@ export class Project {
     return {
       version: 3, name:this.name, units:this.units,
       ...(this.background ? { background: this.background } : {}),
+      ...(this.variables.length ? { variables: this.variables.map(v => ({ name: v.name, expr: v.expr })) } : {}),
       activeSketchId:this.activeSketchId,
       activeLayerId:this.activeLayerId,
       layers:this.layers.map(l => l.toJSON()),
@@ -200,6 +208,9 @@ export class Project {
     p.name  = o.name || 'Untitled';
     p.units = o.units || 'mm';
     p.background = /^#[0-9a-f]{6}$/i.test(o.background || '') ? o.background : null;
+    p.variables = Array.isArray(o.variables)
+      ? o.variables.filter(v => v && typeof v.name === 'string' && typeof v.expr === 'string').map(v => ({ name: v.name, expr: v.expr }))
+      : [];
     // Layers arrived in v3. Older files get the single default layer and
     // every entity lands on it (assignLayer below).
     const layerLook = new Map();
@@ -298,6 +309,8 @@ export class Project {
           if (cj.labelMidAngle != null) c.labelMidAngle = cj.labelMidAngle;
           if (cj.isDiameter)            c.isDiameter    = true;
           if (cj.driven)                c.driven        = true;
+          if (typeof cj.name === 'string') c.name = cj.name;
+          if (typeof cj.expr === 'string' && cj.expr.trim()) c.expr = cj.expr;
           s.constraints.push(c);
         }
       }
@@ -322,6 +335,7 @@ export class Project {
     }
     ensureIdAbove(maxN);
     p._mergeSketches(!(Array.isArray(o.layers) && o.layers.length));
+    ensureDimensionNames(p);
     return p;
   }
 

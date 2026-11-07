@@ -878,3 +878,61 @@
     #menubar .btn-label { display: none; }
     #menubar .units { display: none; }
   }
+
+  /* ---------- Dimension value input + Equations window ---------- */
+  .dim-input {
+    position: absolute; z-index: 30; transform: translate(-50%, -50%);
+    padding: 3px 6px; border: 1.5px solid var(--accent); border-radius: 4px;
+    background: var(--field); color: var(--text); caret-color: var(--accent);
+    font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; text-align: right; outline: none;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  }
+  .dim-input.bad, .eq-grid input.bad { border-color: var(--overc); box-shadow: 0 0 0 2px color-mix(in srgb, var(--overc) 25%, transparent); }
+  .fwin[data-win="equations"] { width: 380px; max-height: 70%; }
+  .eq-head {
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--text-muted); margin: 6px 0 6px;
+  }
+  .eq-head:first-child { margin-top: 0; }
+  .eq-grid { display: grid; grid-template-columns: 74px minmax(0, 1fr) 66px 22px; gap: 4px; align-items: center; margin-bottom: 8px; }
+  .eq-grid input {
+    min-width: 0; padding: 4px 6px; border: 1px solid var(--border); border-radius: 5px;
+    background: var(--field); font: 12px ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .eq-grid input:disabled { opacity: 0.55; }
+  .eq-grid .eq-name { font-weight: 600; }
+  .eq-val { font-size: 11px; text-align: right; color: var(--text-soft); font-variant-numeric: tabular-nums; }
+  .hint code { font-size: 10.5px; }
+
+  /* ---------- Locked layers ---------- */
+  :root { --lock: #c47a00; }
+  :root[data-theme="dark"] { --lock: #f0b44c; }
+  .lyr-row.locked { box-shadow: inset 3px 0 0 var(--lock); background: color-mix(in srgb, var(--lock) 8%, transparent); }
+  .lyr-row.locked.active { background: color-mix(in srgb, var(--lock) 14%, var(--accent-softer)); }
+  .lyr-row .icon-btn.on { color: var(--lock); background: color-mix(in srgb, var(--lock) 16%, transparent); }
+  .lock-tag {
+    margin-left: 6px; padding: 0 5px; border-radius: 999px; font-size: 9.5px; font-weight: 700;
+    letter-spacing: 0.04em; text-transform: uppercase; vertical-align: 1px;
+    color: var(--lock); border: 1px solid color-mix(in srgb, var(--lock) 55%, transparent);
+  }
+  #status-layer.locked { color: var(--lock); font-weight: 600; }
+  #lock-banner {
+    position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 20;
+    display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 12px;
+    border: 1px solid color-mix(in srgb, var(--lock) 60%, transparent); border-radius: 999px;
+    background: color-mix(in srgb, var(--lock) 14%, var(--panel)); color: var(--text);
+    font-size: 12px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15); white-space: nowrap;
+  }
+  #lock-banner[hidden] { display: none; }
+  #lock-banner > svg { width: 15px; height: 15px; color: var(--lock); }
+  #lock-banner .unlock {
+    display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--border);
+    background: var(--field); border-radius: 999px; padding: 2px 9px; cursor: pointer; font-size: 11.5px;
+  }
+  #lock-banner .unlock svg { width: 12px; height: 12px; }
+  #lock-banner.flash { animation: lock-flash 0.6s ease 2; }
+  @keyframes lock-flash { 50% { background: color-mix(in srgb, var(--lock) 38%, var(--panel)); } }
+
+  #statusbar > span { white-space: nowrap; flex: 0 0 auto; }
+  #statusbar > #status-hint { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }

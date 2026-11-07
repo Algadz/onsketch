@@ -29,7 +29,7 @@ export class SmartDimensionTool extends Tool {
     this._removeInput();
   }
   _removeInput() {
-    if (this.inputEl) { this.inputEl.remove(); this.inputEl = null; }
+    if (this.inputEl) { this.inputEl.dispose(); this.inputEl = null; }
   }
   _cleanup() {
     this._removeInput();
@@ -266,56 +266,27 @@ export class SmartDimensionTool extends Tool {
     const pos = this._labelScreenPos();
     if (!pos) { this._cleanup(); return; }
 
-    const input = document.createElement('input');
-    input.type = 'text';
-    Object.assign(input.style, {
-      position: 'absolute',
-      left: pos.x + 'px',
-      top:  pos.y + 'px',
-      transform: 'translate(-50%, -50%)',
-      zIndex: '30',
-      padding: '2px 5px',
-      border: '1.5px solid var(--accent)',
-      borderRadius: '3px',
-      background: 'var(--field)', color: 'var(--text)', caretColor: 'var(--accent)',
-      font: '12px ui-sans-serif, system-ui, -apple-system',
-      width: '72px',
-      textAlign: 'right',
-      outline: 'none',
-      boxShadow: '0 1px 4px rgba(0,0,0,0.25)'
-    });
-
     const p = this.preview;
     let initial;
     if (p.kind === 'angle')          initial = normalizeAngleValue(p.value) * 180 / Math.PI;
     else                              initial = (p.kind === 'diameter') ? p.value : Math.abs(p.value);
-    input.value = Number(initial).toFixed(3);
+    const angular = p.kind === 'angle';
 
-    document.getElementById('workspace').appendChild(input);
-    setTimeout(() => { input.focus(); input.select(); }, 0);
-    this.inputEl = input;
-
-    const finish = (commit) => {
-      if (!this.inputEl) return;
-      const raw = this.inputEl.value;
-      this.inputEl.removeEventListener('keydown', onKeyDown);
-      this.inputEl.removeEventListener('blur', onBlur);
-      this._removeInput();
-      if (commit) {
-        const v = parseFloat(raw);
-        this._commit(Number.isFinite(v) ? v : initial);
-      }
+    // Accepts units (4in, 25mm, 30deg) and equations (=D1*2).
+    this.inputEl = this.app.openValueInput(pos, Number(Number(initial).toFixed(3)).toString(), (text) => {
+      let parsed;
+      try { parsed = this.app.parseDimensionInput(text, null, angular); }
+      catch (e) { return e.message; }
+      this.inputEl = null;
+      this._commit(parsed.value, parsed.expr);
       this._reset();
       this.app.requestRender();
-    };
-    const onKeyDown = (e) => {
-      if (e.key === 'Enter')      { e.preventDefault(); e.stopPropagation(); finish(true);  }
-      else if (e.key === 'Escape'){ e.preventDefault(); e.stopPropagation(); finish(false); }
-      else                         { e.stopPropagation(); }
-    };
-    const onBlur = () => finish(true);
-    input.addEventListener('keydown', onKeyDown);
-    input.addEventListener('blur',    onBlur);
+      return null;
+    }, () => {
+      this.inputEl = null;
+      this._reset();
+      this.app.requestRender();
+    });
   }
 
   _labelScreenPos() {
@@ -398,7 +369,7 @@ export class SmartDimensionTool extends Tool {
     return null;
   }
 
-  _commit(value) {
+  _commit(value, expr = null) {
     const sketch = this.app.activeSketch();
     if (!sketch) return;
     const p = this.preview;
@@ -438,6 +409,7 @@ export class SmartDimensionTool extends Tool {
       made.labelMidAngle = p.midAngle;
     }
     if (made) {
+      if (expr) made.expr = expr;
       sketch.constraints.push(made);
       // Run a probe solve. If adding this dimension would over-define the
       // sketch, demote it to a "driven" dimension — informational only,
@@ -450,6 +422,7 @@ export class SmartDimensionTool extends Tool {
       });
       if (probe.state === 'over' || (probe.redundantIds && probe.redundantIds.has(made.id))) {
         made.driven = true;
+        made.expr = null;
       }
       this.app.commit({ activeIds: affectedIds });
       this.app.refreshUI();

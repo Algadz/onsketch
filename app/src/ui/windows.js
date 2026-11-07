@@ -28,7 +28,7 @@ export class WindowManager {
   _register(el) {
     const id = el.dataset.win;
     this.wins.set(id, el);
-    const st = this.state[id] || (this.state[id] = { open: true });
+    const st = this.state[id] || (this.state[id] = { open: !el.hasAttribute('data-closed') });
     el.hidden = !st.open;
     el.querySelector('.fwin-x')?.addEventListener('click', () => this.toggle(id, false));
     el.addEventListener('pointerdown', () => { el.style.zIndex = ++this.z; });
@@ -92,8 +92,10 @@ export class WindowManager {
   }
 
   reset() {
-    for (const [id] of this.wins) this.state[id] = { open: true };
-    for (const el of this.wins.values()) el.hidden = false;
+    for (const [id, el] of this.wins) {
+      this.state[id] = { open: !el.hasAttribute('data-closed') };
+      el.hidden = !this.state[id].open;
+    }
     this.layout();
     this._save();
     this.onChange();

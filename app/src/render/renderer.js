@@ -100,6 +100,7 @@ export class Renderer {
       if (entity.status === 'over')  color = t.over;
       if (!isActive) color = t.inactive;
     }
+    if (entity.locked && entity instanceof Point) color = t.inactive;   // locked layer: vertices greyed
     if (construction)    color = t.construction;
     if (entity.hover)    color = t.hover;
     if (entity.selected) color = t.selected;
@@ -420,6 +421,12 @@ export class Renderer {
     }
   }
 
+  /** Dimension label text, decorated by the app (Σ for equations,
+   *  names when shown). Previews pass objects without a name. */
+  _label(c, text) {
+    return this.labelFor && c && c.id ? this.labelFor(c, text) : text;
+  }
+
   _dimColors(grey, selected = false) {
     return selected
       ? { stroke: this.theme.selected, fill: this.theme.selected, text: this.theme.dimSelectedText }
@@ -522,7 +529,7 @@ export class Renderer {
     this._drawArrow(ctx, pa, dir);
     this._drawArrow(ctx, pb, { x: -dir.x, y: -dir.y });
 
-    const text = (c.value != null) ? Number(c.value).toFixed(2) : len.toFixed(2);
+    const text = this._label(recordAs || c, (c.value != null) ? Number(c.value).toFixed(2) : len.toFixed(2));
     this._drawText(ctx, plab.x, plab.y, text, cols.text, Math.atan2(dys, dxs));
     ctx.restore();
 
@@ -679,9 +686,9 @@ export class Renderer {
     this._drawArrow(ctx, prim, arrowDir);
 
     const radius = c.value ?? r;
-    const txt = c.isDiameter
+    const txt = this._label(c, c.isDiameter
       ? '⌀' + Number(radius * 2).toFixed(2)
-      : 'R' + Number(radius).toFixed(2);
+      : 'R' + Number(radius).toFixed(2));
     this._drawText(ctx, plab.x, plab.y, txt, cols.text, 0);
     ctx.restore();
 
@@ -775,7 +782,7 @@ export class Renderer {
 
     const midAng = arc.midAngle;
     const value = normalizeAngleValue(c.value ?? arc.span);
-    const txt = (value * 180 / Math.PI).toFixed(1) + '°';
+    const txt = this._label(c, (value * 180 / Math.PI).toFixed(1) + '°');
     const tx = pinter.x + (radPx + 12) * Math.cos(midAng);
     const ty = pinter.y - (radPx + 12) * Math.sin(midAng); // flip y
     this._drawText(ctx, tx, ty, txt, cols.text, 0);
