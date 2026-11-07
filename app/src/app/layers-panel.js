@@ -133,7 +133,7 @@ export class LayersPanelMixin {
       row.addEventListener('click', () => {
         if (project.activeLayerId === layer.id) return;
         project.activeLayerId = layer.id;
-        this.refreshUI();
+        this.clearSelection();          // selection is limited to the active layer
       });
       list.appendChild(row);
     }

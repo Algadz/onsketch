@@ -176,6 +176,20 @@ const undoStyle = await page.evaluate(() => {
 });
 check(undoStyle && undoStyle.lineStyle === undefined && undoStyle.color === '#d63a3a', `style change is undoable (${JSON.stringify(undoStyle)})`);
 
+// Only the active layer is pickable.
+const activeOnly = await page.evaluate(() => {
+  const a = window._app, other = a.project.layers[0];
+  const c = a.project.entitiesOnLayer(other.id).find(e => e.constructor.kind === 'circle');
+  const at = { x: c.center.x + c.r, y: c.center.y };
+  const whileOther = a.hitTestAcrossLayers(at);
+  const keep = a.project.activeLayerId;
+  a.project.activeLayerId = other.id;
+  const whileOwn = a.hitTestAcrossLayers(at);
+  a.project.activeLayerId = keep;
+  return { other: whileOther === null, own: whileOwn === c };
+});
+check(activeOnly.other && activeOnly.own, `picking limited to the active layer (${JSON.stringify(activeOnly)})`);
+
 // Lock: geometry on a locked layer can't be picked; hide: can't be snapped either.
 const lockHit = await page.evaluate(() => {
   const a = window._app, ly = a.project.activeLayer();
