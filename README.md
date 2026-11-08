@@ -195,14 +195,18 @@ versions drop stroke colours, and shapes they filled through their style
 become Fill-tool fills. Regions are
 found on a planar arrangement of the geometry (segments split where they touch
 or cross, overlaps merged), so shapes sharing or crossing edges fill correctly.
+Two segments count as the same line when each one's ends lie within the
+arrangement tolerance (1e-6) of the other's line, so a shared edge whose two
+copies differ only by solver rounding is always one edge, never a crossing.
 Fill-tool fills are paint on areas (like Live Paint): a colour plus a point
 inside the area, on one layer. When that layer's shapes change, each current
 area finds its colour by comparing with every area at the reference moment
 (drag start / last commit), painted or not:
 1. same bounding shapes → same colour (moved, resized, flipped; a hole stays
    a hole);
-2. it contains a former area's whole boundary plus new edges (crossing,
-   merge) → the candidate covering most of it;
+2. its outline contains a former area's whole outline plus new edges
+   (crossing, cut, merge) → the candidate covering most of it (outlines, not
+   holes: an island in one of its holes never stands in for the area);
 3. at least half of it painted before → the colour covering most of it
    (split, re-cut);
 4. mostly the same boundary by outline length → that colour (e.g. a bowtie
@@ -211,7 +215,8 @@ otherwise it stays empty. Paint whose area no longer exists (opened up,
 re-shaped away) is removed; Undo brings it back. During a drag nothing is
 stored, so dragging back restores the colours exactly; the result is kept on
 release (after the final solve) and can be undone. The scenarios live in
-`tests/unit/fill-drag.test.js`.
+`tests/unit/fill-drag.test.js`; stability under solver noise (shared edges,
+scrubbing a variable) in `tests/unit/fill-stability.test.js`.
 
 
 

@@ -106,7 +106,15 @@ function meetParams(p, q, r, s, out1, out2) {
   const e1 = TOL / l1, e2 = TOL / l2;
   const denom = cross(d1x, d1y, d2x, d2y);
   const rpx = r.x - p.x, rpy = r.y - p.y;
-  if (Math.abs(denom) > 1e-12 * l1 * l2) {
+  // Same line, decided by distance with the tolerance that merges nodes:
+  // each segment's ends lie within TOL of the other's line. Then it is an
+  // overlap, never a crossing: the crossing point of two (nearly) identical
+  // lines is numerically meaningless, and splitting there would break a
+  // shared edge into slivers that change from one solve to the next.
+  const off1 = (x, y) => Math.abs(cross(d1x, d1y, x - p.x, y - p.y)) / l1;   // distance to line 1
+  const off2 = (x, y) => Math.abs(cross(d2x, d2y, x - r.x, y - r.y)) / l2;   // distance to line 2
+  const collinear = off1(r.x, r.y) <= TOL && off1(s.x, s.y) <= TOL && off2(p.x, p.y) <= TOL && off2(q.x, q.y) <= TOL;
+  if (!collinear && Math.abs(denom) > 1e-12 * l1 * l2) {
     const t = cross(rpx, rpy, d2x, d2y) / denom;
     const u = cross(rpx, rpy, d1x, d1y) / denom;
     if (t >= -e1 && t <= 1 + e1 && u >= -e2 && u <= 1 + e2) {
@@ -115,8 +123,8 @@ function meetParams(p, q, r, s, out1, out2) {
     }
     return;
   }
-  // Parallel: only collinear overlaps matter.
-  if (Math.abs(cross(d1x, d1y, rpx, rpy)) / l1 > TOL) return;
+  // Parallel (or collinear): only overlaps along the same line matter.
+  if (!collinear) return;
   const on1 = (x, y) => ((x - p.x) * d1x + (y - p.y) * d1y) / (l1 * l1);
   const on2 = (x, y) => ((x - r.x) * d2x + (y - r.y) * d2y) / (l2 * l2);
   for (const [x, y] of [[r.x, r.y], [s.x, s.y]]) { const t = on1(x, y); if (t > e1 && t < 1 - e1) out1.push(t); }
@@ -300,7 +308,7 @@ export function allRegions(entities) {
     const holes = holesOf(face, cycles);
     const ids = new Set(face.ids);
     for (const h of holes) for (const id of h.ids) ids.add(id);
-    return { outer: face.pts, holes: holes.map(h => h.pts), ids: [...ids], idLen: mergeLen(face, holes),
+    return { outer: face.pts, holes: holes.map(h => h.pts), ids: [...ids], outerIds: face.ids, idLen: mergeLen(face, holes),
       area: face.area - holes.reduce((t, h) => t - h.area, 0) };
   });
 }
@@ -318,7 +326,7 @@ export function findFaceAt(entities, pt) {
   const holes = holesOf(face, cycles).filter(h => !pointInPolygon(pt, h.pts));
   const ids = new Set(face.ids);
   for (const h of holes) for (const id of h.ids) ids.add(id);
-  return { outer: face.pts, holes: holes.map(h => h.pts), ids: [...ids], idLen: mergeLen(face, holes), area: face.area };
+  return { outer: face.pts, holes: holes.map(h => h.pts), ids: [...ids], outerIds: face.ids, idLen: mergeLen(face, holes), area: face.area };
 }
 
 /** Up to ~n points spread over a region (a grid clipped to it), always
@@ -367,7 +375,7 @@ export function sampleRegion(region, n = 49) {
  */
 export function reconcileRegions(refs, entities, makeId) {
   const regions = allRegions(entities);
-  const all = refs.map(r => ({ ids: new Set(r.ids), idLen: r.idLen || r.region?.idLen, region: r.region, fill: r.fill }));
+  const all = refs.map(r => ({ ids: new Set(r.ids), outerIds: new Set(r.outerIds || r.region?.outerIds || r.ids), idLen: r.idLen || r.region?.idLen, region: r.region, fill: r.fill }));
   for (const r of all) r.bbox = r.region ? bboxOf(r.region.outer) : null;
   const setKey = (ids) => [...ids].sort().join('\u0001');
   const byKey = new Map();            // exact boundary set → references
@@ -399,8 +407,14 @@ export function reconcileRegions(refs, entities, makeId) {
     const exact = byKey.get(setKey(S));
     if (exact) src = pickBy(exact);
     if (src === undefined) {
+      // A former area whose whole outline is part of this one's outline,
+      // plus new edges (crossed, cut, merged), wherever it moved to.
+      // Outlines, not all boundary ids: an area's ids include its holes, so
+      // an island sitting in one of its holes would otherwise qualify while
+      // covering none of it (and steal its colour).
+      const O = new Set(reg.outerIds || reg.ids);
       const seen = new Set(), grown = [];
-      for (const id of S) for (const r of byId.get(id) || []) if (!seen.has(r)) { seen.add(r); if (subset(r.ids, S)) grown.push(r); }
+      for (const id of O) for (const r of byId.get(id) || []) if (!seen.has(r)) { seen.add(r); if (subset(r.outerIds, O)) grown.push(r); }
       if (grown.length) src = pickBy(grown);
     }
     if (src === undefined) {
@@ -450,7 +464,7 @@ export function referenceRegions(fills, entities) {
   const painted = fills;
   return regions.map(reg => {
     const f = painted.find(x => regionContains(reg, x.seed)) || null;
-    return { ids: reg.ids, idLen: reg.idLen, region: reg, fill: f };
+    return { ids: reg.ids, outerIds: reg.outerIds, idLen: reg.idLen, region: reg, fill: f };
   });
 }
 
