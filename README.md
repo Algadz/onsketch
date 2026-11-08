@@ -16,6 +16,7 @@ npm test             # unit tests (node:test, no browser)
 npm run test:e2e     # drives the editor in headless Chromium (needs playwright)
 npm run lint
 npm run stamp        # after changing anything in app/: refresh cache-busting hashes
+node scripts/landing-shot.mjs  # regenerate assets/app-preview.png (landing page screenshot)
 ```
 
 `app/index.html` carries an import map that points every module at

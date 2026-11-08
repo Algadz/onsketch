@@ -3,34 +3,31 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>OnSketch - Collaborative Technical Sketching</title>
-<meta name="description" content="OnSketch is a lightweight browser layer between whiteboards and CAD for fast constrained sketching, sharing, snapshots, comments, and forks." />
+<title>OnSketch - Paint, but to scale</title>
+<meta name="description" content="OnSketch turns ideas into concept visuals with real dimensions. Sketch to scale, colour it in, and present an idea that already fits. Free, in your browser, no install." />
+<meta property="og:title" content="OnSketch - Paint, but to scale" />
+<meta property="og:description" content="Concept visuals with real dimensions. Sketch to scale, colour it in, present an idea that already fits." />
+<meta property="og:image" content="https://onsketch.io/assets/app-preview.png" />
 <link rel="preload" as="image" href="assets/app-preview.png" />
 <style>
   :root {
     --ink: #141922;
     --ink-soft: #526071;
-    --paper: #f7f8fa;
+    --paper: #f7f5f0;
     --panel: #ffffff;
-    --line: #d8dee6;
-    --line-soft: #e9edf2;
+    --line: #dcd8cf;
     --blue: #255f9e;
     --blue-dark: #173f6c;
-    --green: #27745f;
-    --amber: #a76519;
-    --shadow: 0 18px 48px rgba(20, 25, 34, 0.14);
+    --accent: #d9a066;
+    --shadow: 0 24px 60px rgba(20, 25, 34, 0.16);
   }
 
   * { box-sizing: border-box; }
-
-  html {
-    scroll-behavior: smooth;
-    background: var(--paper);
-  }
+  html { scroll-behavior: smooth; background: var(--paper); }
 
   body {
     margin: 0;
-    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, system-ui, sans-serif;
+    font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, system-ui, sans-serif;
     color: var(--ink);
     background: var(--paper);
   }
@@ -43,8 +40,8 @@
     align-items: center;
     justify-content: space-between;
     gap: 20px;
-    padding: 0 clamp(18px, 4vw, 56px);
-    background: rgba(247, 248, 250, 0.92);
+    padding: 0 clamp(16px, 4vw, 56px);
+    background: rgba(247, 245, 240, 0.92);
     border-bottom: 1px solid var(--line);
     position: sticky;
     top: 0;
@@ -52,487 +49,183 @@
     backdrop-filter: blur(14px);
   }
 
-  .brand {
-    display: inline-flex;
-    align-items: center;
-    gap: 10px;
-    font-weight: 800;
-    letter-spacing: 0;
-  }
+  .brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 800; }
 
   .brand-mark {
-    width: 30px;
-    height: 30px;
+    width: 30px; height: 30px;
     border-radius: 8px;
     background: var(--ink);
     position: relative;
-    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.14);
   }
-
-  .brand-mark::before,
-  .brand-mark::after {
-    content: "";
-    position: absolute;
-    background: #fff;
-    transform-origin: center;
-  }
-
   .brand-mark::before {
-    width: 18px;
-    height: 2px;
-    left: 6px;
-    top: 14px;
-    transform: rotate(-28deg);
+    content: ""; position: absolute;
+    left: 7px; top: 7px; width: 16px; height: 16px;
+    border: 2px solid #fff; border-radius: 2px;
+    background: var(--accent);
   }
 
-  .brand-mark::after {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    right: 5px;
-    top: 7px;
-  }
-
-  .nav-links {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-
+  .nav-links { display: flex; align-items: center; gap: 6px; }
   .nav-links a {
-    min-height: 36px;
-    display: inline-flex;
-    align-items: center;
-    padding: 0 12px;
-    border-radius: 7px;
-    color: var(--ink-soft);
-    font-size: 14px;
+    min-height: 36px; display: inline-flex; align-items: center;
+    padding: 0 12px; border-radius: 7px;
+    color: var(--ink-soft); font-size: 14px;
   }
+  .nav-links a:hover { background: #ece8df; color: var(--ink); }
+  .nav-links .launch { background: var(--ink); color: #fff; }
+  .nav-links .launch:hover { background: var(--blue-dark); color: #fff; }
 
-  .nav-links a:hover { background: #eef2f6; color: var(--ink); }
+  .section { padding: clamp(48px, 7vw, 88px) clamp(16px, 5vw, 72px); }
+  .inner { width: min(1160px, 100%); margin: 0 auto; }
 
-  .nav-links .launch {
-    background: var(--ink);
-    color: #fff;
-    border: 1px solid var(--ink);
-  }
-
-  .nav-links .launch:hover {
-    background: var(--blue-dark);
-    border-color: var(--blue-dark);
-    color: #fff;
-  }
-
-  .hero {
-    position: relative;
-    height: min(560px, calc(100svh - 184px));
-    min-height: 460px;
-    display: grid;
-    align-items: center;
-    padding: clamp(30px, 6vw, 76px) clamp(18px, 5vw, 72px);
-    color: #fff;
-    overflow: hidden;
-    isolation: isolate;
-    background: #172231 url("assets/app-preview.png") center top / cover no-repeat;
-  }
-
-  .hero::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    z-index: -1;
-    background: rgba(7, 12, 19, 0.42);
-  }
-
-  .hero::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    z-index: -1;
-    background:
-      linear-gradient(90deg, rgba(7, 12, 19, 0.62) 0%, rgba(7, 12, 19, 0.26) 52%, rgba(7, 12, 19, 0.05) 100%);
-  }
-
-  .hero-copy {
-    width: min(710px, 100%);
-  }
+  /* ---- Hero ---- */
+  .hero { padding-bottom: 0; text-align: center; }
 
   .eyebrow {
-    margin: 0 0 14px;
-    color: #dbe8f7;
-    font-size: 13px;
-    font-weight: 750;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
+    margin: 0 0 16px;
+    color: var(--blue);
+    font-size: 13px; font-weight: 750;
+    text-transform: uppercase; letter-spacing: 0.08em;
   }
 
   h1 {
     margin: 0;
-    font-size: clamp(48px, 8vw, 92px);
+    font-size: clamp(46px, 9vw, 104px);
     line-height: 0.95;
-    letter-spacing: 0;
+    letter-spacing: -0.02em;
+  }
+  h1 .scale {
+    background: linear-gradient(transparent 62%, color-mix(in srgb, var(--accent) 55%, transparent) 62%);
   }
 
-  .hero-copy p {
-    max-width: 620px;
-    margin: 22px 0 0;
-    color: #eef4fb;
-    font-size: clamp(18px, 2.2vw, 23px);
-    line-height: 1.35;
+  .lede {
+    max-width: 640px;
+    margin: 24px auto 0;
+    color: var(--ink-soft);
+    font-size: clamp(18px, 2.2vw, 22px);
+    line-height: 1.4;
   }
 
-  .hero-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
-    margin-top: 30px;
-  }
+  .actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 30px; }
 
   .button {
-    min-height: 44px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    padding: 0 18px;
-    border-radius: 7px;
-    border: 1px solid rgba(255,255,255,0.36);
-    color: #fff;
+    min-height: 46px;
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 0 20px;
+    border-radius: 8px;
+    border: 1px solid var(--ink);
     font-weight: 750;
   }
+  .button.primary { background: var(--ink); color: #fff; }
+  .button.primary:hover { background: var(--blue-dark); border-color: var(--blue-dark); }
+  .button.secondary:hover { background: #ece8df; }
 
-  .button.primary {
-    color: var(--ink);
+  .facts { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 18px; margin-top: 22px; color: var(--ink-soft); font-size: 14px; }
+  .facts span::before { content: "✓ "; color: var(--blue); font-weight: 800; }
+
+  .shot {
+    margin: clamp(36px, 6vw, 64px) auto 0;
+    border: 1px solid #cfcabf;
+    border-bottom: 0;
+    border-radius: 12px 12px 0 0;
+    overflow: hidden;
+    box-shadow: var(--shadow);
     background: #fff;
-    border-color: #fff;
   }
+  .shot img { display: block; width: 100%; height: auto; }
 
-  .button.primary:hover { background: #eaf1f8; }
-  .button.secondary:hover { background: rgba(255,255,255,0.12); }
-
-  .hero-facts {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    margin-top: 28px;
-  }
-
-  .fact {
-    display: inline-flex;
-    align-items: center;
-    min-height: 30px;
-    padding: 0 10px;
-    border-radius: 6px;
-    border: 1px solid rgba(255,255,255,0.22);
-    color: #dce8f4;
-    background: rgba(255,255,255,0.08);
-    font-size: 13px;
-  }
-
-  main > section:not(.hero) {
-    padding: clamp(44px, 7vw, 82px) clamp(18px, 5vw, 72px);
-  }
-
-  .section-inner {
-    width: min(1160px, 100%);
-    margin: 0 auto;
-  }
-
-  .section-heading {
-    display: grid;
-    grid-template-columns: minmax(0, 0.9fr) minmax(260px, 0.55fr);
-    gap: 28px;
-    align-items: end;
-    margin-bottom: 26px;
-  }
+  /* ---- Sections ---- */
+  .band { background: var(--panel); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 
   h2 {
     margin: 0;
-    font-size: clamp(30px, 4.2vw, 52px);
-    line-height: 1.04;
-    letter-spacing: 0;
+    font-size: clamp(30px, 4.4vw, 50px);
+    line-height: 1.05;
+    letter-spacing: -0.01em;
   }
 
-  .section-heading p,
-  .pricing-intro {
-    margin: 0;
-    color: var(--ink-soft);
-    font-size: 17px;
-  }
+  .heading { max-width: 720px; margin-bottom: 32px; }
+  .heading p { margin: 14px 0 0; color: var(--ink-soft); font-size: 18px; }
 
-  .workflow {
-    background: #fff;
-    border-bottom: 1px solid var(--line);
-  }
+  .compare { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
 
-  .feature-grid {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 14px;
-  }
-
-  .feature-card,
-  .plan {
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    background: var(--panel);
-    box-shadow: 0 1px 0 rgba(20, 25, 34, 0.03);
-  }
-
-  .feature-card {
-    min-height: 210px;
-    padding: 22px;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-  }
-
-  .feature-card strong {
-    display: block;
-    font-size: 19px;
-    margin-bottom: 10px;
-  }
-
-  .feature-card p {
-    margin: 0;
-    color: var(--ink-soft);
-  }
-
-  .metric {
-    margin-top: 22px;
-    color: var(--blue);
-    font-weight: 800;
-  }
-
-  .product-strip {
-    background: #e8edf2;
-    padding-top: clamp(36px, 6vw, 72px);
-  }
-
-  .preview-shell {
-    border: 1px solid #c9d1dc;
-    border-radius: 8px 8px 0 0;
-    overflow: hidden;
-    box-shadow: var(--shadow);
-    background: #121922;
-  }
-
-  .preview-shell img {
-    display: block;
-    width: 100%;
-    height: auto;
-  }
-
-  .plans {
-    background: var(--paper);
-  }
-
-  .pricing-top {
-    display: flex;
-    align-items: end;
-    justify-content: space-between;
-    gap: 28px;
-    margin-bottom: 24px;
-  }
-
-  .pricing-top h2 { max-width: 760px; }
-  .pricing-intro { max-width: 420px; }
-
-  .plans-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 16px;
-  }
-
-  .plan {
+  .card {
     padding: 24px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--panel);
   }
+  .band .card { background: var(--paper); }
+  .card h3 { margin: 0 0 8px; font-size: 19px; }
+  .card p { margin: 0; color: var(--ink-soft); }
+  .card .verdict { display: block; margin-top: 16px; font-weight: 750; font-size: 14px; color: var(--ink-soft); }
 
-  .plan.featured {
-    border-color: color-mix(in srgb, var(--blue) 42%, var(--line));
+  .card.win {
+    border-color: color-mix(in srgb, var(--blue) 45%, var(--line));
     box-shadow: 0 14px 38px rgba(37, 95, 158, 0.14);
+    background: var(--panel);
+  }
+  .card.win .verdict { color: var(--blue); }
+
+  .pillars { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+  .pillar .icon {
+    width: 40px; height: 40px;
+    display: grid; place-items: center;
+    margin-bottom: 16px;
+    border-radius: 9px;
+    background: #ece8df;
+    font-size: 20px;
+  }
+  .pillar code {
+    font: 13px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    padding: 2px 5px; border-radius: 4px; background: #ece8df; color: var(--ink);
   }
 
-  .plan-kicker {
-    color: var(--ink-soft);
-    font-size: 13px;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
+  .steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; counter-reset: step; }
+  .step { padding-top: 18px; border-top: 2px solid var(--ink); }
+  .step::before {
+    counter-increment: step; content: counter(step);
+    display: block; margin-bottom: 6px;
+    color: var(--blue); font-weight: 850; font-size: 14px;
+  }
+  .step strong { display: block; font-size: 18px; }
+  .step p { margin: 6px 0 0; color: var(--ink-soft); }
+
+  .uses { display: flex; flex-wrap: wrap; gap: 10px; }
+  .uses span {
+    padding: 10px 16px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--panel);
+    font-weight: 650;
   }
 
-  .plan h3 {
-    margin: 8px 0 0;
-    font-size: 28px;
-    line-height: 1.1;
-    letter-spacing: 0;
-  }
+  .details { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  .details .card p + p { margin-top: 8px; }
+  .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: 0; }
 
-  .price {
-    margin: 16px 0 0;
-    font-size: 34px;
-    font-weight: 850;
-  }
-
-  .price span {
-    color: var(--ink-soft);
-    font-size: 15px;
-    font-weight: 600;
-  }
-
-  .plan ul {
-    display: grid;
-    gap: 10px;
-    margin: 22px 0 0;
-    padding: 0;
-    list-style: none;
-  }
-
-  .plan li {
-    color: var(--ink-soft);
-    padding-left: 24px;
-    position: relative;
-  }
-
-  .plan li::before {
-    content: "";
-    position: absolute;
-    left: 0;
-    top: 0.62em;
-    width: 9px;
-    height: 9px;
-    border-radius: 50%;
-    background: var(--green);
-  }
-
-  .plan.free li::before { background: var(--amber); }
-
-  .plan .button {
-    margin-top: 26px;
-    border-color: var(--ink);
-    color: var(--ink);
-    width: 100%;
-  }
-
-  .plan .button:hover { background: #eef2f6; }
-
-  .plan.featured .button {
-    background: var(--blue);
-    border-color: var(--blue);
-    color: #fff;
-  }
-
-  .plan.featured .button:hover {
-    background: var(--blue-dark);
-    border-color: var(--blue-dark);
-  }
-
-  .next {
-    border-top: 1px solid var(--line);
-    background: #fff;
-  }
-
-  .timeline {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 14px;
-  }
-
-  .step {
-    padding: 18px 0 0;
-    border-top: 2px solid var(--line);
-  }
-
-  .step strong {
-    display: block;
-    font-size: 17px;
-  }
-
-  .step p {
-    margin: 8px 0 0;
-    color: var(--ink-soft);
-  }
+  .cta { text-align: center; }
+  .cta .lede { margin-top: 14px; }
+  .next { margin: 26px auto 0; color: var(--ink-soft); font-size: 14px; }
 
   footer {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 18px;
-    padding: 26px clamp(18px, 5vw, 72px);
+    display: flex; align-items: center; justify-content: space-between; gap: 18px;
+    padding: 26px clamp(16px, 5vw, 72px);
     border-top: 1px solid var(--line);
     color: var(--ink-soft);
-    background: #fff;
+    background: var(--panel);
+  }
+  footer a { color: var(--ink); font-weight: 700; }
+
+  @media (max-width: 900px) {
+    .compare, .pillars, .details { grid-template-columns: 1fr; }
+    .steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
 
-  footer a {
-    color: var(--ink);
-    font-weight: 700;
-  }
-
-  @media (max-width: 880px) {
-    .section-heading,
-    .pricing-top,
-    .feature-grid,
-    .plans-grid,
-    .timeline {
-      grid-template-columns: 1fr;
-    }
-
-    .pricing-top {
-      display: grid;
-    }
-
-    .feature-card {
-      min-height: auto;
-    }
-  }
-
-  @media (max-width: 680px) {
-    .site-header {
-      height: auto;
-      min-height: 64px;
-      align-items: flex-start;
-      padding-top: 12px;
-      padding-bottom: 12px;
-      flex-direction: column;
-    }
-
-    .nav-links {
-      width: 100%;
-      overflow-x: auto;
-      padding-bottom: 2px;
-    }
-
-    .nav-links a {
-      flex: 0 0 auto;
-    }
-
-    .hero {
-      height: calc(100svh - 210px);
-      min-height: 410px;
-      align-items: end;
-      padding-bottom: 34px;
-      background-position: 58% top;
-    }
-
-    .hero::after {
-      background: rgba(7, 12, 19, 0.34);
-    }
-
-    .hero-actions .button {
-      width: 100%;
-    }
-
-    footer {
-      align-items: flex-start;
-      flex-direction: column;
-    }
-  }
-
-  @media (max-height: 640px) {
-    .hero {
-      min-height: 420px;
-    }
+  @media (max-width: 600px) {
+    .nav-links a:not(.launch) { display: none; }
+    .steps { grid-template-columns: 1fr; }
+    .actions .button { width: 100%; }
+    footer { flex-direction: column; align-items: flex-start; }
   }
 </style>
 </head>
@@ -543,131 +236,170 @@
       <span>OnSketch</span>
     </a>
     <nav class="nav-links" aria-label="Primary navigation">
-      <a href="#workflow">Workflow</a>
-      <a href="#plans">Sharing</a>
-      <a href="#next">Roadmap</a>
-      <a class="launch" href="/app/">Open app</a>
+      <a href="#why">Why</a>
+      <a href="#how">How it works</a>
+      <a href="#details">Details</a>
+      <a class="launch" href="/app/">Start drawing</a>
     </nav>
   </header>
 
   <main>
-    <section class="hero">
-      <div class="hero-copy">
-        <p class="eyebrow">Technical sketching between whiteboards and CAD</p>
-        <h1>OnSketch</h1>
-        <p>Open a link, sketch precise geometry, and share a technical idea before anyone has to open a heavyweight CAD workflow.</p>
-        <div class="hero-actions">
-          <a class="button primary" href="/app/">Open sketch workspace</a>
-          <a class="button secondary" href="#workflow">See the workflow</a>
+    <section class="section hero">
+      <div class="inner">
+        <p class="eyebrow">Concept visuals with real dimensions</p>
+        <h1>Paint, but <span class="scale">to scale.</span></h1>
+        <p class="lede">Sketch an idea with real dimensions, colour it in, and present a concept that already fits. Right in your browser.</p>
+        <div class="actions">
+          <a class="button primary" href="/app/">Start drawing, free</a>
+          <a class="button secondary" href="#how">See how it works</a>
         </div>
-        <div class="hero-facts" aria-label="Product highlights">
-          <span class="fact">No install</span>
-          <span class="fact">Precise constraints</span>
-          <span class="fact">Shareable snapshots next</span>
+        <div class="facts" aria-label="Highlights">
+          <span>Free</span>
+          <span>No signup</span>
+          <span>Nothing to install</span>
         </div>
-      </div>
-    </section>
-
-    <section class="workflow" id="workflow">
-      <div class="section-inner">
-        <div class="section-heading">
-          <h2>The lightweight layer before formal CAD.</h2>
-          <p>Use OnSketch when a whiteboard is too vague and SolidWorks or Fusion is too much: concept reviews, maker iterations, packaging fit, mechanisms, and quick technical handoffs.</p>
-        </div>
-        <div class="feature-grid">
-          <article class="feature-card">
-            <div>
-              <strong>Fast technical ideation</strong>
-              <p>Start with dimensions, constraints, and real geometry instead of screenshots, rough arrows, or long explanation threads.</p>
-            </div>
-            <span class="metric">Open link, sketch, share</span>
-          </article>
-          <article class="feature-card">
-            <div>
-              <strong>Async concept exchange</strong>
-              <p>Snapshots, comments, and forks should make it natural to review an idea later, propose a variant, and preserve the trail.</p>
-            </div>
-            <span class="metric">Versioned by design</span>
-          </article>
-          <article class="feature-card">
-            <div>
-              <strong>Browser-first communication</strong>
-              <p>No install, no local files to chase, no CAD crash recovery. The sketch is a shareable technical artifact from the start.</p>
-            </div>
-            <span class="metric">Built for mobile and tablet</span>
-          </article>
+        <div class="shot">
+          <img src="assets/app-preview.png" width="2880" height="1800" alt="A 6 by 4 metre studio layout drawn in OnSketch: coloured furniture on a floor plan, with dimensions in millimetres" />
         </div>
       </div>
     </section>
 
-    <section class="product-strip" aria-label="OnSketch app preview">
-      <div class="section-inner">
-        <div class="preview-shell">
-          <img src="assets/app-preview.png" alt="OnSketch drawing workspace with toolbar, sketch layers, canvas, and solver status" />
+    <section class="section band" id="why">
+      <div class="inner">
+        <div class="heading">
+          <h2>Pretty or precise. Why pick one?</h2>
+          <p>When you present an idea, the first question is often "does it fit?". Most tools make you choose between a nice picture and a right answer.</p>
         </div>
-      </div>
-    </section>
-
-    <section class="plans" id="plans">
-      <div class="section-inner">
-        <div class="pricing-top">
-          <h2>Sharing first, CAD later.</h2>
-          <p class="pricing-intro">The account model should support lightweight exchange: public sketches for open collaboration, private libraries for teams and paid users.</p>
-        </div>
-        <div class="plans-grid">
-          <article class="plan free">
-            <span class="plan-kicker">Free</span>
-            <h3>Public concept sharing</h3>
-            <p class="price">$0 <span>/ month</span></p>
-            <ul>
-              <li>Save up to 3 public projects</li>
-              <li>Share precise concept sketches by link</li>
-              <li>Use import and export for local handoff</li>
-            </ul>
-            <a class="button" href="/app/">Start sketching</a>
+        <div class="compare">
+          <article class="card">
+            <h3>Slides and drawing apps</h3>
+            <p>Quick and good-looking, but nothing is to scale. The idea falls apart at the first measurement.</p>
+            <span class="verdict">Pretty, not precise</span>
           </article>
-          <article class="plan featured">
-            <span class="plan-kicker">Paid</span>
-            <h3>Private technical workspace</h3>
-            <p class="price">Unlimited <span>private projects</span></p>
-            <ul>
-              <li>Save unlimited private projects</li>
-              <li>Access sketches across devices and teams</li>
-              <li>Use snapshots, comments, and forks as they land</li>
-            </ul>
-            <a class="button" href="/app/">Open the app</a>
+          <article class="card">
+            <h3>CAD software</h3>
+            <p>Exact, but heavy to learn and slow to start, and the drawings are hard to show to people who don't use CAD.</p>
+            <span class="verdict">Precise, not presentable</span>
+          </article>
+          <article class="card win">
+            <h3>OnSketch</h3>
+            <p>Draw freely, give shapes their real dimensions, then colour them like a painting. One visual that is both clear and correct.</p>
+            <span class="verdict">Both</span>
           </article>
         </div>
       </div>
     </section>
 
-    <section class="next" id="next">
-      <div class="section-inner">
-        <div class="section-heading">
-          <h2>Next product pass: collaboration primitives.</h2>
-          <p>With the editor under /app, the backend should prioritize durable shared artifacts over enterprise CAD features.</p>
+    <section class="section">
+      <div class="inner">
+        <div class="pillars">
+          <article class="card pillar">
+            <div class="icon" aria-hidden="true">📏</div>
+            <h3>To scale</h3>
+            <p>Type real dimensions in the units you think in: <code>2.4m</code>, <code>35cm</code>, <code>4in</code>, even <code>1in + 4mm</code>. Shapes resize to match.</p>
+          </article>
+          <article class="card pillar">
+            <div class="icon" aria-hidden="true">🎨</div>
+            <h3>Presentable</h3>
+            <p>Click an area to fill it with colour. Stack layers and set their opacity. Colours stay in place when you move or resize a shape.</p>
+          </article>
+          <article class="card pillar">
+            <div class="icon" aria-hidden="true">⚡</div>
+            <h3>Instant</h3>
+            <p>Open a tab and start drawing. No account, no download, no licence.</p>
+          </article>
         </div>
-        <div class="timeline">
+      </div>
+    </section>
+
+    <section class="section band" id="how">
+      <div class="inner">
+        <div class="heading">
+          <h2>From rough idea to scaled concept.</h2>
+        </div>
+        <div class="steps">
           <div class="step">
-            <strong>1. Login and project library</strong>
-            <p>Add Supabase auth, cloud saves, visibility, and the free public project limit.</p>
+            <strong>Sketch roughly</strong>
+            <p>Lines, rectangles, circles, arcs. Don't worry about sizes yet.</p>
           </div>
           <div class="step">
-            <strong>2. Versioned snapshots</strong>
-            <p>Save named states so teams can compare concept directions without losing context.</p>
+            <strong>Add dimensions</strong>
+            <p>Click a shape, type its real size. The drawing snaps to scale.</p>
           </div>
           <div class="step">
-            <strong>3. Comments and forks</strong>
-            <p>Make async review natural: annotate, branch a variant, and send the result back as a link.</p>
+            <strong>Colour it in</strong>
+            <p>Fill areas, organise layers, adjust opacity until it reads at a glance.</p>
+          </div>
+          <div class="step">
+            <strong>Change your mind</strong>
+            <p>Edit one number and everything that depends on it follows, colours included.</p>
           </div>
         </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="inner">
+        <div class="heading">
+          <h2>Made for ideas that have to fit.</h2>
+          <p>Whenever you need to show an idea to someone, and the proportions matter.</p>
+        </div>
+        <div class="uses">
+          <span>Room and furniture layouts</span>
+          <span>Shop and booth plans</span>
+          <span>Product concepts</span>
+          <span>Packaging and labels</span>
+          <span>Garden and terrace plans</span>
+          <span>Workshop projects</span>
+          <span>Explaining a mechanism</span>
+          <span>Signage and displays</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="section band" id="details">
+      <div class="inner">
+        <div class="heading">
+          <h2>A real sketch engine underneath.</h2>
+          <p>Easy on the surface, with the precision of a CAD sketcher when you want it.</p>
+        </div>
+        <div class="details">
+          <article class="card">
+            <h3>Geometric constraints</h3>
+            <p>Horizontal, parallel, tangent, equal, coincident and more keep your shapes the way you mean them as you edit.</p>
+            <p>Line colour shows how much is pinned down: <span class="swatch" style="background:#1f6fd1"></span>free to move, <span class="swatch" style="background:#111418"></span>fully defined, <span class="swatch" style="background:#d63a3a"></span>conflicting.</p>
+          </article>
+          <article class="card">
+            <h3>Equations</h3>
+            <p>Every dimension has a name. Link them with formulas like <code>=width / 2</code> or <code>=D1 + 50mm</code> and change a whole concept by editing one value.</p>
+          </article>
+          <article class="card">
+            <h3>No silent fudging</h3>
+            <p>If dimensions contradict each other, OnSketch tells you and leaves your shapes alone instead of bending them into an approximate fit.</p>
+          </article>
+          <article class="card">
+            <h3>Your files, your machine</h3>
+            <p>No cloud account needed. Export a project as a JSON file to keep, back up, and import again later.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section cta">
+      <div class="inner">
+        <h2>Your next idea, to scale.</h2>
+        <p class="lede">Open the editor and draw your first concept in a couple of minutes.</p>
+        <div class="actions">
+          <a class="button primary" href="/app/">Start drawing, free</a>
+        </div>
+        <p class="next">Coming next: image export for slides and documents, and share links.</p>
       </div>
     </section>
   </main>
 
   <footer>
-    <span>OnSketch</span>
-    <a href="/app/">Open app</a>
+    <span>OnSketch · Paint, but to scale.</span>
+    <a href="/app/">Open the editor</a>
   </footer>
 </body>
 </html>
