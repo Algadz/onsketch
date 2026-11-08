@@ -602,6 +602,14 @@ await page.waitForFunction(() => !window._app.cloudUser);
 await page.goto(base.replace('/app/', '/pricing/'));
 await page.waitForSelector('.pr-cta[data-plan="pro"] a.btn');
 check(/back=%2Fpricing%2F%3Fcheckout%3Dyear/.test(await page.getAttribute('.pr-cta[data-plan="pro"] a.btn', 'href')), 'pricing signed out: Sign in to get Pro, then back to the checkout');
+await page.emulateMedia({ colorScheme: 'dark' });
+await app(() => localStorage.setItem('onsketch:prefs', JSON.stringify({ theme: 'dark' })));
+await page.reload();
+await page.waitForSelector('.pr-card');
+check(await app(() => document.documentElement.dataset.theme === 'light' && getComputedStyle(document.querySelector('.pr-card')).backgroundColor === 'rgb(255, 255, 255)'),
+  'pricing stays light with a dark system and a dark editor theme');
+await page.emulateMedia({ colorScheme: 'light' });
+await app(() => localStorage.setItem('onsketch:prefs', JSON.stringify({ theme: 'light' })));
 if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + '/pricing.png', fullPage: true });
 
 check(nativeDialogs.length === 0, 'no browser pop-ups (confirm / alert / prompt)' + (nativeDialogs.length ? ': ' + nativeDialogs.join(' | ') : ''));
