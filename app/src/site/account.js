@@ -37,7 +37,7 @@ export async function mountAccount(el, { signInClass = 'btn', editorHref = '/app
   const stored = storedSession();
   if (!stored) { signedOut(); return; }
 
-  let user = stored.user, profile = null, cloud = null;
+  let user = stored.user, profile = null, cloud = null, plan = null;
   const render = () => {
     const pic = profile?.avatar_url || user.user_metadata?.avatar_url;
     const initial = (profile?.username || user.email || '?').trim()[0].toUpperCase();
@@ -49,6 +49,9 @@ export async function mountAccount(el, { signInClass = 'btn', editorHref = '/app
         <a role="menuitem" href="/app/projects/">My sketches</a>
         <a role="menuitem" href="/library/">Library</a>
         <a role="menuitem" href="${esc(editorHref)}">Open the editor</a>
+        ${plan?.plan === 'premium'
+          ? (plan.hasSubscription ? '<button type="button" role="menuitem" data-a="billing">Manage subscription</button>' : '')
+          : '<a role="menuitem" class="site-acc-pro" href="/pricing/">Upgrade to Pro</a>'}
         <div class="site-acc-sep"></div>
         <button type="button" role="menuitem" data-a="signout">Sign out</button>
       </div>`;
@@ -60,6 +63,10 @@ export async function mountAccount(el, { signInClass = 'btn', editorHref = '/app
       try { cloud = cloud || await openCloud(); await cloud.signOut(); } catch { /* signed out locally anyway */ }
       try { localStorage.removeItem(LINK_KEY); } catch { /* storage unavailable */ }
       signedOut();
+    });
+    menu.querySelector('[data-a="billing"]')?.addEventListener('click', async (e) => {
+      e.currentTarget.textContent = 'Opening…';
+      try { location.href = await cloud.billing('portal'); } catch { e.currentTarget.textContent = 'Manage subscription'; }
     });
     el._close = () => toggle(false);
   };
@@ -76,7 +83,7 @@ export async function mountAccount(el, { signInClass = 'btn', editorHref = '/app
     const fresh = await cloud.user();
     if (!fresh) { signedOut(); return; }
     user = fresh;
-    profile = await cloud.profile().catch(() => null);
+    [profile, plan] = await Promise.all([cloud.profile().catch(() => null), cloud.plan().catch(() => null)]);
     render();
   } catch { /* offline: keep what the stored session says */ }
 }
@@ -106,6 +113,7 @@ function injectStyles() {
     color: var(--text, #1b2028); font: inherit; font-size: 14px; text-align: left; text-decoration: none; cursor: pointer; }
   .site-acc-menu a:hover, .site-acc-menu button:hover, .site-acc-menu a:focus-visible, .site-acc-menu button:focus-visible {
     background: var(--accent-soft, #dce9f7); outline: none; }
+  .site-acc-menu .site-acc-pro { color: var(--accent, #2563a5); font-weight: 600; }
   .site-acc-sep { height: 1px; background: var(--border-soft, #e4e8ee); margin: 4px 2px; }`;
   document.head.appendChild(css);
 }

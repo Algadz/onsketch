@@ -117,7 +117,8 @@ export class CompactMixin {
       ['relations', 'Relations', this.showRelations], ['zoom-fit', 'Zoom to fit'], ['theme', 'Dark theme', this.themeName === 'dark'],
       '-',
       ...(!this.cloudEnabled ? [] : this.cloudUser
-        ? ['-', ['my-sketches', 'My sketches'], ['library', 'Library'], ['profile', 'Public profile'], ['signout', 'Sign out']]
+        ? ['-', ['my-sketches', 'My sketches'], ['library', 'Library'], ['profile', 'Public profile'],
+          this.cloudPlan?.plan === 'premium' ? ['billing', 'Manage subscription'] : ['pricing', 'Upgrade to Pro'], ['signout', 'Sign out']]
         : ['-', ['account', 'Sign in'], ['library', 'Library']]),
       ['stylus', 'Only the pencil draws', !!this.stylusMode],
       ['report', 'Report a problem'],

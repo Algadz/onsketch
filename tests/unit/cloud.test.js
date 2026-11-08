@@ -134,7 +134,10 @@ test('details: title 3–80, description 10–500', async () => {
 
 test('free plan: the fourth project is refused with LimitError', async () => {
   const cloud = await openCloud({ url: URL_, key: KEY, createClient: () => fakeClient() });
-  assert.deepEqual(await cloud.plan(), { plan: 'free', limit: 3 });
+  const plan = await cloud.plan();
+  assert.equal(plan.plan, 'free');
+  assert.equal(plan.limit, 3);
+  assert.equal(plan.hasSubscription, false);
   for (const n of ['One', 'Two', 'Three']) await cloud.create(projectJSON(n), { name: n, description: 'Some description' });
   await assert.rejects(cloud.create(projectJSON('Four'), { name: 'Four', description: 'Some description' }), (e) => e instanceof LimitError && e.limit === 3);
 });

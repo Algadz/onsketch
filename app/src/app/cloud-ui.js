@@ -208,15 +208,19 @@ export class CloudMixin {
         ${this._avatarHTML()}
         <div class="am-who"><b>${p?.username ? '@' + esc(p.username) : 'No public username yet'}</b><span class="muted">${esc(u.email || '')}</span></div>
       </div>
-      <div class="am-plan muted">${plan ? (plan.plan === 'premium' ? '<b>Premium</b>' : `<b>Free plan</b> · up to ${plan.limit} sketches`) : ''}</div>
+      <div class="am-plan muted">${plan ? (plan.plan === 'premium' ? '<b>OnSketch Pro</b> · unlimited sketches' : `<b>Free plan</b> · up to ${plan.limit} sketches`) : ''}</div>
       <a role="menuitem" class="am-item" href="projects/">My sketches</a>
       <a role="menuitem" class="am-item" href="/library/">Library</a>
       <button type="button" role="menuitem" class="am-item" data-a="profile">${p?.username ? 'Public profile…' : 'Choose a username…'}</button>
       ${this.cloudLink ? '<button type="button" role="menuitem" class="am-item" data-a="details">Sketch details…</button>' : ''}
+      ${plan?.plan === 'premium'
+        ? (plan.hasSubscription ? '<button type="button" role="menuitem" class="am-item" data-a="billing">Manage subscription</button>' : '')
+        : '<a role="menuitem" class="am-item am-pro" href="/pricing/">Upgrade to Pro</a>'}
       <div class="am-sep"></div>
       <button type="button" role="menuitem" class="am-item" data-a="signout">Sign out</button>`;
     menu.querySelector('[data-a="profile"]').addEventListener('click', () => this.editProfile());
     menu.querySelector('[data-a="signout"]').addEventListener('click', () => { this.toggleAccountMenu(false); this.cloudSignOut(); });
+    menu.querySelector('[data-a="billing"]')?.addEventListener('click', () => { this.toggleAccountMenu(false); this.manageSubscription(); });
     menu.querySelector('[data-a="details"]')?.addEventListener('click', async () => {
       this.toggleAccountMenu(false);
       try { this.editCloudDetails(await this.cloud.load(this.cloudLink.id)); } catch (e) { this._hint("Couldn't load the sketch details."); }
@@ -227,6 +231,11 @@ export class CloudMixin {
     menu.hidden = false;
     menu.querySelector('.am-item')?.focus();
     if (!plan) this.cloud.plan().then(pl => { this.cloudPlan = pl; if (!menu.hidden) this.toggleAccountMenu(true); }).catch(() => {});
+  }
+  async manageSubscription() {
+    this._hint('Opening your subscription…');
+    try { location.href = await this.cloud.billing('portal'); }
+    catch (e) { notice(e.message || "Couldn't open the subscription page.", { kind: 'error' }); }
   }
   _avatarHTML() {
     const u = this.cloudUser, p = this.cloudProfile;

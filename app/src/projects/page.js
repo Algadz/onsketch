@@ -84,13 +84,16 @@ class Page {
     const { plan, limit } = this.plan, used = this.rows.length;
     const usage = $('usage');
     usage.hidden = false;
-    if (plan === 'premium') usage.innerHTML = `<b>Premium</b> · ${used} sketch${used === 1 ? '' : 'es'} · private sketches allowed`;
+    if (plan === 'premium') {
+      usage.innerHTML = `<span><b>OnSketch Pro</b> · ${used} sketch${used === 1 ? '' : 'es'} · unlimited, private allowed</span>
+        ${this.plan.hasSubscription ? '<button type="button" class="link" data-a="billing">Manage subscription</button>' : ''}`;
+      usage.querySelector('[data-a="billing"]')?.addEventListener('click', (e) => this.manageSubscription(e.currentTarget));
+    }
     else {
       const pct = Math.min(100, Math.round(used / limit * 100));
       usage.innerHTML = `<span><b>Free plan</b> · ${used} of ${limit} sketches used</span>
         <span class="meter${used >= limit ? ' full' : ''}" role="meter" aria-valuemin="0" aria-valuemax="${limit}" aria-valuenow="${used}" aria-label="Sketches used"><span style="width:${pct}%"></span></span>
-        <button type="button" class="link" data-a="upgrade">Upgrade →</button>`;
-      usage.querySelector('[data-a="upgrade"]').addEventListener('click', () => this.upgrade());
+        <a class="link" href="/pricing/">Upgrade to Pro →</a>`;
     }
     usage.insertAdjacentHTML('beforeend', this.profile?.username
       ? `<span class="usage-name">Shown in the <a href="/library/">library</a> as <b>@${esc(this.profile.username)}</b> <button type="button" class="link" data-a="name">Edit profile</button></span>`
@@ -122,8 +125,8 @@ class Page {
     cards.push(this.full()
       ? `<li class="sketch-card upsell">
           <h2>You've used your ${limit} free sketches</h2>
-          <p>Delete one to make room, or go Premium for unlimited and private sketches.</p>
-          <button type="button" class="btn primary" data-a="upgrade">See Premium</button>
+          <p>Delete one to make room, or go Pro for unlimited and private sketches.</p>
+          <a class="btn primary" href="/pricing/">See OnSketch Pro</a>
         </li>`
       : `<li class="sketch-card new">
           <a href="../?new"><span class="plus">+</span><b>New sketch</b>${remaining != null ? `<span class="muted">${remaining} left on the free plan</span>` : ''}</a>
@@ -146,7 +149,10 @@ class Page {
     if (wasOpen) return;
     const m = document.createElement('div');
     m.className = 'card-menu'; m.setAttribute('role', 'menu');
-    const items = [['open', 'Open'], ['details', 'Edit details'], ['duplicate', 'Duplicate'], ['download', 'Download JSON'], ['delete', 'Delete']];
+    const pro = this.plan.plan === 'premium';
+    const items = [['open', 'Open'], ['details', 'Edit details'],
+      row.visibility === 'private' ? ['public', 'Make public'] : (pro ? ['private', 'Make private'] : ['private-pro', 'Make private (Pro)']),
+      ['duplicate', 'Duplicate'], ['download', 'Download JSON'], ['delete', 'Delete']];
     m.innerHTML = items.map(([a, t]) => `<button type="button" role="menuitem" data-a="${a}"${a === 'delete' ? ' class="danger"' : ''}>${t}</button>`).join('');
     li.querySelector('.card-title-row').appendChild(m);
     m.querySelector('button').focus();
@@ -158,6 +164,9 @@ class Page {
       else if (a === 'duplicate') this.duplicate(row);
       else if (a === 'download') this.download(row);
       else if (a === 'delete') this.remove(row);
+      else if (a === 'public') this.setVisibility(row, 'public');
+      else if (a === 'private') this.setVisibility(row, 'private');
+      else if (a === 'private-pro') this.upgrade();
     });
   }
 
@@ -204,22 +213,19 @@ class Page {
       await this.load();
     } catch (e) { notice("Couldn't delete: " + (e.message || e), { kind: 'error' }); }
   }
-  upgrade() {
-    const back = document.createElement('div');
-    back.className = 'modal-backdrop show';
-    back.innerHTML = `<div class="modal account" role="dialog" aria-modal="true" aria-labelledby="up-h">
-      <h3 id="up-h">Premium is coming</h3>
-      <div class="body">
-        <p>Premium will add <b>unlimited sketches</b> and <b>private sketches</b> that only you can see.</p>
-        <p class="muted">It isn't available yet. Until then, the free plan holds ${this.plan.limit ?? 3} sketches; delete one to make room for a new one.</p>
-      </div>
-      <div class="footer"><button type="button" class="btn primary" data-a="ok">OK</button></div></div>`;
-    document.body.appendChild(back);
-    const close = () => back.remove();
-    back.querySelector('[data-a="ok"]').addEventListener('click', close);
-    back.addEventListener('pointerdown', (e) => { if (e.target === back) close(); });
-    back.querySelector('[data-a="ok"]').focus();
+  /** Free plan full (or a Pro feature): to the pricing page. */
+  upgrade() { location.href = '/pricing/'; }
+  async manageSubscription(btn) {
+    if (btn) { btn.disabled = true; btn.textContent = 'Opening…'; }
+    try { location.href = await this.cloud.billing('portal'); }
+    catch (e) { notice(e.message || "Couldn't open the subscription page.", { kind: 'error' }); if (btn) { btn.disabled = false; btn.textContent = 'Manage subscription'; } }
   }
+  async setVisibility(row, visibility) {
+    try { await this.cloud.setVisibility(row.id, visibility); row.visibility = visibility; this.render();
+      notice(visibility === 'private' ? `"${row.name}" is private: only you can see it.` : `"${row.name}" is public: it appears in the library.`); }
+    catch (e) { notice(e.message || "Couldn't change it.", { kind: 'error' }); }
+  }
+
 }
 
 const page = new Page();

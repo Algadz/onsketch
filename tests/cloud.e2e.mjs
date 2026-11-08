@@ -47,6 +47,13 @@ function installFake() {
       signInWithOAuth: async () => ({ error: null }),
       signOut: async () => { setSession(null); return { error: null }; },
     },
+    functions: { invoke: async (name, { body }) => {
+      window.__billingCalls = [...(window.__billingCalls || []), { name, body }];
+      if (name !== 'billing' || !session()) return { data: null, error: new Error('Unauthorized') };
+      if (body.action === 'checkout') return { data: { url: `https://onsketch.lemonsqueezy.test/checkout/${body.interval}?user=${session().user.id}` }, error: null };
+      if (body.action === 'portal') return { data: { url: 'https://onsketch.lemonsqueezy.test/billing' }, error: null };
+      return { data: null, error: new Error('Unknown action') };
+    } },
     rpc: async (fn, args) => {
       if (fn !== 'username_available') return { data: null, error: new Error('no such function') };
       const me = session()?.user?.id;
@@ -82,7 +89,7 @@ function installFake() {
         return { data: out, error: null };
       };
       const run = () => {
-        if (table === 'account_plans') return q.maybe ? { data: null, error: null } : { data: [], error: null };
+        if (table === 'account_plans') return finish(load('fake-sb:t:account_plans').filter(m));
         if (table === 'library_sketches') {
           const profiles = load('fake-sb:t:public_profiles'), likes = load('fake-sb:t:project_likes');
           let out = load(DB).filter(r => r.visibility === 'public' && r.description != null).map(r => {
@@ -99,7 +106,8 @@ function installFake() {
         let out;
         if (q.op === 'insert' || q.op === 'upsert') {
           if (table === 'projects') {
-            if (all.filter(r => r.owner_id === me()).length >= (window.__fakeLimit ?? 3)) return fail('OnSketch: free plan limit (3 projects).');
+            const pro = load('fake-sb:t:account_plans').some(r => r.user_id === me() && r.plan === 'premium');
+            if (!pro && all.filter(r => r.owner_id === me()).length >= (window.__fakeLimit ?? 3)) return fail('OnSketch: free plan limit (3 projects).');
             const now = new Date().toISOString();
             const r = { id: 'p' + (all.length + 1) + '-' + Date.now(), owner_id: me(), visibility: 'private', revision: 1, created_at: now, updated_at: now, ...q.p };
             all.push(r); out = [r];
@@ -307,9 +315,10 @@ check(/3 of 3 sketches used/.test(await page.textContent('#usage')), 'usage mete
 check(await page.isVisible('.sketch-card.upsell') && !(await page.isVisible('.sketch-card.new')), 'at the limit the New card becomes the upgrade card');
 await page.click('.sketch-card[data-id] .menu-btn');
 await page.click('.card-menu [data-a="duplicate"]');
-await page.waitForSelector('text=Premium is coming');
-check(true, 'a fourth sketch shows Premium');
-await page.click('.modal-backdrop.show [data-a="ok"]');
+await page.waitForURL(/\/pricing\/$/);
+check(true, 'a fourth sketch leads to the pricing page');
+await page.goBack();
+await page.waitForSelector('.sketch-card[data-id]');
 
 // Delete a copy.
 await page.locator('.sketch-card[data-id]', { hasText: '(copy)' }).first().locator('.menu-btn').click();
@@ -493,6 +502,57 @@ await page.waitForURL(home);
 await page.waitForFunction(() => /@alban\.m/.test(document.querySelector('#site-account .site-acc-head')?.textContent || ''));
 check(true, 'signing in from the landing page returns to it, showing @username');
 if (process.env.SHOT_DIR) { await page.click('#site-account .site-acc-btn'); await page.screenshot({ path: process.env.SHOT_DIR + '/landing-menu.png', clip: { x: 700, y: 0, width: 700, height: 340 } }); }
+if (process.env.SHOT_DIR) await page.keyboard.press('Escape');
+
+// Pricing: free user → checkout through the billing function.
+await page.route(/lemonsqueezy\.test/, r => r.fulfill({ status: 200, contentType: 'text/html', body: '<title>checkout</title>' }));
+await page.goto(base.replace('/app/', '/pricing/'));
+await page.waitForSelector('.pr-cta[data-plan="pro"] [data-a="buy"]');
+check((await page.textContent('[data-price]')) === '$89' && /7\.42/.test(await page.textContent('[data-sub]')), 'pricing: yearly by default, $89 ($7.42 a month)');
+await page.click('.pr-toggle [data-interval="month"]');
+check((await page.textContent('[data-price]')) === '$9.99' && (await page.textContent('.pr-cta[data-plan="pro"] .btn')) === 'Get Pro monthly', 'pricing: monthly $9.99');
+check((await page.textContent('.pr-cta[data-plan="free"]')).includes('Your plan'), 'pricing: Free marked as your plan');
+await page.click('.pr-cta[data-plan="pro"] [data-a="buy"]');
+await page.waitForURL(/lemonsqueezy\.test\/checkout\/month\?user=u1/);
+check(true, 'Get Pro opens the Lemon Squeezy checkout for this user, monthly');
+
+// Back from paying: the page waits for the webhook, then shows Pro.
+await page.goto(base.replace('/app/', '/pricing/?welcome=1'));
+await page.waitForSelector('#pr-banner:not([hidden])');
+check(/Activating/.test(await page.textContent('#pr-banner')), 'after paying: "Activating OnSketch Pro…"');
+await app(() => localStorage.setItem('fake-sb:t:account_plans', JSON.stringify([{ user_id: 'u1', plan: 'premium', status: 'active', interval: 'month',
+  renews_at: '2026-12-08T00:00:00Z', ends_at: null, subscription_id: '987' }])));
+await page.waitForFunction(() => document.getElementById('pr-banner').classList.contains('ok'), null, { timeout: 10000 });
+check(/Pro is on/.test(await page.textContent('#pr-banner')) && !/welcome/.test(page.url()), 'the webhook lands: "OnSketch Pro is on", URL cleaned');
+check(/Renews on/.test(await page.textContent('.pr-cta[data-plan="pro"]')), 'pricing as Pro: your plan, with the renewal date');
+await page.click('.pr-cta[data-plan="pro"] [data-a="portal"]');
+await page.waitForURL(/lemonsqueezy\.test\/billing/);
+check(true, 'Manage subscription opens the customer portal');
+
+// Pro in My sketches and the editor: no limit, private sketches.
+await page.goto(base + 'projects/');
+await page.waitForSelector('.sketch-card[data-id]');
+check(/OnSketch Pro/.test(await page.textContent('#usage')) && await page.isVisible('#usage [data-a="billing"]'), 'My sketches as Pro: no limit, Manage subscription');
+await page.locator('.sketch-card[data-id]').first().locator('.menu-btn').click();
+await page.click('.card-menu [data-a="private"]');
+await page.waitForSelector('.sketch-card .tag.private');
+check(await app(() => JSON.parse(localStorage.getItem('fake-sb:rows')).some(r => r.visibility === 'private')), 'Make private: the sketch is private');
+await page.goto(base);
+await page.waitForFunction(() => window._app?.cloudUser);
+await page.click('#account-btn');
+await page.waitForFunction(() => /OnSketch Pro/.test(document.querySelector('#account-menu .am-plan')?.textContent || ''));
+check(await page.isVisible('#account-menu [data-a="billing"]') && !(await page.isVisible('#account-menu .am-pro')), 'account menu as Pro: Manage subscription, no Upgrade');
+await page.keyboard.press('Escape');
+
+// Signed out: Sign in to get Pro, back to the checkout.
+await app(() => localStorage.setItem('fake-sb:t:account_plans', '[]'));
+await page.click('#account-btn');
+await page.click('#account-menu [data-a="signout"]');
+await page.waitForFunction(() => !window._app.cloudUser);
+await page.goto(base.replace('/app/', '/pricing/'));
+await page.waitForSelector('.pr-cta[data-plan="pro"] a.btn');
+check(/back=%2Fpricing%2F%3Fcheckout%3Dyear/.test(await page.getAttribute('.pr-cta[data-plan="pro"] a.btn', 'href')), 'pricing signed out: Sign in to get Pro, then back to the checkout');
+if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + '/pricing.png', fullPage: true });
 
 check(nativeDialogs.length === 0, 'no browser pop-ups (confirm / alert / prompt)' + (nativeDialogs.length ? ': ' + nativeDialogs.join(' | ') : ''));
 check(errors.length === 0, 'no page errors' + (errors.length ? ': ' + errors.join(' | ') : ''));

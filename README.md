@@ -317,6 +317,12 @@ the stored session first.
 - New sketch, library copies and examples make a browser-only drawing; signing
   out keeps the drawing in the browser.
 
+- **OnSketch Pro** ($9.99/month or $89/year, sold through Lemon Squeezy):
+  unlimited sketches and private sketches. `/pricing/` compares the plans
+  and starts the checkout; a Supabase Edge Function receives Lemon
+  Squeezy's webhooks and sets the plan. Setup and design:
+  `docs/pro-plan.md`; functions: `supabase/functions/`.
+
 supabase-js is loaded from jsDelivr only once someone signs in. Schema,
 rules and policies: `supabase/migrations/` (run in order); data layer and
 details dialog: `app/src/cloud/`; editor UI: `app/src/app/cloud-ui.js`;

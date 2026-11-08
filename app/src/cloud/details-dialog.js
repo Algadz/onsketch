@@ -1,7 +1,7 @@
 import { TITLE_MIN, TITLE_MAX, DESC_MIN, DESC_MAX, LimitError, cleanText, usernameProblem } from './cloud.js';
 
 /* =============== SKETCH DETAILS DIALOG ==========================
-   Title + description (+ visibility for Premium) for a cloud project.
+   Title + description (+ visibility for Pro) for a cloud project.
    Shared by the editor (first save, Edit details) and My sketches.
    Uses the .modal styles of app/styles.css.
 
@@ -30,7 +30,7 @@ export function openDetailsDialog({ heading = 'Sketch details', submitLabel = 'S
           <textarea id="details-desc" name="description" maxlength="${DESC_MAX}" rows="3" placeholder="What it is, sizes, materials…">${esc(description)}</textarea>
           ${premium ? `
             <label class="check"><input type="checkbox" name="private" ${visibility === 'private' ? 'checked' : ''} /> Private <span class="muted">(only you can see it)</span></label>`
-          : `<p class="muted details-note">Free sketches are <b>public</b>: they will appear in the OnSketch library when it opens. Private sketches come with Premium.</p>`}
+          : `<p class="muted details-note">Free sketches are <b>public</b>: they appear in the <a href="/library/" target="_blank" rel="noopener">library</a>. <a href="/pricing/" target="_blank" rel="noopener">OnSketch Pro</a> keeps sketches private.</p>`}
           <p class="account-msg" role="status"></p>
         </div>
         <div class="footer">
@@ -82,7 +82,7 @@ export function openDetailsDialog({ heading = 'Sketch details', submitLabel = 'S
         ok.disabled = false;
         msg.classList.add('error');
         msg.textContent = e instanceof LimitError
-          ? `You've used your ${e.limit} free sketches. Delete one on My sketches, or go Premium for unlimited sketches.`
+          ? `You've used your ${e.limit} free sketches. Delete one on My sketches, or go Pro (onsketch.io/pricing) for unlimited sketches.`
           : (e.message || "Couldn't save.");
       }
     });

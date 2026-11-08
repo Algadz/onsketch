@@ -30,7 +30,7 @@ export class ConflictError extends Error {
 }
 /** The plan doesn't allow another project. */
 export class LimitError extends Error {
-  constructor(limit) { super(`The free plan holds ${limit} sketches.`); this.name = 'LimitError'; this.limit = limit; }
+  constructor(limit) { super(`The free plan holds ${limit} sketches. OnSketch Pro has no limit.`); this.name = 'LimitError'; this.limit = limit; }
 }
 
 /** Opens the cloud, or returns null when it isn't configured.
@@ -59,7 +59,7 @@ export function detailsProblems({ name, description }) {
 function fromDb(error) {
   const m = /OnSketch: free plan limit \((\d+)/.exec(error?.message || '');
   if (m) return new LimitError(+m[1]);
-  if (/^OnSketch: /.test(error?.message || '')) return new Error(error.message.replace(/^OnSketch: /, ''));
+  if (/^OnSketch: /.test(error?.message || '')) return new Error(error.message.replace(/^OnSketch: /, '').replace('a Premium feature', 'an OnSketch Pro feature'));
   return error;
 }
 
@@ -97,15 +97,33 @@ export class Cloud {
     const { error } = await this.client.auth.signOut();
     if (error) throw error;
   }
-  /** { plan: 'free' | 'premium', limit: number | null } for the signed-in user. */
+  /** The signed-in user's plan: { plan: 'free' | 'premium' (= Pro), limit,
+   *  status, interval, renewsAt, endsAt, hasSubscription }. */
   async plan() {
     const user = await this.user();
-    let plan = 'free';
+    let row = null;
     if (user) {
-      const { data, error } = await this.client.from('account_plans').select('plan').eq('user_id', user.id).maybeSingle();
-      if (!error && data && data.plan in PLAN_LIMITS) plan = data.plan;
+      const { data, error } = await this.client.from('account_plans')
+        .select('plan,status,interval,renews_at,ends_at,subscription_id').eq('user_id', user.id).maybeSingle();
+      if (!error && data) row = data;
     }
-    return { plan, limit: PLAN_LIMITS[plan] };
+    let plan = row && row.plan in PLAN_LIMITS ? row.plan : 'free';
+    // Same rule as plan_of() in SQL: a cancelled subscription ends at ends_at.
+    if (plan === 'premium' && row.status === 'cancelled' && row.ends_at && new Date(row.ends_at) < new Date()) plan = 'free';
+    return { plan, limit: PLAN_LIMITS[plan], status: row?.status || null, interval: row?.interval || null,
+      renewsAt: row?.renews_at || null, endsAt: row?.ends_at || null, hasSubscription: !!row?.subscription_id };
+  }
+  /** Lemon Squeezy through the "billing" Edge Function: 'checkout'
+   *  ({ interval: 'month' | 'year' }) or 'portal'. Resolves to a URL. */
+  async billing(action, options = {}) {
+    const { data, error } = await this.client.functions.invoke('billing', { body: { action, ...options } });
+    if (error) {
+      let detail = '';
+      try { detail = (await error.context?.json?.())?.error || ''; } catch { /* no JSON body */ }
+      throw new Error(detail || error.message || "Couldn't reach the billing service.");
+    }
+    if (!data?.url) throw new Error(data?.error || "Couldn't reach the billing service.");
+    return data.url;
   }
 
   /* ---- Projects ---- */

@@ -71,6 +71,8 @@ export class ChromeMixin {
       case 'library':      location.href = '/library/'; break;
       case 'profile':      this.editProfile(); break;
       case 'signout':      this.cloudSignOut(); break;
+      case 'pricing':      location.href = '/pricing/'; break;
+      case 'billing':      this.manageSubscription(); break;
     }
   }
 
