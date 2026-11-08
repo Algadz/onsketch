@@ -120,3 +120,13 @@ test('names validate and renames follow into expressions; all of it saves', () =
   assert.equal(cs[1].expr, 'length / 2 + D10');
   assert.deepEqual(q.variables, [{ name: 'gap', expr: '3mm' }]);
 });
+
+test('operator precedence: * and / before + and -, left to right, ^ first', () => {
+  const L = (n) => ({ D1: 10, D2: 4, w: 20 }[n]);
+  const cases = [
+    ['2+3*4', 14], ['10/2+3*4', 17], ['2*3+4/2', 8], ['10 - 4 / 2 * 3', 4], ['100/10/2', 5], ['10-4-3', 3],
+    ['=D1+D2*2', 18], ['=D1+D2*2/4', 12], ['=w/2+D1*3', 40], ['=D1 + 2*D2 - 6/3', 16],
+    ['1in + 4mm*2', 33.4], ['2 + 3 * 4mm', 14], ['=2+3*4^2', 50], ['=-2+3*4', 10], ['(2+3)*4', 20],
+  ];
+  for (const [src, want] of cases) assert.ok(near(evaluate(src, L), want), `${src} = ${evaluate(src, L)}, want ${want}`);
+});

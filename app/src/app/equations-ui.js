@@ -178,7 +178,7 @@ export class EquationsMixin {
       else c.value = internalValue(c, value);
       c.exprError = null;
       this.commit();
-      this._refreshEquationsPanel();
+      this._refreshEquationsPanel(true);
       return null;
     } catch (e) {
       return e.message;
@@ -190,6 +190,7 @@ export class EquationsMixin {
     const body = document.getElementById('equations-body');
     if (!body) return;
     body.addEventListener('change', (e) => this._onEquationsEdit(e));
+    body.addEventListener('input', (e) => { if (e.target.classList?.contains('bad')) { e.target.classList.remove('bad'); e.target.title = ''; } });
     body.addEventListener('pointerdown', (e) => {
       const el = e.target.closest('[data-scrub]');
       if (el && e.button === 0) this._beginScrub(el, e);
@@ -297,6 +298,7 @@ export class EquationsMixin {
   }
 
   _onEquationsEdit(e) {
+    if (this._eqRebuilding) return;
     const inp = e.target;
     const kind = inp.dataset.k;
     if (!kind) return;
@@ -323,17 +325,26 @@ export class EquationsMixin {
       }
     }
     this.commit();
-    this._refreshEquationsPanel();
+    this._refreshEquationsPanel(true);
   }
 
-  _refreshEquationsPanel() {
+  /** Rebuild the window from the project. It always rebuilds, so errors,
+   *  values and red boxes follow the current state (it used to skip while
+   *  a field had focus, and after Enter the focus stays: a fixed equation
+   *  kept its red box and the old value). The focused field gets its
+   *  focus and caret back; text typed but not applied yet is kept, unless
+   *  `fresh` says the edit was just applied. */
+  _refreshEquationsPanel(fresh = false) {
     const body = document.getElementById('equations-body');
     if (!body) return;
     const project = this.project;
     const vars = project.variables;
     const dims = allDimensions(project);
-    // Keep the focused field if the user is typing in this window.
-    if (body.contains(document.activeElement) && document.activeElement.tagName === 'INPUT') return;
+    const act = document.activeElement;
+    const keep = body.contains(act) && act.tagName === 'INPUT' && act.dataset.k
+      ? { k: act.dataset.k, i: act.dataset.i, value: act.value, typed: !fresh && act.value !== act.defaultValue,
+          s: act.selectionStart, e: act.selectionEnd }
+      : null;
     let html = `<div class="eq-head"><span>Global variables</span><button class="link-btn" data-eq="add-var">+ Add</button></div>`;
     if (!vars.length) html += '<div class="hint">None yet. Variables can be used in any dimension, e.g. <code>=width/2</code>.</div>';
     html += '<div class="eq-grid">';
@@ -356,7 +367,17 @@ export class EquationsMixin {
         <span class="eq-val${!c.expr && !c.driven ? ' scrub' : ''}" data-val="dim:${i}" ${!c.expr && !c.driven ? `data-scrub="dim:${i}" title="Drag left / right to change (Shift: fine, Ctrl: round)"` : `title="${c.driven ? 'Floating: measures the geometry' : 'Set by its equation'}"`}>${c.exprError ? '!' : fmt(userValue(c), ang)}</span><span></span>`;
     });
     html += '</div><div class="hint">Units: mm cm m in " ft, deg rad. Functions: sin cos tan sqrt abs min max, pi. Start with = to keep an equation.</div>';
-    body.innerHTML = html;
+    this._eqRebuilding = true;           // a browser may fire change on the removed field
+    try { body.innerHTML = html; } finally { this._eqRebuilding = false; }
+    if (keep) {
+      const el = body.querySelector(`input[data-k="${keep.k}"][data-i="${keep.i}"]`);
+      if (el && !el.disabled) {
+        if (keep.typed) el.value = keep.value;
+        el.focus({ preventScroll: true });
+        const n = el.value.length;
+        try { el.setSelectionRange(Math.min(keep.s ?? n, n), Math.min(keep.e ?? n, n)); } catch { /* not a text field */ }
+      }
+    }
   }
 
   /** Label text for a dimension on the canvas: Σ marks an equation;

@@ -63,7 +63,7 @@ export class InkTool extends Tool {
     const s = this._settings();
     return {
       id: newId('k'), layerId: this.app.project.activeLayerId, kind: this.kind,
-      color: this.app.pen.inkColor, opacity: s.opacity,
+      color: this.app.pen.fillColor, opacity: s.opacity,
       width: s.size / this.app.view.zoom, points,
     };
   }

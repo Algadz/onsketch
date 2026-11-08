@@ -904,7 +904,7 @@
   .fwin[data-win="sketch"] .fwin-body { width: 196px; }
   .sketch-grid { grid-template-columns: repeat(4, 36px); }
   /* Colors window: the highlighted chip is what the palette sets */
-  .pc-sw.active { box-shadow: 0 0 0 2px var(--accent); z-index: 3; }
+  .pc-sw.pc-one { position: relative; width: 44px; height: 44px; flex: 0 0 auto; }
   .pc-legend span.on { color: var(--text); }
   .pc-legend b { font-weight: 600; min-width: 26px; display: inline-block; }
   .palette .sw.on { outline: 2px solid var(--accent); outline-offset: 1px; }

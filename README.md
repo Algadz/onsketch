@@ -48,15 +48,13 @@ cached modules after a deploy. `npm test` fails if the stamp is out of date.
   (colour, opacity, width, layer); geometry under the cursor wins, and
   selected ink moves along when a selected shape is dragged. Roadmap:
   `docs/sketch-tools-plan.md`.
-- **Colors** window: one place for both colours, Paint.NET style. Two
-  chips, Ink (Pen, Marker) and Fill (the bucket); the highlighted one follows
-  the tool and is what a left click on the palette sets (right click sets the
-  other). Click the highlighted chip for any colour, ⇄ swaps them; the
-  opacity slider is the highlighted colour's. Shapes are never
-  filled when drawn; the Fill tool (B) fills the area you click, using only
-  the active layer's shapes (a region they close, or the background anywhere
-  else); other layers are ignored. Its cursor is a paint drop in the fill
-  colour, pointing at the click spot.
+- **Colors** window: one colour for Fill, Pen and Marker. Pick a swatch or
+  click the chip for any colour. The opacity slider is the current tool's
+  (Pen and Marker keep their own; other tools show the fill opacity). Shapes
+  are never filled when drawn; the Fill tool (B, in the Sketch window) fills
+  the area you click, using only the active layer's shapes (a region they
+  close, or the background anywhere else); other layers are ignored. Its
+  cursor is a paint drop in the colour, pointing at the click spot.
 
 ## Examples
 
@@ -123,6 +121,9 @@ touch input. Plan and audit: `docs/mobile-plan.md`.
   text. Values set by an equation, and floating dimensions, don't scrub.
 - The Equations window (Σ in the menu bar) lists global variables and all
   dimensions: rename them (references follow), edit equations, see values.
+  Usual precedence: `^`, then `*` `/`, then `+` `-`, left to right. A bad
+  entry turns red; editing it clears the red, and once applied the window
+  shows the new value at once (it rebuilds even while a field has focus).
 
 ## Solving and conflicts
 

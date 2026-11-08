@@ -134,7 +134,7 @@ check(layerInfo.n === 2 && layerInfo.rows === 2 && layerInfo.active === 'Layer 2
 
 // New shapes: no fill at creation, line colour from state only.
 await page.evaluate(() => window._app.clearSelection());
-await page.click('#colors-body .palette .sw[data-c="#e07b00"]');            // fill colour, for the Fill tool only
+await page.click('#colors-body .palette .sw[data-c="#e07b00"]');            // the colour, used by Fill / Pen / Marker only
 await page.keyboard.press('r');
 await page.mouse.click(cx + 60, cy + 60);
 await page.mouse.click(cx + 200, cy + 160);
@@ -826,16 +826,15 @@ await page.evaluate(() => { const a = window._app; a.project.layer('ly1').visibl
   check(await page.isVisible('.fwin[data-win="sketch"]'), 'Sketch window is open');
   check(await page.isVisible('#sketch-body [data-tool="fill"]') && !(await page.isVisible('#tools-body [data-tool="fill"]')), 'Fill is in the Sketch window, not in Tools');
   await page.evaluate(() => window._app.windows.toggle('colors', true));
-  const chip = () => page.evaluate(() => document.querySelector('#colors-body .pc-sw.active')?.dataset.chip);
+  // One colour for Fill, Pen and Marker; the opacity slider follows the tool.
+  const opLabel = () => page.evaluate(() => document.querySelector('#colors-body .prop-row label').textContent);
   await page.keyboard.press('b');
-  check(await chip() === 'fill', 'Fill tool highlights the fill colour');
+  check(await opLabel() === 'Fill opacity' && await page.evaluate(() => document.querySelectorAll('#colors-body .pc-sw').length) === 1, 'Colors window: one colour; Fill shows the fill opacity');
   await page.keyboard.press('n');
-  check(await chip() === 'ink', 'Pen highlights the ink colour');
-  const before = await page.evaluate(() => window._app.pen.fillColor);
+  check(await opLabel() === 'Pen opacity', 'Pen shows the pen opacity');
   await page.click('#colors-body .palette .sw[data-c="#14946b"]');
-  await page.click('#colors-body .palette .sw[data-c="#c9a400"]', { button: 'right' });
-  const pen = await page.evaluate(() => ({ ink: window._app.pen.inkColor, fill: window._app.pen.fillColor }));
-  check(pen.ink === '#14946b' && pen.fill === '#c9a400' && before !== pen.fill, `left click sets ink, right click sets fill (${JSON.stringify(pen)})`);
+  const one = await page.evaluate(() => ({ colour: window._app.pen.fillColor, ink: window._app.pen.inkColor }));
+  check(one.colour === '#14946b' && one.ink === undefined, `a swatch sets the one colour (${JSON.stringify(one)})`);
   await page.click('#colors-body .palette .sw[data-c="#111418"]');
   await page.click('.fwin[data-win="sketch"] [data-tool="pen"]');
   await drag(cx - 250, cy + 150, cx + 250, cy + 150);
@@ -843,6 +842,7 @@ await page.evaluate(() => { const a = window._app; a.project.layer('ly1').visibl
   await drag(cx - 250, cy + 190, cx + 250, cy + 190);
   const drawn = await strokes();
   check(/^pen:\d+,marker:\d+$/.test(drawn), `pen and marker draw strokes (${drawn})`);
+  check(await page.evaluate(() => window._app.activeSketch().strokes.every(k => k.color === window._app.pen.fillColor)), 'strokes use the one colour');
   await page.keyboard.press('Control+z');
   check(/^pen:\d+$/.test(await strokes()), 'undo removes the last stroke');
   // A stroke on another layer survives the eraser.
@@ -1069,6 +1069,19 @@ await page.evaluate(() => { const a = window._app; a.project.layer('ly1').visibl
   const titles = await page.$$eval('#equations-body [data-k="dim-name"]', els => els.map(e => e.title).join(','));
   check(titles === 'Horizontal distance,Vertical distance', `Equations window names them (${titles})`);
   await page.evaluate(() => window._app.windows.toggle('equations', false));
+}
+
+// Equations window: a fixed error clears its red box and shows the value.
+{
+  await page.evaluate(() => { const a = window._app; a.project.variables.push({ name: 'qq', expr: '1' }); a.commit(); a.windows.toggle('equations', true); a._refreshEquationsPanel(); });
+  const i = await page.evaluate(() => window._app.project.variables.length - 1);
+  const sel = `[data-k="var-expr"][data-i="${i}"]`;
+  await page.fill(sel, '2+*'); await page.press(sel, 'Enter');
+  const bad = await page.evaluate((sel) => [document.querySelector(sel).classList.contains('bad'), document.querySelector('[data-val="var:' + sel.match(/\d+/)[0] + '"]').textContent], sel);
+  await page.fill(sel, '2+3*4'); await page.press(sel, 'Enter');
+  const good = await page.evaluate(([sel, i]) => [document.querySelector(sel).classList.contains('bad'), document.querySelector(`[data-val="var:${i}"]`).textContent, document.activeElement === document.querySelector(sel)], [sel, i]);
+  check(bad[0] === true && bad[1] === '!' && good[0] === false && good[1] === '14' && good[2], `fixing an equation clears the red box and shows 2+3*4 = 14, focus kept (${JSON.stringify({ bad, good })})`);
+  await page.evaluate(() => { const a = window._app; a.project.variables.pop(); a.commit(); a.windows.toggle('equations', false); });
 }
 
 // /app/?example=desk opens the landing page's desk, fully defined, and
