@@ -1,13 +1,22 @@
-// Accounts and cloud projects on Supabase (phase 1: data layer only).
+// Accounts and cloud projects on Supabase: the data layer.
 //
-// Nothing here touches the DOM. The editor gets a Cloud object from
+// Nothing here touches the DOM. Pages get a Cloud object from
 // openCloud(); it is null when config.js is empty, so the app keeps
 // working offline-only. supabase-js is loaded from the CDN on first use,
 // so visitors who never sign in don't download it.
+//
+// The rules (title 3–80, description 10–500, 3 projects and public only
+// on the free plan) live in the database (supabase/migrations/0002_*);
+// the checks here only give quicker, friendlier messages.
 import { SUPABASE_URL, SUPABASE_KEY } from './config.js';
 
 const SUPABASE_ESM = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
-const LIST_COLUMNS = 'id,name,visibility,revision,updated_at';
+const LIST_COLUMNS = 'id,name,description,visibility,revision,updated_at,created_at';
+const THUMBS = 'thumbnails';
+
+export const TITLE_MIN = 3, TITLE_MAX = 80, DESC_MIN = 10, DESC_MAX = 500;
+/** Projects allowed per plan (null = no limit); mirrors plan_project_limit() in SQL. */
+export const PLAN_LIMITS = { free: 3, premium: null };
 
 export function isConfigured(url = SUPABASE_URL, key = SUPABASE_KEY) {
   return typeof url === 'string' && /^https:\/\/\S+$/.test(url) && typeof key === 'string' && key.length > 20;
@@ -17,6 +26,10 @@ export function isConfigured(url = SUPABASE_URL, key = SUPABASE_KEY) {
  *  or device) since it was loaded. `latest` is the row as it is now. */
 export class ConflictError extends Error {
   constructor(latest) { super('This project was changed somewhere else.'); this.name = 'ConflictError'; this.latest = latest; }
+}
+/** The plan doesn't allow another project. */
+export class LimitError extends Error {
+  constructor(limit) { super(`The free plan holds ${limit} sketches.`); this.name = 'LimitError'; this.limit = limit; }
 }
 
 /** Opens the cloud, or returns null when it isn't configured.
@@ -28,6 +41,25 @@ export async function openCloud({ url = SUPABASE_URL, key = SUPABASE_KEY, create
     auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: 'pkce' },
   });
   return new Cloud(client);
+}
+
+/** Problems with a title / description, as a list of messages (empty = fine). */
+export function detailsProblems({ name, description }) {
+  const out = [];
+  const t = cleanText(name), d = cleanText(description);
+  if (t.length < TITLE_MIN) out.push(`The title needs at least ${TITLE_MIN} characters.`);
+  if (t.length > TITLE_MAX) out.push(`The title can have at most ${TITLE_MAX} characters.`);
+  if (d.length < DESC_MIN) out.push(`The description needs at least ${DESC_MIN} characters.`);
+  if (d.length > DESC_MAX) out.push(`The description can have at most ${DESC_MAX} characters.`);
+  return out;
+}
+
+/** Turns a database error into a friendlier one. */
+function fromDb(error) {
+  const m = /OnSketch: free plan limit \((\d+)/.exec(error?.message || '');
+  if (m) return new LimitError(+m[1]);
+  if (/^OnSketch: /.test(error?.message || '')) return new Error(error.message.replace(/^OnSketch: /, ''));
+  return error;
 }
 
 export class Cloud {
@@ -64,6 +96,16 @@ export class Cloud {
     const { error } = await this.client.auth.signOut();
     if (error) throw error;
   }
+  /** { plan: 'free' | 'premium', limit: number | null } for the signed-in user. */
+  async plan() {
+    const user = await this.user();
+    let plan = 'free';
+    if (user) {
+      const { data, error } = await this.client.from('account_plans').select('plan').eq('user_id', user.id).maybeSingle();
+      if (!error && data && data.plan in PLAN_LIMITS) plan = data.plan;
+    }
+    return { plan, limit: PLAN_LIMITS[plan] };
+  }
 
   /* ---- Projects ---- */
   /** The signed-in user's projects, most recently changed first (no data). */
@@ -82,36 +124,95 @@ export class Cloud {
     if (error) throw error;
     return data;
   }
-  /** Stores a new project; returns its row (id, revision, …). */
-  async create(json) {
-    const { data, error } = await this.client.from('projects')
-      .insert(rowFor(json)).select(LIST_COLUMNS).single();
-    if (error) throw error;
+  /** Stores a new project with its details { name, description, visibility };
+   *  returns its row. Throws LimitError at the plan's limit. */
+  async create(json, details) {
+    const problems = detailsProblems(details);
+    if (problems.length) throw new Error(problems[0]);
+    const name = cleanText(details.name);
+    const row = { ...rowFor({ ...json, name }), name, description: cleanText(details.description),
+      visibility: details.visibility === 'private' ? 'private' : 'public' };
+    const { data, error } = await this.client.from('projects').insert(row).select(LIST_COLUMNS).single();
+    if (error) throw fromDb(error);
     return data;
   }
-  /** Overwrites project `id` if it is still at `revision`; returns the new
-   *  row. Throws ConflictError when someone saved it in the meantime. */
+  /** Overwrites project `id`'s drawing if it is still at `revision`;
+   *  returns the new row. Throws ConflictError when someone saved it in
+   *  the meantime. The title follows the project name when it is valid. */
   async save(id, json, revision) {
+    const row = rowFor(json);
+    if (row.name.length < TITLE_MIN) delete row.name;
+    else row.name = row.name.slice(0, TITLE_MAX);
     const { data, error } = await this.client.from('projects')
-      .update(rowFor(json)).eq('id', id).eq('revision', revision).select(LIST_COLUMNS);
-    if (error) throw error;
+      .update(row).eq('id', id).eq('revision', revision).select(LIST_COLUMNS);
+    if (error) throw fromDb(error);
     if (data && data.length) return data[0];
     let latest = null;
     try { latest = await this.load(id); } catch { /* deleted or no longer visible */ }
     throw new ConflictError(latest);
   }
+  /** Changes title / description / visibility (not the drawing: no conflict). */
+  async updateDetails(id, details) {
+    const problems = detailsProblems(details);
+    if (problems.length) throw new Error(problems[0]);
+    const patch = { name: cleanText(details.name), description: cleanText(details.description) };
+    if (details.visibility) patch.visibility = details.visibility === 'private' ? 'private' : 'public';
+    const { data, error } = await this.client.from('projects').update(patch).eq('id', id).select(LIST_COLUMNS).single();
+    if (error) throw fromDb(error);
+    return data;
+  }
   async rename(id, name) {
     const { error } = await this.client.from('projects').update({ name: cleanName(name) }).eq('id', id);
-    if (error) throw error;
+    if (error) throw fromDb(error);
   }
   async setVisibility(id, visibility) {
     if (visibility !== 'private' && visibility !== 'public') throw new Error('bad visibility ' + visibility);
     const { error } = await this.client.from('projects').update({ visibility }).eq('id', id);
-    if (error) throw error;
+    if (error) throw fromDb(error);
+  }
+  /** A copy of project `id` (drawing, description), titled "<title> (copy)". */
+  async duplicate(id) {
+    const row = await this.load(id);
+    const name = `${row.name} (copy)`.slice(0, TITLE_MAX);
+    const copy = await this.create({ ...row.data, name }, {
+      name, description: row.description || `Copy of ${row.name}.`, visibility: row.visibility });
+    const thumb = await this._thumbPath(id);
+    if (thumb) {
+      try { await this.client.storage.from(THUMBS).copy(thumb, await this._thumbPath(copy.id)); } catch { /* no thumbnail yet */ }
+    }
+    return copy;
   }
   async remove(id) {
+    const thumb = await this._thumbPath(id);
     const { error } = await this.client.from('projects').delete().eq('id', id);
+    if (error) throw fromDb(error);
+    if (thumb) {
+      try { await this.client.storage.from(THUMBS).remove([thumb]); } catch { /* already gone */ }
+    }
+  }
+
+  /* ---- Thumbnails (Storage: thumbnails/<owner>/<project>.webp) ---- */
+  async _thumbPath(id) {
+    const user = await this.user();
+    return user ? `${user.id}/${id}.webp` : null;
+  }
+  async uploadThumbnail(id, blob) {
+    const path = await this._thumbPath(id);
+    if (!path) return;
+    const { error } = await this.client.storage.from(THUMBS)
+      .upload(path, blob, { upsert: true, contentType: blob.type || 'image/webp', cacheControl: '60' });
     if (error) throw error;
+  }
+  /** Map project id → temporary URL of its thumbnail (missing ones left out). */
+  async thumbnailURLs(rows, owner = null) {
+    const user = owner ? { id: owner } : await this.user();
+    if (!user || !rows.length) return new Map();
+    const paths = rows.map(r => `${r.owner_id || user.id}/${r.id}.webp`);
+    const { data, error } = await this.client.storage.from(THUMBS).createSignedUrls(paths, 3600);
+    if (error || !data) return new Map();
+    const out = new Map();
+    data.forEach((d, i) => { if (d && d.signedUrl && !d.error) out.set(rows[i].id, d.signedUrl); });
+    return out;
   }
 }
 
@@ -120,7 +221,8 @@ export function rowFor(json) {
   if (!json || typeof json !== 'object' || !Array.isArray(json.sketches)) throw new Error('not a project');
   return { name: cleanName(json.name), data: json };
 }
+export function cleanText(s) { return String(s ?? '').replace(/\s+/g, ' ').trim(); }
 export function cleanName(name) {
-  const n = String(name ?? '').replace(/\s+/g, ' ').trim().slice(0, 200);
+  const n = cleanText(name).slice(0, 200);
   return n || 'Untitled';
 }

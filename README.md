@@ -240,17 +240,31 @@ different layers, and hidden layers are still solved. Project files are JSON
 
 Optional sign-in (Google, or an emailed link / code) on Supabase. The
 **Sign in** button at the right of the menu bar (⋯ menu on phones) opens
-the account dialog: *Save it to my account* links the open drawing to a
-cloud project; from then on every change is pushed a few seconds later
-(the button shows Saving… / Saved / Not synced). *My projects* lists,
-opens and deletes projects. Saves carry the revision they started from,
-so a save from a stale tab or device asks which version to keep instead
-of overwriting. New project, Import and examples make a browser-only
-drawing; signing out keeps the drawing in the browser.
+the account dialog: plan and usage, the open drawing, **My sketches**,
+sign out.
 
-supabase-js is loaded from jsDelivr only once someone signs in. Schema and
-policies: `supabase/migrations/`; data layer: `app/src/cloud/`; UI:
-`app/src/app/cloud-ui.js`; plan and setup: `docs/cloud-plan.md`. Emptying
-`app/src/cloud/config.js` turns all of it off. `npm run test:cloud` drives
-it against a fake client (`-- --live` adds signed-out checks on the real
-project).
+- **Save to my account** asks for a **title** (3–80 characters) and a
+  **description** (10–500), with a preview; from then on every change is
+  pushed a few seconds later (the button shows Saving… / Saved / Not
+  synced) and the preview is refreshed at most every 30 s.
+- **My sketches** (`/app/projects/`): the account's sketches as cards
+  (preview, title, description, last change, Public / Private), a usage
+  meter, and per card Open, Edit details, Duplicate, Download JSON,
+  Delete. Open goes to `/app/?project=<id>`, New to `/app/?new`.
+- **Plans**: free = 3 sketches, public (they will feed a public library);
+  Premium (not on sale yet) = unlimited, may be private. Enforced in the
+  database; the plan is in `account_plans`, written only by the service role.
+- Saves carry the revision they started from, so a save from a stale tab
+  or device asks which version to keep instead of overwriting. Only the
+  drawing moves the revision; title and description edits never conflict.
+- New project, Import and examples make a browser-only drawing; signing
+  out keeps the drawing in the browser.
+
+supabase-js is loaded from jsDelivr only once someone signs in. Schema,
+rules and policies: `supabase/migrations/` (run in order); data layer and
+details dialog: `app/src/cloud/`; editor UI: `app/src/app/cloud-ui.js`;
+page: `app/projects/` + `app/src/projects/page.js`; previews:
+`app/src/render/thumbnail.js`. Plans: `docs/cloud-plan.md`,
+`docs/projects-page-plan.md`. Emptying `app/src/cloud/config.js` turns all
+of it off. `npm run test:cloud` drives it against a fake client
+(`-- --live` adds signed-out checks on the real project).

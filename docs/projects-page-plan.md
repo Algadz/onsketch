@@ -114,12 +114,12 @@ Each row keeps `thumbnail_version` to bust caches.
 
 ## Phases
 
-1. **Details + limit** — migration 0002, details form on first save and
+1. ✅ **Details + limit** — migration 0002, details form on first save and
    *Edit details*, limit trigger and upsell. Existing projects without a
    description get the form on next open.
-2. **My sketches page** — `/app/projects/`, cards, usage meter, ⋯ actions,
+2. ✅ **My sketches page** — `/app/projects/`, cards, usage meter, ⋯ actions,
    `?project=` deep link, account menu entry.
-3. **Thumbnails** — renderer to WebP, Storage bucket + policies, upload
+3. ✅ **Thumbnails** — renderer to WebP, Storage bucket + policies, upload
    with autosave, cards show them (placeholder until the first upload).
 4. **Public library** — `/library/` (or a tab), read-only viewer
    `/app/?view=<id>`, *Duplicate to my sketches*, reporting/moderation,
@@ -131,17 +131,22 @@ Tests at each phase: unit (data layer, limit/visibility errors),
 `tests/cloud.e2e.mjs` extended with the fake (form validation, limit,
 page cards), plus a live signed-out check of the page.
 
-## Decisions needed
+## Decisions (agreed)
 
-1. **Free projects visibility now.** The library doesn't exist yet.
-   Recommended: free projects are saved **public by default with a clear
-   badge and a note in the save form** ("Free sketches will appear in
-   the public library"), but the library page isn't built yet, so nothing
-   is listed anywhere. Existing projects stay as they are (private ones
-   stay private) until their owner opens them. Alternative: keep
-   everything private until the library launches, then ask each user.
-2. **Limit = 3 projects in total** (public + private), or 3 private and
-   unlimited public? Recommended for now: 3 in total, simple to explain.
-3. **"More than 10 characters"** applies to the description; title
-   minimum 3. OK?
-4. **Page URL**: `/app/projects/` (recommended) or `/projects/`.
+1. Free sketches are saved **public**, with a badge and a note in the save
+   form; nothing lists them until the library exists. Existing private
+   projects stay private.
+2. The limit counts **all** projects: 3 on the free plan.
+3. Title 3–80 characters, description 10–500.
+4. The page is `/app/projects/`.
+
+## As built
+
+- `supabase/migrations/0002_project_details.sql` (tested on PostgreSQL 16
+  with stand-ins for Supabase's auth and storage schemas): `description`,
+  `account_plans`, `plan_of()`, `plan_project_limit()`, the
+  `projects_check` trigger (title, description, private = Premium, limit
+  with an advisory lock), revision only on drawing changes, the
+  `thumbnails` bucket (private, 300 KB, WebP / PNG) and its policies.
+- Thumbnails are 320 × 200 drawn at 2× (640 × 400 WebP, ~5–20 KB), read
+  through signed URLs (1 h).

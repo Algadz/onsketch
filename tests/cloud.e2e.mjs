@@ -48,13 +48,26 @@ function installFake() {
       signInWithOAuth: async () => ({ error: null }),
       signOut: async () => { setSession(null); return { error: null }; },
     },
-    from: () => {
-      const q = { f: [], op: 'select', p: null, single: false };
+    storage: { from: () => ({
+      upload: async (path, blob) => {
+        const url = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(blob); });
+        const files = JSON.parse(localStorage.getItem('fake-sb:files') || '{}'); files[path] = url;
+        localStorage.setItem('fake-sb:files', JSON.stringify(files)); window.__fakeUploads = (window.__fakeUploads || 0) + 1;
+        return { data: { path }, error: null };
+      },
+      remove: async (paths) => { const files = JSON.parse(localStorage.getItem('fake-sb:files') || '{}'); paths.forEach(p => delete files[p]); localStorage.setItem('fake-sb:files', JSON.stringify(files)); return { error: null }; },
+      copy: async (a, b) => { const files = JSON.parse(localStorage.getItem('fake-sb:files') || '{}'); if (files[a]) files[b] = files[a]; localStorage.setItem('fake-sb:files', JSON.stringify(files)); return { error: null }; },
+      createSignedUrls: async (paths) => { const files = JSON.parse(localStorage.getItem('fake-sb:files') || '{}'); return { data: paths.map(p => files[p] ? { path: p, signedUrl: files[p] } : { path: p, error: 'not found', signedUrl: null }), error: null }; },
+    }) },
+    from: (table) => {
+      const q = { f: [], op: 'select', p: null, single: false, table };
       const run = () => {
+        if (table === 'account_plans') return { data: null, error: null };
         const all = rows(); const m = r => q.f.every(([k, v]) => r[k] === v);
         let out;
+        if (q.op === 'insert' && q.table === 'projects' && all.length >= (window.__fakeLimit ?? 3)) return { data: null, error: new Error('OnSketch: free plan limit (3 projects).') };
         if (q.op === 'insert') { const r = { id: 'p' + (all.length + 1) + '-' + Date.now(), owner_id: 'u1', visibility: 'private', revision: 1, updated_at: new Date().toISOString(), ...q.p }; all.push(r); out = [r]; }
-        else if (q.op === 'update') { out = all.filter(m); out.forEach(r => Object.assign(r, q.p, { revision: r.revision + 1, updated_at: new Date().toISOString() })); }
+        else if (q.op === 'update') { out = all.filter(m); out.forEach(r => Object.assign(r, q.p, { revision: r.revision + ('data' in q.p ? 1 : 0), updated_at: new Date().toISOString() })); }
         else if (q.op === 'delete') { out = all.filter(m); put(all.filter(r => !m(r))); return { data: out, error: null }; }
         else out = all.filter(m).sort((a, b) => b.updated_at.localeCompare(a.updated_at));
         if (q.op !== 'select') put(all);
@@ -63,7 +76,7 @@ function installFake() {
         return { data: out, error: null };
       };
       const b = {
-        select() { return b; }, order() { return b; }, single() { q.single = true; return b; },
+        select() { return b; }, order() { return b; }, single() { q.single = true; return b; }, maybeSingle() { return b; },
         insert(p) { q.op = 'insert'; q.p = p; return b; }, update(p) { q.op = 'update'; q.p = p; return b; },
         delete() { q.op = 'delete'; return b; }, eq(k, v) { q.f.push([k, v]); return b; },
         then(res, rej) { return Promise.resolve(run()).then(res, rej); },
@@ -112,13 +125,22 @@ await page.waitForSelector('#account-modal [data-a="upload"]');
 check((await page.textContent('#account-modal')).includes('me@example.com'), 'signed in: projects dialog shows the email');
 check(await page.locator('#account-btn .avatar').count() === 1, 'account button shows an avatar');
 
-// Save the drawing to the account.
+// Save the drawing to the account: title + description required.
 await page.click('#account-modal [data-a="upload"]');
-await page.waitForSelector('#account-modal .project-list li.current');
+await page.waitForSelector('#details-modal');
+check(await page.isVisible('#details-modal .details-preview canvas'), 'save dialog shows a preview');
+check((await page.inputValue('#details-name')) === 'Shelf', 'title pre-filled from the project name');
+await page.fill('#details-desc', 'too short');
+check(await page.isDisabled('#details-modal [data-a="ok"]'), 'Save disabled with a 9-character description');
+check((await page.textContent('#details-modal .counter')).includes('9 / 10'), 'counter shows 9 / 10 minimum');
+await page.fill('#details-desc', 'Wall shelf, 80 cm, birch plywood');
+await page.click('#details-modal [data-a="ok"]');
+await page.waitForFunction(() => window._app.cloudLink && !document.getElementById('details-modal'));
 let rows = await rowsOnServer();
-check(rows.length === 1 && rows[0].name === 'Shelf' && rows[0].data.sketches[0].entities.length > 0, 'drawing saved to the account');
-check(await app(() => window._app.cloudLink?.revision === 1), 'drawing linked to the cloud project');
-await page.click('#account-modal [data-a="close"]');
+check(rows.length === 1 && rows[0].name === 'Shelf' && rows[0].description === 'Wall shelf, 80 cm, birch plywood' && rows[0].visibility === 'public', 'saved with title, description, public');
+check(rows[0].data.sketches[0].entities.length > 0, 'drawing saved to the account');
+await page.waitForFunction(() => window.__fakeUploads >= 1, null, { timeout: 5000 });
+check(true, 'preview uploaded after the first save');
 
 // Autosave: a change is pushed a moment later.
 await page.keyboard.press('c');
@@ -139,14 +161,75 @@ await page.waitForFunction(() => !window._app.cloudLink.dirty);
 rows = await rowsOnServer();
 check(rows.length === 1 && rows[0].name === 'Shelf v2', 'Keep mine overwrites the other version');
 
-// New project unlinks; open the cloud one again from the list.
-await app(() => window._app.newProject());
-check(await app(() => window._app.cloudLink === null), 'New project is browser-only');
-await page.click('#account-btn');
-await page.waitForSelector('#account-modal .project-list [data-a="open"]');
-await page.click('#account-modal .project-list [data-a="open"]');
-await page.waitForFunction(() => window._app.project.name === 'Shelf v2');
-check(await app(() => window._app.project.toJSON().sketches[0].entities.some(e => e.type === 'circle') && !!window._app.cloudLink), 'opened from My projects, linked again');
+// My sketches page: cards with preview, title, description, usage.
+await page.goto(base + 'projects/');
+await page.waitForSelector('.sketch-card[data-id]');
+const card = await page.evaluate(() => {
+  const c = document.querySelector('.sketch-card[data-id]');
+  return { title: c.querySelector('.card-title').textContent, desc: c.querySelector('.card-desc').textContent,
+    img: !!c.querySelector('.thumb img'), open: !!c.querySelector('.tag.open'), badge: c.querySelector('.tag.public')?.textContent,
+    usage: document.getElementById('usage').textContent };
+});
+check(card.title === 'Shelf v2' && card.desc.includes('birch'), `card shows title and description (${card.title})`);
+check(card.img, 'card shows the preview');
+check(card.open && card.badge === 'Public', 'card marks the open drawing and the Public badge');
+check(/1 of 3 sketches used/.test(card.usage), 'usage meter: 1 of 3');
+check(await page.isVisible('.sketch-card.new'), 'a New sketch card while there is room');
+
+// Edit details from the ⋯ menu.
+await page.click('.sketch-card[data-id] .menu-btn');
+await page.click('.card-menu [data-a="details"]');
+await page.fill('#details-desc', 'Wall shelf, 90 cm, oak');
+await page.click('#details-modal [data-a="ok"]');
+await page.waitForFunction(() => document.querySelector('.card-desc')?.textContent.includes('oak'));
+rows = await rowsOnServer();
+check(rows[0].description === 'Wall shelf, 90 cm, oak' && rows[0].revision === (await app(() => JSON.parse(localStorage.getItem('onsketch:cloud')).revision)), 'Edit details saves without a revision bump the editor would trip on');
+
+// Duplicate twice → limit reached → upsell card; duplicating again shows Premium.
+for (let i = 0; i < 2; i++) {
+  await page.click('.sketch-card[data-id] .menu-btn');
+  await page.click('.card-menu [data-a="duplicate"]');
+  await page.waitForFunction((n) => document.querySelectorAll('.sketch-card[data-id]').length === n, i + 2);
+}
+check(/3 of 3 sketches used/.test(await page.textContent('#usage')), 'usage meter: 3 of 3');
+check(await page.isVisible('.sketch-card.upsell') && !(await page.isVisible('.sketch-card.new')), 'at the limit the New card becomes the upgrade card');
+await page.click('.sketch-card[data-id] .menu-btn');
+await page.click('.card-menu [data-a="duplicate"]');
+await page.waitForSelector('text=Premium is coming');
+check(true, 'a fourth sketch shows Premium');
+await page.click('.modal-backdrop.show [data-a="ok"]');
+
+// Delete a copy.
+await page.locator('.sketch-card[data-id]', { hasText: '(copy)' }).first().locator('.menu-btn').click();
+await page.click('.card-menu [data-a="delete"]');
+await page.waitForFunction(() => document.querySelectorAll('.sketch-card[data-id]').length === 2);
+check((await rowsOnServer()).length === 2, 'Delete removes it from the account');
+
+// New sketch from the page: the linked drawing is put away, a fresh one opens.
+await page.click('.sketch-card.new a');
+await page.waitForFunction(() => window._app && window._app.cloudUser !== undefined);
+await page.waitForFunction(() => window._app.cloudLink === null && window._app.activeSketch().entities.length === 0);
+check(!/[?&]new/.test(page.url()), 'New sketch: fresh drawing, parameter cleaned');
+
+// Open a sketch from its card.
+await page.goto(base + 'projects/');
+await page.waitForSelector('.sketch-card[data-id]');
+await page.getByRole('link', { name: 'Shelf v2', exact: true }).click();
+await page.waitForFunction(() => window._app?.project?.name === 'Shelf v2' && window._app.cloudLink);
+check(await app(() => window._app.project.toJSON().sketches[0].entities.some(e => e.type === 'circle')), 'opened from My sketches, linked again');
+
+// Phone width, dark theme: no sideways scrolling.
+await page.setViewportSize({ width: 390, height: 820 });
+await page.emulateMedia({ colorScheme: 'dark' });
+await app(() => localStorage.setItem('onsketch:prefs', JSON.stringify({ theme: 'dark' })));
+await page.goto(base + 'projects/');
+await page.waitForSelector('.sketch-card[data-id]');
+check(await app(() => document.documentElement.scrollWidth <= 390 && document.documentElement.dataset.theme === 'dark'), 'My sketches fits a phone, follows the dark theme');
+if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + '/projects-phone-dark.png', fullPage: true });
+await page.setViewportSize({ width: 1400, height: 900 });
+await app(() => localStorage.setItem('onsketch:prefs', JSON.stringify({ theme: 'light' })));
+await page.goto(base);
+await page.waitForFunction(() => window._app);
 
 // A reload keeps the link and the session.
 await page.reload();

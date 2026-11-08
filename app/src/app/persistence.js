@@ -78,7 +78,9 @@ export class PersistenceMixin {
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flush(); });
   }
   newProject() {
-    if (!confirm('Discard current project and start a new one?')) return;
+    const s = this.activeSketch();
+    const empty = !s || (!s.entities.length && !s.strokes.length && !s.fills.length);
+    if (!empty && !this._skipConfirm && !confirm('Discard current project and start a new one?')) return;
     if (this._cloudUnlink) this._cloudUnlink();
     this.project = new Project(); this.project.addSketch('Sketch 1');
     this.undoStack.length = 0; this.redoStack.length = 0;

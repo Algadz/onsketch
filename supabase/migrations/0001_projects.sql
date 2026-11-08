@@ -32,7 +32,9 @@ create or replace function public.projects_touch()
 returns trigger language plpgsql as $$
 begin
   new.updated_at := now();
-  new.revision   := old.revision + 1;
+  -- Only a change to the drawing moves the revision (title edits don't conflict).
+  if new.data is distinct from old.data then new.revision := old.revision + 1;
+  else new.revision := old.revision; end if;
   new.owner_id   := old.owner_id;     -- a project never changes hands
   new.created_at := old.created_at;
   return new;

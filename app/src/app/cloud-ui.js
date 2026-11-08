@@ -1,5 +1,7 @@
 import { Project } from '../core/model.js';
-import { isConfigured, openCloud, ConflictError } from '../cloud/cloud.js';
+import { isConfigured, openCloud, ConflictError, LimitError, TITLE_MIN } from '../cloud/cloud.js';
+import { openDetailsDialog } from '../cloud/details-dialog.js';
+import { renderThumbnail, thumbnailBlob } from '../render/thumbnail.js';
 
 /* =============== ACCOUNT AND CLOUD PROJECTS ====================
    Optional. With app/src/cloud/config.js empty nothing here runs and
@@ -19,6 +21,8 @@ import { isConfigured, openCloud, ConflictError } from '../cloud/cloud.js';
    ============================================================ */
 const LINK_KEY = 'onsketch:cloud';
 const PUSH_DELAY = 2500;
+const THUMB_EVERY = 30000;        // at most one thumbnail upload per 30 s
+const PAGE_PARAMS = ['project', 'new', 'signin'];
 const AUTH_PARAMS = ['code', 'error', 'error_code', 'error_description'];
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -50,7 +54,30 @@ export class CloudMixin {
 
     const params = new URLSearchParams(location.search);
     const returning = AUTH_PARAMS.some(k => params.has(k));
-    if (returning || this._hasStoredSession() || this.cloudLink) this._ensureCloud();
+    this._urlRequest = PAGE_PARAMS.find(k => params.has(k)) ? { what: PAGE_PARAMS.find(k => params.has(k)), id: params.get('project') } : null;
+    if (this._urlRequest) {
+      PAGE_PARAMS.forEach(k => params.delete(k));
+      history.replaceState(null, '', location.pathname + (params.toString() ? '?' + params : '') + location.hash);
+    }
+    if (this._urlRequest?.what === 'new') { this._urlRequest = null; this._startNewFromPage(); }
+    if (returning || this._hasStoredSession() || this.cloudLink || this._urlRequest) this._ensureCloud().then(() => this._handleURLRequest());
+  }
+
+  /** /app/?new from My sketches: a fresh drawing. A linked drawing is
+   *  already in the account, so it is simply put away. */
+  _startNewFromPage() {
+    if (!this.cloudLink) { this.newProject(); return; }
+    this._cloudUnlink();
+    this._skipConfirm = true;
+    try { this.newProject(); } finally { this._skipConfirm = false; }
+  }
+  /** /app/?project=<id> and /app/?signin, once the session is known. */
+  async _handleURLRequest() {
+    const req = this._urlRequest; this._urlRequest = null;
+    if (!req) return;
+    if (!this.cloud || !this.cloudUser) { this.openAccount(); return; }
+    if (req.what === 'signin') { this.openAccount(); return; }
+    if (req.what === 'project' && req.id && this.cloudLink?.id !== req.id) await this.openCloudProject(req.id);
   }
 
   _hasStoredSession() {
@@ -100,9 +127,11 @@ export class CloudMixin {
     this._renderAccountButton();
     if (this.compact) this._refreshMoreMenu?.();
     if (user && !was) {
+      this.cloud.plan().then(p => { this.cloudPlan = p; if (this._accountOpen && !this._conflictRow) this._renderAccount(); }).catch(() => {});
       if (this._accountOpen) this._renderAccount();
       this._cloudSync();
     }
+    if (!user) this.cloudPlan = null;
   }
 
   /* ---- Link between the drawing and a cloud project ---- */
@@ -152,6 +181,7 @@ export class CloudMixin {
         link.dirty = !!this._cloudPushAgain;
         this._storeLink();
         this._setCloudStatus(link.dirty ? 'saving' : 'saved');
+        this._cloudThumbSoon();
       }
     } catch (e) {
       if (e instanceof ConflictError) { this._setCloudStatus('conflict'); this._showConflict(e.latest); }
@@ -182,6 +212,22 @@ export class CloudMixin {
       else { this._openCloudRow(row, { keepUndo: true }); this._hint(`Updated "${row.name}" with the version saved on another device.`); }
     } else if (link.dirty) this._cloudPush();
     else this._setCloudStatus('saved');
+    if (this.cloudLink === link && !row.description) this._hint(`Add a description to "${row.name}": account menu → Edit details.`);
+  }
+
+  /* ---- Thumbnails ---- */
+  _cloudThumbSoon(force = false) {
+    if (!this.cloudLink || !this.cloud) return;
+    clearTimeout(this._thumbTimer);
+    const wait = force ? 0 : Math.max(0, (this._thumbAt || 0) + THUMB_EVERY - Date.now());
+    this._thumbTimer = setTimeout(() => this._cloudThumbUpload(), wait);
+  }
+  async _cloudThumbUpload() {
+    const link = this.cloudLink;
+    if (!link || !this.cloud || !this.cloudUser) return;
+    this._thumbAt = Date.now();
+    try { await this.cloud.uploadThumbnail(link.id, await thumbnailBlob(this.project, this.fillDisplay())); }
+    catch (e) { console.warn('thumbnail upload failed', e); }
   }
 
   /* ---- Status ---- */
@@ -303,54 +349,78 @@ export class CloudMixin {
   /** Where sign-in redirects come back to: the editor, without parameters. */
   _returnURL() { return location.origin + location.pathname; }
 
+  /** Signed in: who, plan and usage, the open drawing, My sketches. */
   async _renderProjects(box) {
     const u = this.cloudUser;
     const linked = this.cloudLink;
-    box.innerHTML = `<h3>My projects</h3>
+    box.innerHTML = `<h3>Your account</h3>
       <div class="body">
         <div class="account-who"><span>${esc(u.email || '')}</span><button type="button" class="link" data-a="signout">Sign out</button></div>
-        <div class="account-current">${linked
-          ? '<span class="muted">This drawing is saved in your account; changes are saved as you work.</span>'
-          : '<span class="muted">This drawing is only in this browser.</span><button type="button" class="btn primary" data-a="upload">Save it to my account</button>'}</div>
-        <ul class="project-list"><li class="muted">Loading…</li></ul>
+        <div class="account-plan muted">Loading…</div>
+        <div class="account-current"><span class="muted">${linked ? 'This drawing is saved in your account; changes are saved as you work.' : 'This drawing is only in this browser.'}</span></div>
+        <a class="btn primary account-page" href="projects/">My sketches →</a>
         <p class="account-msg" role="status"></p>
       </div>
       <div class="footer"><button type="button" class="btn" data-a="close">Close</button></div>`;
-    const msg = box.querySelector('.account-msg');
-    const say = (t, err) => { msg.textContent = t; msg.classList.toggle('error', !!err); };
     box.querySelector('[data-a="close"]').addEventListener('click', () => this.closeAccount());
     box.querySelector('[data-a="signout"]').addEventListener('click', () => this.cloudSignOut());
-    box.querySelector('[data-a="upload"]')?.addEventListener('click', async (e) => {
-      e.target.disabled = true; say('Saving…');
-      try { this._cloudLinkTo(await this.cloud.create(this.project.toJSON())); this._renderAccount(); }
-      catch (err) { e.target.disabled = false; say(err.message || "Couldn't save.", true); }
-    });
 
-    const list = box.querySelector('.project-list');
-    let rows;
-    try { rows = await this.cloud.list(); }
-    catch (e) { list.innerHTML = `<li class="error">${esc(e.message || "Couldn't load your projects.")}</li>`; return; }
-    if (!this._accountOpen || !box.contains(list)) return;
-    if (!rows.length) { list.innerHTML = '<li class="muted">No projects yet.</li>'; return; }
-    list.innerHTML = rows.map(r => `
-      <li data-id="${esc(r.id)}"${linked && linked.id === r.id ? ' class="current"' : ''}>
-        <span class="name">${esc(r.name)}</span>
-        <span class="when">${linked && linked.id === r.id ? 'open now' : esc(when(r.updated_at))}</span>
-        <button type="button" class="btn" data-a="open"${linked && linked.id === r.id ? ' disabled' : ''}>Open</button>
-        <button type="button" class="btn icon" data-a="delete" title="Delete" aria-label="Delete ${esc(r.name)}">✕</button>
-      </li>`).join('');
-    list.querySelectorAll('li[data-id]').forEach(li => {
-      const row = rows.find(r => r.id === li.dataset.id);
-      li.querySelector('[data-a="open"]').addEventListener('click', () => this.openCloudProject(row.id));
-      li.querySelector('[data-a="delete"]').addEventListener('click', async () => {
-        if (!confirm(`Delete "${row.name}" from your account? This can't be undone.`)) return;
-        try {
-          await this.cloud.remove(row.id);
-          if (this.cloudLink?.id === row.id) this._cloudUnlink();
-          this._renderAccount();
-        } catch (e) { say(e.message || "Couldn't delete.", true); }
-      });
+    let rows = [], plan = this.cloudPlan || { plan: 'free', limit: 3 };
+    try { [rows, plan] = await Promise.all([this.cloud.list(), this.cloud.plan()]); this.cloudPlan = plan; }
+    catch (e) { box.querySelector('.account-plan').textContent = e.message || "Couldn't load your account."; return; }
+    if (!this._accountOpen || !box.isConnected || box.querySelector('[data-a="signout"]') === null) return;
+    const used = rows.length, full = plan.limit != null && used >= plan.limit;
+    box.querySelector('.account-plan').innerHTML = plan.plan === 'premium'
+      ? `<b>Premium</b> · ${used} sketch${used === 1 ? '' : 'es'}`
+      : `<b>Free plan</b> · ${used} of ${plan.limit} sketches used`;
+    const cur = box.querySelector('.account-current');
+    const row = linked && rows.find(r => r.id === linked.id);
+    if (row) {
+      cur.innerHTML = `<span><b>${esc(row.name)}</b><br><span class="muted">${row.description ? 'Saved in your account; changes are saved as you work.' : 'Saved in your account. Add a description (10+ characters).'}</span></span>
+        <button type="button" class="btn${row.description ? '' : ' primary'}" data-a="details">Edit details</button>`;
+      cur.querySelector('[data-a="details"]').addEventListener('click', () => this.editCloudDetails(row));
+    } else if (!full) {
+      cur.innerHTML = `<span class="muted">This drawing is only in this browser.</span><button type="button" class="btn primary" data-a="upload">Save to my account</button>`;
+      cur.querySelector('[data-a="upload"]').addEventListener('click', () => this.saveToAccount());
+    } else {
+      cur.innerHTML = `<span class="muted">This drawing is only in this browser. You've used your ${plan.limit} free sketches: delete one on My sketches to save it, or go Premium.</span>`;
+    }
+  }
+
+  /** First save of the open drawing: asks for title + description. */
+  async saveToAccount() {
+    const plan = this.cloudPlan || await this.cloud.plan().catch(() => ({ plan: 'free', limit: 3 }));
+    const name = (this.project.name || '').trim();
+    this.closeAccount();
+    const row = await openDetailsDialog({
+      heading: 'Save to my account', submitLabel: 'Save', plan: plan.plan,
+      name: name.length >= TITLE_MIN && name !== 'Untitled' ? name : '',
+      preview: renderThumbnail(this.project, this.fillDisplay(), { width: 320, height: 200, scale: 2 }),
+      onSubmit: (details) => this.cloud.create(this.project.toJSON(), details),
     });
+    if (!row) return;
+    this._setProjectName(row.name);
+    this._cloudLinkTo(row);
+    this._writeLocal();
+    this._cloudThumbSoon(true);
+    this._hint(`"${row.name}" is saved in your account.`);
+  }
+
+  async editCloudDetails(row) {
+    const plan = this.cloudPlan || { plan: 'free' };
+    this.closeAccount();
+    const updated = await openDetailsDialog({
+      heading: 'Sketch details', submitLabel: 'Save', plan: plan.plan,
+      name: row.name, description: row.description || '', visibility: row.visibility,
+      onSubmit: (details) => this.cloud.updateDetails(row.id, details),
+    });
+    if (updated && this.cloudLink?.id === updated.id) { this._setProjectName(updated.name); this._writeLocal(); }
+  }
+
+  _setProjectName(name) {
+    this.project.name = name;
+    const field = document.getElementById('project-name');
+    if (field) field.value = name;
   }
 
   async openCloudProject(id) {
@@ -425,14 +495,17 @@ export class CloudMixin {
     });
     box.querySelector('[data-a="copy"]').addEventListener('click', async () => {
       try {
-        const json = this.project.toJSON();
-        json.name = `${this.project.name} (copy)`;
-        this.project.name = json.name;
-        document.getElementById('project-name').value = json.name;
-        this._cloudLinkTo(await this.cloud.create(json));
+        const name = `${this.project.name} (copy)`.slice(0, 80);
+        const created = await this.cloud.create({ ...this.project.toJSON(), name },
+          { name, description: row.description || `Copy of ${row.name}.`, visibility: row.visibility });
+        this._setProjectName(name);
+        this._cloudLinkTo(created);
         this._writeLocal();
+        this._cloudThumbSoon(true);
         done();
-      } catch (e) { fail(e); }
+      } catch (e) {
+        fail(e instanceof LimitError ? new Error(`No room for a copy: you've used your ${e.limit} free sketches.`) : e);
+      }
     });
     box.querySelector('[data-a="mine"]').addEventListener('click', async () => {
       this.cloudLink.revision = row.revision;       // overwrite the version we just saw

@@ -633,6 +633,103 @@
   .project-list .btn { padding: 4px 10px; }
   .project-list .btn.icon { padding: 4px 8px; }
   .modal.account .footer { flex-wrap: wrap; }
+  .account-plan { font-size: 12px; }
+  .account-plan b { color: var(--text); }
+  .modal.account .account-page { text-align: center; text-decoration: none; }
+  .modal.account textarea {
+    min-height: 74px; font: inherit; font-size: 13px; padding: 7px 8px;
+    border: 1px solid var(--border); border-radius: 6px; background: var(--field); color: inherit; resize: vertical;
+  }
+  .modal.account .check { display: flex; align-items: center; gap: 6px; font-weight: 400; }
+  .modal.details .counter { float: right; font-weight: 400; color: var(--text-muted); }
+  .modal.details .counter.short { color: var(--overc); }
+  .details-preview { border: 1px solid var(--border-soft); border-radius: 8px; overflow: hidden; background: #fff; aspect-ratio: 16 / 10; }
+  .details-preview canvas, .details-preview img { display: block; width: 100%; height: 100%; object-fit: contain; }
+  .details-note b { color: var(--text-soft); }
+
+  /* ---------- My sketches page (app/projects/) ---------- */
+  body.page { height: auto; min-height: 100%; overflow: auto; background: var(--bg); color: var(--text); font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; }
+  .page-bar {
+    position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 12px;
+    padding: 10px max(16px, calc((100% - 1120px) / 2)); background: var(--panel-2); border-bottom: 1px solid var(--border);
+  }
+  .page-bar .brand { font-weight: 800; font-size: 17px; color: var(--text); text-decoration: none; }
+  .page-bar .brand b { color: var(--accent); }
+  .page-bar h1 { margin: 0; font-size: 15px; font-weight: 600; color: var(--text-soft); padding-left: 12px; border-left: 1px solid var(--border); }
+  .page-bar .spacer { flex: 1; }
+  .page-bar .btn { text-decoration: none; color: var(--text); white-space: nowrap; }
+  .page-account { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .page-account .avatar {
+    width: 28px; height: 28px; border-radius: 50%; background: var(--accent); color: #fff; font-weight: 700; font-size: 13px;
+    display: inline-flex; align-items: center; justify-content: center; object-fit: cover;
+  }
+  .page-account .who { color: var(--text-soft); max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .page .link { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; font: inherit; }
+  .page .link:hover { text-decoration: underline; }
+  .page-main { max-width: 1120px; margin: 0 auto; padding: 22px 16px 48px; }
+  .page-msg { color: var(--text-soft); }
+  .page-msg[hidden] { display: none; }
+  .usage {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 18px; padding: 10px 14px;
+    background: var(--panel-2); border: 1px solid var(--border-soft); border-radius: 10px; color: var(--text-soft);
+  }
+  .usage b { color: var(--text); }
+  .meter { flex: 0 1 220px; height: 8px; border-radius: 4px; background: var(--border-soft); overflow: hidden; }
+  .meter > span { display: block; height: 100%; background: var(--accent); border-radius: 4px; }
+  .meter.full > span { background: var(--selected); }
+  .sketches { list-style: none; margin: 0; padding: 0; display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
+  .sketch-card {
+    display: flex; flex-direction: column; min-width: 0; background: var(--panel-2); border: 1px solid var(--border-soft);
+    border-radius: 12px; box-shadow: var(--shadow-soft); transition: border-color .15s, box-shadow .15s;
+  }
+  .sketch-card[data-id]:hover { border-color: var(--accent-border); box-shadow: 0 4px 14px rgba(18, 25, 38, 0.08); }
+  .sketch-card .thumb { position: relative; display: block; aspect-ratio: 16 / 10; background: #fff; border-bottom: 1px solid var(--border-soft); border-radius: 12px 12px 0 0; overflow: hidden; }
+  .sketch-card .thumb img { display: block; width: 100%; height: 100%; object-fit: contain; }
+  .thumb-empty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; color: #b4bcc6; font-size: 12px; }
+  .thumb-empty svg { width: 42px; height: 42px; }
+  .sketch-card .card-body { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 4px; flex: 1; }
+  .card-title-row { position: relative; display: flex; align-items: center; gap: 6px; }
+  .card-title { flex: 1; min-width: 0; margin: 0; font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card-title a { color: var(--text); text-decoration: none; }
+  .card-title a:hover { color: var(--accent); }
+  .menu-btn { width: 30px; height: 28px; border: 1px solid transparent; border-radius: 6px; background: none; color: var(--text-soft); font-size: 18px; line-height: 1; cursor: pointer; }
+  .menu-btn:hover { background: var(--hover); border-color: var(--border-soft); }
+  .card-desc { margin: 0; color: var(--text-soft); font-size: 13px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 2.9em; }
+  .card-desc .missing { color: var(--text-muted); font-style: italic; }
+  .card-meta { margin-top: auto; padding-top: 6px; display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: var(--text-muted); }
+  .tag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; border: 1px solid var(--border-soft); }
+  .tag.public { color: #2c6b34; background: #eaf6ec; border-color: #cfe8d3; }
+  .tag.private { color: var(--text-soft); background: var(--panel); }
+  .tag.open { position: absolute; left: 8px; top: 8px; color: #fff; background: var(--accent); border-color: var(--accent); }
+  :root[data-theme="dark"] .tag.public { color: #8fd49a; background: #18291c; border-color: #2c5a35; }
+  .card-menu {
+    position: absolute; right: 0; top: 32px; z-index: 5; min-width: 160px; padding: 4px; display: flex; flex-direction: column;
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.16);
+  }
+  .card-menu button { text-align: left; padding: 7px 10px; border: 0; border-radius: 5px; background: none; color: var(--text); font: inherit; cursor: pointer; }
+  .card-menu button:hover, .card-menu button:focus-visible { background: var(--hover); outline: none; }
+  .card-menu .danger { color: var(--overc); }
+  .sketch-card.new { border-style: dashed; background: transparent; box-shadow: none; min-height: 220px; }
+  .sketch-card.new a { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; color: var(--text-soft); text-decoration: none; border-radius: 12px; }
+  .sketch-card.new a:hover { color: var(--accent); background: var(--accent-softer); }
+  .sketch-card.new .plus { font-size: 34px; line-height: 1; font-weight: 300; }
+  .sketch-card.new .muted { font-size: 12px; color: var(--text-muted); }
+  .sketch-card.upsell { padding: 18px; justify-content: center; gap: 8px; min-height: 220px; background: var(--accent-softer); border-color: var(--accent-border); }
+  .sketch-card.upsell h2 { margin: 0; font-size: 16px; }
+  .sketch-card.upsell p { margin: 0; color: var(--text-soft); font-size: 13px; }
+  .sketch-card.upsell .btn { align-self: flex-start; }
+  .empty-state { text-align: center; padding: 40px 16px; color: var(--text-soft); }
+  .empty-state.wide { grid-column: 1 / -1; padding: 18px 16px 6px; }
+  .empty-state h2 { margin: 0 0 6px; font-size: 19px; color: var(--text); }
+  .empty-state p { margin: 0 0 14px; }
+  .empty-state .btn { text-decoration: none; display: inline-block; }
+  .empty-mark { width: 54px; height: 54px; margin: 0 auto 12px; color: var(--accent); }
+  @media (max-width: 640px) {
+    .page-bar { gap: 8px; flex-wrap: wrap; }
+    .page-bar h1 { display: none; }
+    .page-account .who { display: none; }
+    .sketches { grid-template-columns: 1fr; }
+  }
 
   /* Cursor hint */
   #cursor-hint {

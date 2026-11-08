@@ -22,11 +22,18 @@ function walk(dir) {
   });
 }
 
-export function stampedHtml(html) {
+/** Pages that load the editor's modules: path under app/, and the
+ *  prefix from that page back to app/ ('' or '../'). */
+export const PAGES = [
+  { file: 'index.html', base: '' },
+  { file: 'projects/index.html', base: '../' },
+];
+
+export function stampedHtml(html, base = '') {
   const files = walk(join(APP, 'src')).sort();
   const imports = {};
   for (const f of files) {
-    const rel = './' + relative(APP, f).split('\\').join('/');
+    const rel = (base || './') + relative(APP, f).split('\\').join('/');
     imports[rel] = `${rel}?v=${hash(f)}`;
   }
   const map = `<script type="importmap">\n${JSON.stringify({ imports }, null, 2)}\n</script>`;
@@ -34,19 +41,23 @@ export function stampedHtml(html) {
   let out = /<!-- stamp:begin[\s\S]*?<!-- stamp:end -->/.test(html)
     ? html.replace(/<!-- stamp:begin[\s\S]*?<!-- stamp:end -->/, block)
     : html.replace('</head>', `${block}\n</head>`);
-  out = out.replace(/href="styles\.css(\?v=[0-9a-f]+)?"/, `href="styles.css?v=${hash(join(APP, 'styles.css'))}"`);
-  out = out.replace(/src="src\/main\.js(\?v=[0-9a-f]+)?"/, `src="src/main.js?v=${hash(join(APP, 'src/main.js'))}"`);
+  const q = base.replace(/[.]/g, '\\.').replace(/\//g, '\\/');
+  out = out.replace(new RegExp(`href="${q}styles\\.css(\\?v=[0-9a-f]+)?"`), `href="${base}styles.css?v=${hash(join(APP, 'styles.css'))}"`);
+  // The page's entry module (src/main.js, src/projects/page.js, …).
+  out = out.replace(new RegExp(`src="${q}(src\\/[\\w/-]+\\.js)(\\?v=[0-9a-f]+)?"`, 'g'),
+    (_, path) => `src="${base}${path}?v=${hash(join(APP, path))}"`);
   return out;
 }
 
-const indexPath = join(APP, 'index.html');
 if (process.argv[1] && process.argv[1].endsWith('stamp.mjs')) {
-  const html = readFileSync(indexPath, 'utf8');
-  const next = stampedHtml(html);
-  if (process.argv.includes('--check')) {
-    if (next !== html) { console.error('app/index.html is not stamped; run: npm run stamp'); process.exit(1); }
-  } else if (next !== html) {
-    writeFileSync(indexPath, next);
-    console.log('stamped app/index.html');
+  let stale = false;
+  for (const { file, base } of PAGES) {
+    const path = join(APP, file);
+    const html = readFileSync(path, 'utf8');
+    const next = stampedHtml(html, base);
+    if (next === html) continue;
+    if (process.argv.includes('--check')) { console.error(`app/${file} is not stamped; run: npm run stamp`); stale = true; }
+    else { writeFileSync(path, next); console.log(`stamped app/${file}`); }
   }
+  if (stale) process.exit(1);
 }

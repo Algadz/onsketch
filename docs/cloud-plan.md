@@ -78,7 +78,7 @@ Policies: owners read / insert / update / delete their rows; anyone reads
 
 ## Supabase project setup (done once, by the owner)
 
-1. SQL Editor → run `supabase/migrations/0001_projects.sql`.
+1. SQL Editor → run `supabase/migrations/0001_projects.sql`, then `0002_project_details.sql`.
 2. Authentication → URL configuration: Site URL `https://onsketch.io/app/`;
    redirect URLs `https://onsketch.io/app/**` and `http://localhost:8080/app/**`.
 3. Authentication → Providers: Email on (magic link). Optional: Google,

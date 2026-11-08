@@ -1,7 +1,7 @@
 // Cloud data layer against a fake supabase client (no network).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { openCloud, isConfigured, rowFor, cleanName, ConflictError } from '../../app/src/cloud/cloud.js';
+import { openCloud, isConfigured, rowFor, cleanName, detailsProblems, ConflictError, LimitError } from '../../app/src/cloud/cloud.js';
 import { Project } from '../../app/src/core/model.js';
 
 const URL_ = 'https://abc.supabase.co';
@@ -20,16 +20,18 @@ function fakeClient() {
     const run = () => {
       let out;
       if (q.op === 'insert') {
+        if (rows.filter(r => r.owner_id === session.user.id).length >= 3) return { data: null, error: new Error('OnSketch: free plan limit (3 projects).') };
         const r = { id: 'p' + nextId++, owner_id: session.user.id, visibility: 'private', revision: 1, updated_at: Date.now(), ...q.payload };
         rows.push(r); out = [r];
       } else if (q.op === 'update') {
         out = rows.filter(match);
-        for (const r of out) Object.assign(r, q.payload, { revision: r.revision + 1 });
+        for (const r of out) Object.assign(r, q.payload, { revision: r.revision + ('data' in q.payload ? 1 : 0) });
       } else if (q.op === 'delete') {
         out = rows.filter(match);
         for (const r of out) rows.splice(rows.indexOf(r), 1);
       } else out = rows.filter(match);
       out = out.map(pick);
+      if (q.maybe) return { data: out[0] || null, error: null };
       if (q.single) return out.length === 1 ? { data: out[0], error: null } : { data: null, error: new Error('not found') };
       return { data: out, error: null };
     };
@@ -40,6 +42,7 @@ function fakeClient() {
       delete() { q.op = 'delete'; return b; },
       eq(k, v) { q.filters.push([k, v]); return b; },
       single() { q.single = true; return b; },
+      maybeSingle() { q.maybe = true; return b; },
       then(res, rej) { return Promise.resolve(run()).then(res, rej); },
     };
     return b;
@@ -55,6 +58,8 @@ function fakeClient() {
       signOut: async () => { session = null; return { error: null }; },
     },
     from: () => table(),
+    storage: { from: () => ({ upload: async () => ({ error: null }), remove: async () => ({ error: null }), copy: async () => ({ error: null }),
+      createSignedUrls: async (paths) => ({ data: paths.map(p => ({ path: p, signedUrl: 'https://x/' + p })), error: null }) }) },
   };
 }
 
@@ -73,7 +78,7 @@ test('cloud is off until configured', async () => {
 test('create, list, load, save, delete', async () => {
   const fake = fakeClient();
   const cloud = await openCloud({ url: URL_, key: KEY, createClient: () => fake });
-  const row = await cloud.create(projectJSON('Desk'));
+  const row = await cloud.create(projectJSON('Desk'), { name: 'Desk', description: 'A standing desk' });
   assert.equal(row.name, 'Desk');
   assert.equal(row.revision, 1);
   assert.deepEqual((await cloud.list()).map(r => r.name), ['Desk']);
@@ -94,7 +99,7 @@ test('create, list, load, save, delete', async () => {
 test('a save from a stale revision is refused with the latest row', async () => {
   const fake = fakeClient();
   const cloud = await openCloud({ url: URL_, key: KEY, createClient: () => fake });
-  const row = await cloud.create(projectJSON());
+  const row = await cloud.create(projectJSON(), { name: 'Shelf', description: 'A wall shelf' });
   await cloud.save(row.id, projectJSON('From tab A'), 1);          // now at 2
   await assert.rejects(cloud.save(row.id, projectJSON('From tab B'), 1), (e) => {
     assert.ok(e instanceof ConflictError);
@@ -117,4 +122,29 @@ test('names are cleaned and non-projects rejected', () => {
   assert.equal(cleanName('x'.repeat(300)).length, 200);
   assert.throws(() => rowFor({ name: 'x' }));
   assert.equal(rowFor(projectJSON('A')).name, 'A');
+});
+
+test('details: title 3–80, description 10–500', async () => {
+  assert.deepEqual(detailsProblems({ name: 'Desk', description: 'A standing desk' }), []);
+  assert.match(detailsProblems({ name: 'ab', description: 'A standing desk' })[0], /title/);
+  assert.match(detailsProblems({ name: 'Desk', description: '  too   short ' })[0], /description/);
+  const cloud = await openCloud({ url: URL_, key: KEY, createClient: () => fakeClient() });
+  await assert.rejects(cloud.create(projectJSON(), { name: 'Desk', description: 'short' }), /description/);
+});
+
+test('free plan: the fourth project is refused with LimitError', async () => {
+  const cloud = await openCloud({ url: URL_, key: KEY, createClient: () => fakeClient() });
+  assert.deepEqual(await cloud.plan(), { plan: 'free', limit: 3 });
+  for (const n of ['One', 'Two', 'Three']) await cloud.create(projectJSON(n), { name: n, description: 'Some description' });
+  await assert.rejects(cloud.create(projectJSON('Four'), { name: 'Four', description: 'Some description' }), (e) => e instanceof LimitError && e.limit === 3);
+});
+
+test('save keeps the cloud title when the project name is too short', async () => {
+  const fake = fakeClient();
+  const cloud = await openCloud({ url: URL_, key: KEY, createClient: () => fake });
+  const row = await cloud.create(projectJSON('Desk'), { name: 'Desk', description: 'A standing desk' });
+  const saved = await cloud.save(row.id, projectJSON('D'), row.revision);
+  assert.equal(saved.name, 'Desk');
+  const urls = await cloud.thumbnailURLs([row]);
+  assert.match(urls.get(row.id), /u1\/.*\.webp$/);
 });
