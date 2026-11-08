@@ -1,5 +1,6 @@
 // Records the OnSketch demo (1280×720 .webm) used for the Lemon Squeezy store review
 // and marketing. Needs a static server on http://localhost:8099 (python3 -m http.server 8099).
+import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
 const OUT = new URL('../marketing/raw/', import.meta.url).pathname;   // the .webm recording; encode with the commands in marketing/README.md
