@@ -16,6 +16,7 @@ export class RenderEventsMixin {
     requestAnimationFrame(tick);
   }
   _render() {
+    this.refreshDrivenDimensions();           // floating dimensions show what they measure
     this.renderer.drawGrid(this.gridOn, this.project.background);
     this.renderer.drawEntities(this.project, this.fillDisplay());
 
@@ -138,6 +139,11 @@ export class RenderEventsMixin {
         return;
       }
       this.hideContextMenu();
+      // A dimension value box is open: clicking a shape inserts its name.
+      if (ev.button === 0 && !ev.altKey && this._valueInput && this._valueInputPick(world)) {
+        ev.preventDefault();
+        return;
+      }
       c.setPointerCapture(ev.pointerId);
       if (ev.button === 1 || (ev.button === 0 && ev.altKey)) {
         panning = true;

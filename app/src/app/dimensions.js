@@ -183,7 +183,7 @@ export class DimensionLabelsMixin {
     if (!rect) return;
     // Shows the equation when there is one (like SolidWorks), else the value.
     this.openValueInput({ x: rect.x + rect.w / 2, y: rect.y + rect.h / 2 }, this.dimensionEditText(c),
-      (text) => this.setDimensionFromText(c, text));
+      (text) => this.setDimensionFromText(c, text), () => {}, { selfName: c.name });
   }
 
 }

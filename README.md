@@ -78,6 +78,15 @@ Save forces a write. Export / Import JSON moves a project between browsers.
   Equations are global: when they change a value, every layer is solved, not
   just the active one.
 - Editing a dimension shows its equation (Σ marks equation-driven labels).
+- While a dimension's value box is open, click a line, circle or arc to
+  insert its dimension name (`=D5`, or at the caret inside an equation). A
+  shape without one gets a **floating** (driven, reference) dimension first.
+  Floating dimensions re-measure the geometry on every render, solve and drag
+  frame, so after `D1 = D5`, dragging that line resizes D1's shape live.
+- In the Equations window, drag a plain value sideways to change it, as in
+  Blender: the step fits the value's size, Shift is 10× finer, Ctrl snaps to
+  round numbers, Esc restores, release is one undo step; a click edits the
+  text. Values set by an equation, and floating dimensions, don't scrub.
 - The Equations window (Σ in the menu bar) lists global variables and all
   dimensions: rename them (references follow), edit equations, see values.
 
@@ -110,6 +119,11 @@ point tied to it by a coincident relation (on the new layer); moving shapes to
 another layer (Properties → layer) takes their own relations along and splits
 shared corners the same way; older files are split on load. Deleting either
 side leaves the other where it was.
+
+Right-click a line, circle or arc for **Set as construction** (or back to
+normal geometry) and, on lines, **Create midpoint** (a point held at the
+middle by a midpoint relation). With several shapes selected, the actions
+apply to all of them.
 
 Relations (coincident, horizontal, parallel, tangent, …) are shown as small
 badges where they act (toggle: Relations / `K`); click one to select it and

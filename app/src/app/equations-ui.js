@@ -6,6 +6,7 @@ import {
 import { CONSTRAINT_LABELS } from '../core/constraints.js';
 
 const esc = (t) => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const PLAIN = /^\s*-?\d+(?:\.\d+)?\s*$/;          // a plain number (scrubbable)
 const fmt = (v, angular) => (v == null || !Number.isFinite(v)) ? '—' : (angular ? v.toFixed(2) + '°' : Number(v.toFixed(4)).toString());
 
 /* =============== EQUATIONS UI ==================================
@@ -19,6 +20,7 @@ export class EquationsMixin {
    *  Called before every commit / solve. */
   _applyEquations() {
     ensureDimensionNames(this.project);
+    if (this.refreshDrivenDimensions) this.refreshDrivenDimensions();   // floating dimensions measure the geometry
     let changed = 0;
     const errors = solveEquations(this.project, (c, v) => {
       if (c.kind === 'offsetDistance') this._setOffsetDistanceValue(c, v);
@@ -89,8 +91,13 @@ export class EquationsMixin {
    * valid or the user presses Escape.
    * @param {{x,y}} pos  screen position in the workspace
    * @param {(text:string) => string|null} submit  returns an error or null
+   * @param {{selfName?:string}} opts  name of the dimension being edited
+   *
+   * While it is open, clicking a line, circle or arc on the canvas inserts
+   * that shape's dimension name (creating a floating one if needed), see
+   * dim-links.js.
    */
-  openValueInput(pos, text, submit, cancel = () => {}) {
+  openValueInput(pos, text, submit, cancel = () => {}, opts = {}) {
     const input = document.createElement('input');
     input.type = 'text';
     input.className = 'dim-input';
@@ -102,8 +109,33 @@ export class EquationsMixin {
     fit();
     document.getElementById('workspace').appendChild(input);
     setTimeout(() => { input.focus(); input.select(); }, 0);
-    let done = false;
-    const close = () => { done = true; input.remove(); };
+    let done = false, hold = false;
+    const close = () => { done = true; input.remove(); if (this._valueInput === vi) this._valueInput = null; };
+    const refocus = () => setTimeout(() => { if (!done) input.focus(); }, 0);
+    const vi = {
+      selfName: opts.selfName || null,
+      /** Keep the box open through the canvas click that follows. */
+      hold: () => { hold = true; refocus(); },
+      /** Insert a name: at the caret in an equation, else as =name. */
+      insert: (name) => {
+        hold = true;
+        const v = input.value;
+        if (/^\s*=/.test(v)) {
+          const a = input.selectionStart ?? v.length, b = input.selectionEnd ?? v.length;
+          const before = v.slice(0, a), after = v.slice(b);
+          const pad = /[\w.)]$/.test(before) ? ' + ' : '';
+          input.value = before + pad + name + after;
+          const caret = (before + pad + name).length;
+          setTimeout(() => { if (!done) { input.focus(); input.setSelectionRange(caret, caret); } }, 0);
+        } else {
+          input.value = '=' + name;
+          setTimeout(() => { if (!done) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); } }, 0);
+        }
+        input.classList.remove('bad');
+        fit();
+      },
+    };
+    this._valueInput = vi;
     const tryCommit = () => {
       const err = submit(input.value);
       if (!err) { close(); return true; }
@@ -120,6 +152,7 @@ export class EquationsMixin {
     });
     input.addEventListener('blur', () => {
       if (done) return;
+      if (hold) { hold = false; return; }           // a canvas pick: stay open
       if (!tryCommit()) { close(); cancel(); }      // leaving with bad text cancels
     });
     return { el: input, dispose: () => { if (!done) close(); } };
@@ -146,6 +179,10 @@ export class EquationsMixin {
     const body = document.getElementById('equations-body');
     if (!body) return;
     body.addEventListener('change', (e) => this._onEquationsEdit(e));
+    body.addEventListener('pointerdown', (e) => {
+      const el = e.target.closest('[data-scrub]');
+      if (el && e.button === 0) this._beginScrub(el, e);
+    });
     body.addEventListener('click', (e) => {
       const b = e.target.closest('button[data-eq]');
       if (!b) return;
@@ -164,6 +201,87 @@ export class EquationsMixin {
       }
       this.commit();
       this._refreshEquationsPanel();
+    });
+  }
+
+  /* ---- Blender-style scrubbing on value boxes ----
+     Press on a value and drag sideways: the value changes by a step that
+     fits its size (1400 → 10 per pixel, 40 → 0.1), Shift for 10× finer,
+     Ctrl to snap to round numbers. Geometry follows live; release makes
+     one undo step; Esc puts the start value back. A click without
+     dragging edits the value as text. Only plain values scrub: equations
+     and floating dimensions show why in their tooltip. */
+  _beginScrub(el, ev) {
+    const [kind, idxText] = el.dataset.scrub.split(':');
+    const idx = +idxText;
+    const dims = allDimensions(this.project);
+    const target = kind === 'var' ? this.project.variables[idx] : dims[idx];
+    if (!target) return;
+    const angular = kind === 'dim' && isAngular(target);
+    const v0 = kind === 'var' ? Number(target.expr) : userValue(target);
+    if (!Number.isFinite(v0)) return;
+    ev.preventDefault();
+    const step0 = angular ? 0.5 : Math.pow(10, Math.floor(Math.log10(Math.max(Math.abs(v0), 1)))) / 100;
+    const startX = ev.clientX;
+    let moved = false, last = v0;
+    el.setPointerCapture(ev.pointerId);
+    const apply = (v) => {
+      if (kind === 'var') target.expr = String(v);
+      else if (target.kind === 'offsetDistance') this._setOffsetDistanceValue(target, v);
+      else target.value = internalValue(target, v);
+      this._applyEquations();
+      this._solveAllLayers();
+      this._updateEquationValues();
+      this.requestRender();
+    };
+    const move = (e) => {
+      const dx = e.clientX - startX;
+      if (!moved && Math.abs(dx) < 3) return;
+      if (!moved) { moved = true; el.classList.add('scrubbing'); document.body.classList.add('scrubbing'); }
+      const step = step0 * (e.shiftKey ? 0.1 : 1);
+      let v = v0 + dx * step;
+      const q = e.ctrlKey || e.metaKey ? step * 10 : step;
+      v = Math.round(v / q) * q;
+      v = Number(v.toFixed(Math.max(0, -Math.floor(Math.log10(q))) + 0));
+      if (!angular && kind === 'dim' && !(v > 0)) v = q;
+      if (v !== last) { last = v; apply(v); }
+    };
+    const key = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); apply(v0); last = v0; end(false); } };
+    const end = (keep = true) => {
+      el.removeEventListener('pointermove', move);
+      el.removeEventListener('pointerup', up);
+      el.removeEventListener('pointercancel', up);
+      window.removeEventListener('keydown', key, true);
+      el.classList.remove('scrubbing');
+      document.body.classList.remove('scrubbing');
+      if (moved && keep && last !== v0) this.commit();
+      else if (moved) this.solveAndRender();
+      this._refreshEquationsPanel();
+    };
+    const up = () => {
+      if (!moved) {                                   // a click: edit as text
+        end();
+        const sel = kind === 'var' ? `[data-k="var-expr"][data-i="${idx}"]` : `[data-k="dim-expr"][data-i="${idx}"]`;
+        const inp = document.querySelector('#equations-body ' + sel);
+        if (inp) { if (kind === 'dim' && !inp.value) inp.value = String(Number(v0.toFixed(4))); inp.focus(); inp.select(); }
+        return;
+      }
+      end();
+    };
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerup', up);
+    el.addEventListener('pointercancel', up);
+    window.addEventListener('keydown', key, true);
+  }
+
+  /** Update the value boxes in place (rebuilding would drop a scrub). */
+  _updateEquationValues() {
+    const body = document.getElementById('equations-body'); if (!body) return;
+    const dims = allDimensions(this.project);
+    body.querySelectorAll('[data-val]').forEach(span => {
+      const [kind, i] = span.dataset.val.split(':');
+      if (kind === 'var') { const v = this.project.variables[+i]; if (v) span.textContent = v.error ? '!' : fmt(v.value, false); }
+      else { const c = dims[+i]; if (c) span.textContent = c.exprError ? '!' : fmt(userValue(c), isAngular(c)); }
     });
   }
 
@@ -211,7 +329,7 @@ export class EquationsMixin {
     vars.forEach((v, i) => {
       html += `<input class="eq-name" data-k="var-name" data-i="${i}" value="${esc(v.name)}" aria-label="Variable name">
         <input class="eq-expr${v.error ? ' bad' : ''}" data-k="var-expr" data-i="${i}" value="${esc(v.expr)}" title="${esc(v.error || '')}" aria-label="Variable expression">
-        <span class="eq-val">${v.error ? '!' : fmt(v.value, false)}</span>
+        <span class="eq-val${PLAIN.test(v.expr || '') ? ' scrub' : ''}" data-val="var:${i}" ${PLAIN.test(v.expr || '') ? `data-scrub="var:${i}" title="Drag left / right to change (Shift: fine, Ctrl: round)"` : 'title="Set by an expression"'}>${v.error ? '!' : fmt(v.value, false)}</span>
         <button class="fwin-x" data-eq="del-var" data-i="${i}" title="Delete variable">&times;</button>`;
     });
     html += '</div>';
@@ -224,7 +342,7 @@ export class EquationsMixin {
       html += `<input class="eq-name" data-k="dim-name" data-i="${i}" value="${esc(c.name || '')}" title="${esc(kind)}" aria-label="Dimension name">
         <input class="eq-expr${c.exprError ? ' bad' : ''}" data-k="dim-expr" data-i="${i}" value="${esc(c.expr ? '=' + c.expr : '')}"
           placeholder="${c.driven ? 'driven (reference)' : 'value or =equation'}" ${c.driven ? 'disabled' : ''} title="${esc(c.exprError || kind)}" aria-label="Dimension equation">
-        <span class="eq-val">${c.exprError ? '!' : fmt(userValue(c), ang)}</span><span></span>`;
+        <span class="eq-val${!c.expr && !c.driven ? ' scrub' : ''}" data-val="dim:${i}" ${!c.expr && !c.driven ? `data-scrub="dim:${i}" title="Drag left / right to change (Shift: fine, Ctrl: round)"` : `title="${c.driven ? 'Floating: measures the geometry' : 'Set by its equation'}"`}>${c.exprError ? '!' : fmt(userValue(c), ang)}</span><span></span>`;
     });
     html += '</div><div class="hint">Units: mm cm m in " ft, deg rad. Functions: sin cos tan sqrt abs min max, pi. Start with = to keep an equation.</div>';
     body.innerHTML = html;

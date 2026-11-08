@@ -625,6 +625,8 @@
     text-align: left;
     cursor: pointer;
   }
+  .context-menu-sep { height: 1px; margin: 4px 2px; background: var(--border-soft); }
+  .context-menu-item.action .glyph { font-weight: 400; }
   .context-menu-item:hover {
     background: var(--accent-softer);
     color: var(--accent);
@@ -933,6 +935,10 @@
   }
   .eq-grid input:disabled { opacity: 0.55; }
   .eq-grid .eq-name { font-weight: 600; }
+  .eq-val.scrub { cursor: ew-resize; border-radius: 3px; padding: 1px 3px; }
+  .eq-val.scrub:hover { background: var(--accent-softer); color: var(--accent); }
+  .eq-val.scrubbing { background: var(--accent); color: #fff; }
+  body.scrubbing, body.scrubbing * { cursor: ew-resize !important; user-select: none; }
   .eq-val { font-size: 11px; text-align: right; color: var(--text-soft); font-variant-numeric: tabular-nums; }
   .hint code { font-size: 10.5px; }
 

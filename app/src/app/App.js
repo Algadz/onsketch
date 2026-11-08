@@ -22,6 +22,7 @@ import { FillsMixin } from './fills.js';
 import { PersistenceMixin } from './persistence.js';
 import { SketchWindowMixin } from './sketch-window.js';
 import { ReportMixin } from './report.js';
+import { DimLinksMixin } from './dim-links.js';
 
 /* =============== 10. APP ====================================== */
 export class App {
@@ -473,6 +474,22 @@ export class App {
       menu.appendChild(row);
     }
 
+    const actions = this.contextActions(items);
+    if (actions.length) {
+      const sep = document.createElement('div');
+      sep.className = 'context-menu-sep';
+      menu.appendChild(sep);
+      for (const a of actions) {
+        const row = document.createElement('button');
+        row.type = 'button';
+        row.className = 'context-menu-item action';
+        row.dataset.action = a.id;
+        row.innerHTML = `<span class="glyph">${a.id === 'midpoint' ? '⌐' : '┄'}</span><span>${a.label}</span>`;
+        row.addEventListener('click', () => { this.hideContextMenu(); a.run(); });
+        menu.appendChild(row);
+      }
+    }
+
     document.body.appendChild(menu);
     const margin = 8;
     const rect = menu.getBoundingClientRect();
@@ -626,7 +643,7 @@ export class App {
 }
 
 /* Methods are grouped into mixins by concern; see src/app/*.js. */
-for (const Mixin of [ChromeMixin, EquationsMixin, LayersPanelMixin, FillsMixin, DimensionLabelsMixin, SelectionMixin, DragMixin, SolveMixin, OperationsMixin, ConstraintActionsMixin, RenderEventsMixin, PanelsMixin, PersistenceMixin, SketchWindowMixin, ReportMixin]) {
+for (const Mixin of [ChromeMixin, EquationsMixin, LayersPanelMixin, FillsMixin, DimensionLabelsMixin, SelectionMixin, DragMixin, SolveMixin, OperationsMixin, ConstraintActionsMixin, RenderEventsMixin, PanelsMixin, PersistenceMixin, SketchWindowMixin, ReportMixin, DimLinksMixin]) {
   for (const key of Object.getOwnPropertyNames(Mixin.prototype)) {
     if (key === 'constructor') continue;
     Object.defineProperty(App.prototype, key, Object.getOwnPropertyDescriptor(Mixin.prototype, key));

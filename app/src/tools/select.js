@@ -166,6 +166,7 @@ export class SelectTool extends Tool {
         }
       }
       if (!result) result = this.app.solveLocalizedDrag(this.dragging, dx, dy);
+      this.app.updateLinkedDimensionsDuringDrag(this.dragging);
       // After the solve, probe each *other* handle at its now-final
       // position so secondary snaps (e.g. the far end of a dragged line
       // happening to fall on another line) light up too. This mirrors

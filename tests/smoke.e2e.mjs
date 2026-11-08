@@ -886,6 +886,89 @@ await page.evaluate(() => { const a = window._app; a.project.layer('ly1').visibl
   check(before === after && JSON.parse(after).e > 0, `project restored after reload (${before} → ${after})`);
 }
 
+// Right-click actions, Blender-style scrubbing, click-to-link dimensions.
+{
+  const P = (id, x, y) => ({ type: 'point', id, x, y });
+  const proj = { version: 3, activeLayerId: 'ly1', layers: [{ id: 'ly1', name: 'L' }], sketches: [{ id: 's', name: 'S', entities: [
+    { type: 'line', id: 'q1', p1: P('qa', -40, 0), p2: P('qb', 0, 0) },
+    { type: 'line', id: 'q2', p1: P('qb', 0, 0), p2: P('qc', 0, 20) },
+    { type: 'line', id: 'q3', p1: P('qc', 0, 20), p2: P('qd', -40, 20) },
+    { type: 'line', id: 'q4', p1: P('qd', -40, 20), p2: P('qa', -40, 0) },
+    { type: 'line', id: 'f1', p1: P('fa', 20, -20), p2: P('fb', 50, -20) },
+  ], constraints: [
+    { id: 'h1', kind: 'horizontal', lineId: 'q1', p1: 'qa', p2: 'qb' }, { id: 'h2', kind: 'horizontal', lineId: 'q3', p1: 'qc', p2: 'qd' },
+    { id: 'v1', kind: 'vertical', lineId: 'q2', p1: 'qb', p2: 'qc' }, { id: 'v2', kind: 'vertical', lineId: 'q4', p1: 'qd', p2: 'qa' },
+    { id: 'fx', kind: 'fix', pointId: 'qa', x: -40, y: 0 }, { id: 'hf', kind: 'horizontal', lineId: 'f1', p1: 'fa', p2: 'fb' },
+    { id: 'fx2', kind: 'fix', pointId: 'fa', x: 20, y: -20 },
+    { id: 'dw', kind: 'distance', p1: 'qa', p2: 'qb', value: 40, name: 'D1', labelOffset: -8 },
+    { id: 'dh', kind: 'distance', p1: 'qb', p2: 'qc', value: 20 },
+  ] }] };
+  const loadQ = () => page.evaluate((proj) => {
+    const a = window._app; a.project = a.project.constructor.fromJSON(proj); a._afterStateSwap();
+    a.view.zoom = 5; a.view.panX = 0; a.view.panY = 0; a.commit({ diagnostics: 'sync' }); a.setTool('select');
+    for (const w of ['props', 'colors', 'tools', 'layers', 'sketch']) a.windows.toggle(w, false);
+  }, proj);
+  const scr = (x, y) => page.evaluate(([x, y]) => window._app.view.worldToScreen({ x, y }), [x, y]).then(p => ({ x: box.x + p.x, y: box.y + p.y }));
+  await loadQ();
+
+  // 1. Right-click a line: construction, then create midpoint.
+  let at = await scr(35, -20);
+  await page.mouse.click(at.x, at.y, { button: 'right' });
+  const labels = await page.$$eval('#context-menu .action span:last-child', els => els.map(e => e.textContent.trim()));
+  check(labels.includes('Set as construction') && labels.includes('Create midpoint'), `right-click offers construction and midpoint (${labels.join(' | ')})`);
+  await page.click('#context-menu [data-action="construction"]');
+  check(await page.evaluate(() => window._app.activeSketch().entities.find(e => e.id === 'f1').construction), 'Set as construction');
+  await page.mouse.click(at.x, at.y, { button: 'right' });
+  check(await page.textContent('#context-menu [data-action="construction"]').then(t => /normal geometry/.test(t)), 'menu then offers Set as normal geometry');
+  await page.click('#context-menu [data-action="midpoint"]');
+  const mid = await page.evaluate(() => { const s = window._app.activeSketch(); const c = s.constraints.find(c => c.kind === 'midpoint');
+    const p = s.entities.find(e => e.id === c?.pointId); return p && [p.x, p.y]; });
+  check(mid && Math.abs(mid[0] - 35) < 1e-6 && Math.abs(mid[1] + 20) < 1e-6, `Create midpoint puts a point held at the middle (${mid})`);
+  await page.evaluate(() => { const a = window._app; const f = a.activeSketch().entities.find(e => e.id === 'f1'); f.construction = false; a.commit(); });
+
+  // 2. Scrub a variable and a dimension in the Equations window.
+  await page.evaluate(() => { const a = window._app; a.project.variables.push({ name: 'k', expr: '10' }); a.commit(); a.windows.toggle('equations', true); a._refreshEquationsPanel(); });
+  let vb = await page.locator('[data-scrub="var:0"]').boundingBox();
+  await page.mouse.move(vb.x + vb.width / 2, vb.y + vb.height / 2); await page.mouse.down();
+  await page.mouse.move(vb.x + vb.width / 2 + 25, vb.y + 5, { steps: 5 }); await page.mouse.move(vb.x + vb.width / 2 + 50, vb.y + 5, { steps: 5 }); await page.mouse.up();
+  check(await page.evaluate(() => window._app.project.variables[0].expr) === '15', 'dragging a variable value by 50 px adds 50 × 0.1');
+  const dimIdx = await page.evaluate(() => [...document.querySelectorAll('#equations-body [data-k="dim-name"]')].findIndex(i => i.value === 'D1'));
+  vb = await page.locator(`[data-scrub="dim:${dimIdx}"]`).boundingBox();
+  await page.mouse.move(vb.x + vb.width / 2, vb.y + vb.height / 2); await page.mouse.down();
+  await page.mouse.move(vb.x + vb.width / 2 + 30, vb.y + 5, { steps: 6 });
+  const live = await page.evaluate(() => { const s = window._app.activeSketch(); const b = s.entities.find(e => e.id === 'q1'); return Math.round(Math.hypot(b.p2.x - b.p1.x, b.p2.y - b.p1.y) * 10) / 10; });
+  await page.mouse.up();
+  check(live === 43, `dragging D1's value resizes the rectangle live (40 → ${live})`);
+  vb = await page.locator(`[data-scrub="dim:${dimIdx}"]`).boundingBox();
+  await page.mouse.move(vb.x + vb.width / 2, vb.y + vb.height / 2); await page.mouse.down();
+  await page.mouse.move(vb.x + vb.width / 2 + 40, vb.y + 5, { steps: 4 });
+  await page.keyboard.press('Escape'); await page.mouse.up();
+  check(await page.evaluate(() => window._app.activeSketch().constraints.find(c => c.name === 'D1').value) === 43, 'Esc during a scrub restores the value');
+  await page.evaluate(() => window._app.windows.toggle('equations', false));
+
+  // 3. Edit D1, click the free line: =D2 with a new floating dimension, then drag that line.
+  await page.evaluate(() => { const a = window._app; a.requestRender(); });
+  await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
+  await page.evaluate(() => { const a = window._app; a.editDimValue(a.activeSketch().constraints.find(c => c.name === 'D1')); });
+  await page.waitForSelector('.dim-input');
+  at = await scr(35, -20);
+  await page.mouse.click(at.x, at.y);
+  const typed = await page.inputValue('.dim-input');
+  const floating = await page.evaluate(() => window._app.activeSketch().constraints.filter(c => c.driven).map(c => c.name + '=' + Math.round(c.value)));
+  check(/^=D\d+$/.test(typed) && floating.length === 1 && floating[0] === typed.slice(1) + '=30', `click a line while editing: ${typed}, floating ${floating}`);
+  await page.keyboard.press('Enter');
+  const w1 = await page.evaluate(() => { const s = window._app.activeSketch(); const b = s.entities.find(e => e.id === 'q1'); return Math.round(Math.hypot(b.p2.x - b.p1.x, b.p2.y - b.p1.y)); });
+  check(w1 === 30, `D1 follows the clicked line (width ${w1})`);
+  const end = await scr(50, -20), to = await scr(70, -20);
+  await page.mouse.move(end.x, end.y); await page.mouse.down();
+  await page.mouse.move((end.x + to.x) / 2, end.y, { steps: 4 }); await page.mouse.move(to.x, to.y, { steps: 4 });
+  const during = await page.evaluate(() => { const s = window._app.activeSketch(); const b = s.entities.find(e => e.id === 'q1'); return Math.round(Math.hypot(b.p2.x - b.p1.x, b.p2.y - b.p1.y)); });
+  await page.mouse.up();
+  const after = await page.evaluate(() => { const s = window._app.activeSketch(); const b = s.entities.find(e => e.id === 'q1'); const f = s.entities.find(e => e.id === 'f1');
+    return [Math.round(Math.hypot(b.p2.x - b.p1.x, b.p2.y - b.p1.y)), Math.round(f.p2.x - f.p1.x), document.getElementById('status-solve').textContent]; });
+  check(during === 50 && after[0] === 50 && after[1] === 50, `dragging the linked line resizes the rectangle live (during ${during}, after ${after.slice(0, 2)})`);
+}
+
 // /app/?example=desk opens the landing page's desk, fully defined, and
 // stays fully defined when the width changes (metre-scale dimensions).
 {
