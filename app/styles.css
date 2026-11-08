@@ -861,6 +861,19 @@
     border: 1px solid color-mix(in srgb, var(--text) 22%, transparent);
   }
   .palette .sw:hover { transform: scale(1.08); }
+  /* Sketch window: ink colour chip */
+  .fwin[data-win="sketch"] .fwin-body { width: 196px; }
+  .ink-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .ink-sw {
+    position: relative; width: 34px; height: 34px; flex: 0 0 auto; border-radius: 50%;
+    background: var(--sw); border: 2px solid var(--panel);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 30%, transparent);
+    cursor: pointer; overflow: hidden;
+  }
+  .ink-sw input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; border: 0; padding: 0; }
+  .palette .sw.on { outline: 2px solid var(--accent); outline-offset: 1px; }
+  #optbar input[type=range] { width: 110px; accent-color: var(--accent); vertical-align: middle; }
+  .opt-val { display: inline-block; min-width: 40px; font-size: 11px; color: var(--text-soft); font-variant-numeric: tabular-nums; }
   .hint { font-size: 10.5px; color: var(--text-muted); line-height: 1.35; margin-top: 4px; }
 
   /* Properties window */

@@ -1,6 +1,7 @@
 import { cleanStyle } from '../core/style.js';
 import { getTheme } from '../render/theme.js';
 import { uiIcon } from '../ui/icons.js';
+import { INK_DEFAULTS } from './sketch-window.js';
 
 const PREFS_KEY = 'onsketch:prefs';
 const esc = (t) => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -8,7 +9,7 @@ const esc = (t) => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt
 /** Drawing style used by the tools: line weight and line type for new
  *  geometry, and the colour the Fill tool paints with. Stroke colour is
  *  never chosen: it always shows the geometry's state. */
-const DEFAULT_PEN = { lineWidth: 1.4, lineStyle: 'solid', fillColor: '#1f7ad6', fillOpacity: 0.35 };
+const DEFAULT_PEN = { lineWidth: 1.4, lineStyle: 'solid', fillColor: '#1f7ad6', fillOpacity: 0.35, ...INK_DEFAULTS };
 
 /* =============== LAYERS + STYLE PANELS =========================
    Right-hand sidebar. "Layers" lists project layers top-most first
@@ -35,8 +36,9 @@ export class LayersPanelMixin {
     btn('layer-delete', 'trash', () => {
       const layer = this.project.activeLayer();
       if (this.project.layers.length <= 1) return alert('A project needs at least one layer.');
-      const n = this.project.entitiesOnLayer(layer.id).length;
-      if (!confirm(n ? `Delete layer "${layer.name}" and its ${n} entit${n === 1 ? 'y' : 'ies'}?` : `Delete layer "${layer.name}"?`)) return;
+      const n = this.project.entitiesOnLayer(layer.id).length
+        + this.project.sketches.reduce((k, s) => k + s.strokes.filter(st => st.layerId === layer.id).length, 0);
+      if (!confirm(n ? `Delete layer "${layer.name}" and its ${n} item${n === 1 ? '' : 's'}?` : `Delete layer "${layer.name}"?`)) return;
       this.project.removeLayer(layer.id);
       this.clearSelection();
       this._layerChanged();
@@ -97,6 +99,7 @@ export class LayersPanelMixin {
     const project = this.project;
     const counts = new Map();
     for (const s of project.sketches) for (const e of s.entities) counts.set(e.layerId, (counts.get(e.layerId) || 0) + 1);
+    for (const s of project.sketches) for (const st of s.strokes) counts.set(st.layerId, (counts.get(st.layerId) || 0) + 1);
     list.innerHTML = '';
     for (const layer of [...project.layers].reverse()) {
       const row = document.createElement('div');

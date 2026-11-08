@@ -134,7 +134,7 @@ check(layerInfo.n === 2 && layerInfo.rows === 2 && layerInfo.active === 'Layer 2
 
 // New shapes: no fill at creation, line colour from state only.
 await page.evaluate(() => window._app.clearSelection());
-await page.click('.palette .sw[data-c="#e07b00"]');            // fill colour, for the Fill tool only
+await page.click('#colors-body .palette .sw[data-c="#e07b00"]');            // fill colour, for the Fill tool only
 await page.keyboard.press('r');
 await page.mouse.click(cx + 60, cy + 60);
 await page.mouse.click(cx + 200, cy + 160);
@@ -260,7 +260,7 @@ check(after2.p[0] === lockDrag.p[0] && after2.p[1] === lockDrag.p[1], `inactive 
 // Fill tool is blind to other layers: with Layer 2 active, clicking inside
 // Layer 1's rectangle finds no region there, so it fills the background.
 await page.evaluate(() => window._app._setPen('lineStyle', 'solid', true));
-await page.click('.palette .sw[data-c="#8a4fd1"]', { button: 'right' });
+await page.click('#colors-body .palette .sw[data-c="#8a4fd1"]', { button: 'right' });
 await page.keyboard.press('b');
 await page.mouse.click(cx - 120, cy - 20);
 const blind = await page.evaluate(() => ({ fills: window._app.activeSketch().fills.length, bg: window._app.project.background }));
@@ -320,10 +320,10 @@ await page.mouse.move(cx - 250, cy + 150, { steps: 3 });
 await page.mouse.click(cx - 250, cy + 150);
 await page.mouse.click(cx - 170, cy + 230);
 await page.keyboard.press('Escape');
-await page.click('.palette .sw[data-c="#14946b"]', { button: 'right' });
+await page.click('#colors-body .palette .sw[data-c="#14946b"]', { button: 'right' });
 await page.keyboard.press('b');
 await page.mouse.click(cx - 290, cy + 190);
-await page.click('.palette .sw[data-c="#c2307a"]', { button: 'right' });
+await page.click('#colors-body .palette .sw[data-c="#c2307a"]', { button: 'right' });
 await page.mouse.click(cx - 210, cy + 190);
 await page.keyboard.press('s');
 const shared = await page.evaluate(() => {
@@ -812,6 +812,38 @@ await page.evaluate(() => { const a = window._app; a.project.layer('ly1').visibl
   const left = await page.evaluate(() => window._app.activeSketch().constraints.map(c => c.kind).join(','));
   check(sel === 'horizontal' && left === 'vertical', `click a relation badge, Delete removes it (selected ${sel}; left ${left})`);
 
+}
+
+// Sketch window: pen and marker draw strokes on the active layer, the
+// eraser removes them (active layer only), each is one undo step.
+{
+  const strokes = () => page.evaluate(() => window._app.activeSketch().strokes.map(s => s.kind + ':' + s.points.length).join(','));
+  const drag = async (x0, y0, x1, y1) => {
+    await page.mouse.move(x0, y0); await page.mouse.down();
+    for (let i = 1; i <= 12; i++) await page.mouse.move(x0 + (x1 - x0) * i / 12, y0 + (y1 - y0) * i / 12 + Math.sin(i) * 6);
+    await page.mouse.up();
+  };
+  check(await page.isVisible('.fwin[data-win="sketch"]'), 'Sketch window is open');
+  await page.click('.fwin[data-win="sketch"] [data-tool="pen"]');
+  await drag(cx - 250, cy + 150, cx + 250, cy + 150);
+  await page.keyboard.press('g');
+  await drag(cx - 250, cy + 190, cx + 250, cy + 190);
+  const drawn = await strokes();
+  check(/^pen:\d+,marker:\d+$/.test(drawn), `pen and marker draw strokes (${drawn})`);
+  await page.keyboard.press('Control+z');
+  check(/^pen:\d+$/.test(await strokes()), 'undo removes the last stroke');
+  // A stroke on another layer survives the eraser.
+  await page.evaluate(() => { const a = window._app; a.project.addLayer('Ink 2'); a.refreshUI(); });
+  await page.keyboard.press('n');
+  await drag(cx - 250, cy + 230, cx + 250, cy + 230);
+  await page.evaluate(() => { const a = window._app; a.project.activeLayerId = a.project.layers[0].id; a.refreshUI(); });
+  await page.keyboard.press('e');
+  await drag(cx, cy + 120, cx, cy + 260);
+  const left = await page.evaluate(() => { const a = window._app; return a.activeSketch().strokes.map(s => a.project.layer(s.layerId).name); });
+  check(left.length === 1 && left[0] === 'Ink 2', `eraser removes strokes on the active layer only (left: ${left.join(',')})`);
+  await page.keyboard.press('Control+z');
+  check(/^pen:\d+,pen:\d+$/.test(await strokes()), 'undo brings erased strokes back');
+  await page.keyboard.press('s');
 }
 
 // The project survives a reload (autosaved to the browser, restored on open).

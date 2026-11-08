@@ -38,6 +38,10 @@ export class ChromeMixin {
       layers: (cw, ch, w) => ({ x: cw - w - 12, y: 12 }),
       props:  (cw, ch, w) => ({ x: cw - w - 12, y: 212 }),
       equations: (cw, ch, w) => ({ x: Math.max(160, (cw - w) / 2), y: 60 }),   // below the lock banner
+      sketch: () => {                                   // to the right of the Tools window
+        const t = document.querySelector('.fwin[data-win="tools"]');
+        return { x: t && !t.hidden ? t.offsetLeft + t.offsetWidth + 8 : 12, y: 12 };
+      },
     }, () => this._syncWindowButtons());
     this._syncWindowButtons();
     requestAnimationFrame(() => this.windows.layout());
@@ -181,6 +185,8 @@ export class ChromeMixin {
       html += sep + '<span class="opt-hint">Click to select, Ctrl-click to add, drag a box to select many, drag geometry to move it.</span>';
     } else if (t.id === 'smartdim') {
       html += sep + '<span class="opt-hint"><b>1.</b> Click one or two entities &nbsp; <b>2.</b> Click to place the dimension &nbsp; <b>3.</b> Type a value, Enter. Click an existing dimension to edit it.</span>';
+    } else if (t.group === 'freehand') {
+      html += this._sketchOptionsHTML(t.id);
     } else if (t.id === 'fill') {
       html += sep + `<span class="seg"><button class="${this.fillErase ? '' : 'on'}" data-opt="fill-mode">Fill</button><button class="${this.fillErase ? 'on' : ''}" data-opt="erase-mode">Erase fill</button></span>`;
       html += `<label class="opt">Colour <i class="opt-sw" style="--sw:${p.fillColor}"></i></label>`;
@@ -188,6 +194,7 @@ export class ChromeMixin {
     }
     bar.innerHTML = html;
 
+    this._bindSketchOptions(bar);
     bar.querySelectorAll('select[data-pen]').forEach(sel => sel.addEventListener('change', () => {
       const k = sel.dataset.pen;
       const v = k === 'lineWidth' ? parseFloat(sel.value) : sel.value;

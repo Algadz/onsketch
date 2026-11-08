@@ -36,6 +36,11 @@ cached modules after a deploy. `npm test` fails if the stamp is out of date.
   relations, dimensions), Equations. *Reset window layout* puts them back.
 - **Line colour always shows state**, as in SolidWorks: blue under-defined,
   black fully defined, red over-defined, pink construction, orange selected.
+- **Sketch** window: freehand ink. Pen (N), Marker (G) and Eraser (E), an
+  ink colour, size and opacity. Strokes are vector, in world units, on the
+  active layer and drawn on top of its shapes; the solver, dimensions,
+  snapping and the Fill tool ignore them. The eraser removes whole strokes
+  on the active layer. Roadmap: `docs/sketch-tools-plan.md`.
 - **Colors** window: the Fill tool's colour and opacity. Shapes are never
   filled when drawn; the Fill tool (B) fills the area you click, using only
   the active layer's shapes (a region they close, or the background anywhere
@@ -110,7 +115,7 @@ variable changed it).
 | `app/src/core/` | DOM-free model: math, entities, constraints, solver, sketch/project, layers and styles, regions (planar arrangement for fills) |
 | `app/src/render/` | view transform, canvas renderer, themes |
 | `app/src/editor/` | snap engine, selection-aware relation/dimension lists |
-| `app/src/tools/` | select, draw tools, smart dimension |
+| `app/src/tools/` | select, draw tools, smart dimension, fill, freehand (pen, marker, eraser) |
 | `app/src/app/` | `App` shell plus mixins grouped by concern (drag, solve, operations, chrome, panels, layers, fills, …) |
 | `app/src/ui/` | icons, tool definitions, floating window manager |
 | `app/styles.css` | UI styles; light and dark tokens on `:root` / `:root[data-theme="dark"]` |
@@ -125,7 +130,8 @@ Project
    ├─ entities[]   Point / Line / Circle / Arc, each with layerId and style
    │               (line weight, line type)
    ├─ constraints[]
-   └─ fills[]      fill-tool paint: colour, opacity, layer, a point inside the area
+   ├─ fills[]      fill-tool paint: colour, opacity, layer, a point inside the area
+   └─ strokes[]    freehand ink: kind (pen / marker), colour, opacity, width, layer, points
 ```
 
 New geometry takes the current line weight and type. Files from earlier

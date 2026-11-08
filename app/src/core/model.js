@@ -23,6 +23,7 @@ function convertLegacyFills(items, sketch) {
   return out;
 }
 import { ensureDimensionNames } from './equations.js';
+import { reviveStroke, strokeToJSON } from './strokes.js';
 
 /** Point a constraint's references from one point id to another (the
  *  fields that hold point ids, including nested line / arc references). */
@@ -96,6 +97,9 @@ export class Sketch {
     // paint whose area no longer exists is removed (undo brings it back).
     // A transient `region` (current outline) is attached at run time.
     this.fills = [];
+    // Freehand ink from the Sketch window (core/strokes.js): free of the
+    // solver, drawn on top of its layer's shapes.
+    this.strokes = [];
     this.dirtyIds = new Set();
     this.project = null;          // back-reference, set by Project; not serialised
   }
@@ -146,6 +150,7 @@ export class Sketch {
     };
     if (this.features && this.features.length) o.features = this.features;
     if (this.fills.length) o.fills = this.fills.map(fillToJSON);
+    if (this.strokes.length) o.strokes = this.strokes.map(strokeToJSON);
     return o;
   }
 }
@@ -200,6 +205,7 @@ export class Project {
     const i = this.layers.findIndex(l => l.id === id);
     if (i < 0) return false;
     for (const s of this.sketches) s.fills = s.fills.filter(f => f.layerId !== id);
+    for (const s of this.sketches) s.strokes = s.strokes.filter(st => st.layerId !== id);
     for (const s of this.sketches) s.constraints = s.constraints.filter(c => c.layerId !== id);
     for (const s of this.sketches) {
       for (const e of s.entities.filter(e => e.layerId === id)) s.removeEntity(e);
@@ -288,6 +294,7 @@ export class Project {
       s.id = sj.id; s.visible = sj.visible !== false;
       s.features = Array.isArray(sj.features) ? sj.features.map(f => ({ ...f })) : [];
       s.fills = Array.isArray(sj.fills) ? sj.fills : [];
+      s.strokes = Array.isArray(sj.strokes) ? sj.strokes.map(reviveStroke).filter(Boolean) : [];
       // CRITICAL — shared point identity must be preserved across revival.
       // Without this map, a corner that was a single Point shared by two
       // lines comes back as TWO Points carrying the same id. The solver's
@@ -394,6 +401,7 @@ export class Project {
       const walk = (e) => { noteId(e.id); for (const c of e.children()) walk(c); };
       for (const l of p.layers) noteId(l.id);
       for (const f of s.fills) noteId(f.id);
+      for (const st of s.strokes) noteId(st.id);
       for (const e of s.entities) walk(e);
       for (const c of s.constraints) noteId(c.id);
     }
@@ -404,6 +412,10 @@ export class Project {
       delete s._legacyFills;
     }
     p._mergeSketches(!(Array.isArray(o.layers) && o.layers.length));
+    for (const s of p.sketches) for (const st of s.strokes) {
+      if (!st.id) st.id = newId('k');
+      if (!p.layer(st.layerId)) st.layerId = p.layers[0].id;
+    }
     ensureDimensionNames(p);
     p.assignConstraintLayers();
     p.separateLayerPoints();               // older files could share points across layers
@@ -432,6 +444,7 @@ export class Project {
         if (s !== base) base.constraints.push(...s.constraints);
         if (s !== base) base.features.push(...(s.features || []));
         if (s !== base) base.fills.push(...(s.fills || []));
+        if (s !== base) base.strokes.push(...(s.strokes || []));
       });
       this.sketches = [base];
     }

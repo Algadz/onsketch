@@ -4,6 +4,7 @@ import { Arc, Circle, Line, Point } from '../core/entities.js';
 import { SelectTool } from '../tools/select.js';
 import { ArcTool, CenterLineTool, CenterRectangleTool, CircleTool, HexagonTool, LineTool, PointTool, RectangleTool, ThreePointCircleTool } from '../tools/draw.js';
 import { FillTool } from '../tools/fill.js';
+import { EraserTool, InkTool } from '../tools/freehand.js';
 import { SmartDimensionTool } from '../tools/smartdim.js';
 
 export class RenderEventsMixin {
@@ -40,6 +41,8 @@ export class RenderEventsMixin {
       if (prev.box)        this.renderer.drawSelectionBox(prev.box);
       if (prev.dimPicks)   this.renderer.drawDimPicks(prev.dimPicks);
       if (prev.dimPreview) this.renderer.drawDimPreview(prev.dimPreview);
+      if (prev.strokes)    for (const st of prev.strokes) this.renderer.drawStroke(st);
+      if (prev.brush)      this.renderer.drawBrush(prev.brush);
     }
     const opPrev = (this.getMirrorPreview && this.getMirrorPreview())
       || (this.getOffsetPreview && this.getOffsetPreview());
@@ -90,11 +93,15 @@ export class RenderEventsMixin {
       case 'point':     this.tool = new PointTool(this); break;
       case 'smartdim':  this.tool = new SmartDimensionTool(this); break;
       case 'fill':      this.tool = new FillTool(this); break;
+      case 'pen':       this.tool = new InkTool(this, 'pen'); break;
+      case 'marker':    this.tool = new InkTool(this, 'marker'); break;
+      case 'eraser':    this.tool = new EraserTool(this); break;
     }
     if (this.tool.activate) this.tool.activate();
     document.querySelectorAll('[data-tool]').forEach(b => b.classList.toggle('active', b.dataset.tool === name));
     document.getElementById('status-tool').textContent = 'Tool: ' + toolDef(name).label;
     if (name === 'smartdim' && !this.showDimensions) this.setDimensionsVisible(true);
+    if (this._refreshSketchWindow) this._refreshSketchWindow();
     this._refreshOptionsBar();
     document.getElementById('status-hint').textContent = (this.tool.hint && this.tool.hint()) || '';
     this._updateCanvasCursor();
@@ -178,6 +185,14 @@ export class RenderEventsMixin {
       this.tool.onPointerUp(world, snap, ev);
     });
 
+    // The brush footprint of the Sketch tools leaves with the pointer.
+    c.addEventListener('pointerleave', () => {
+      if (this.tool && 'cursor' in this.tool && (this.tool instanceof InkTool || this.tool instanceof EraserTool)) {
+        this.tool.cursor = null;
+        this.requestRender();
+      }
+    });
+
     c.addEventListener('wheel', (ev) => {
       ev.preventDefault();
       this.hideContextMenu();
@@ -214,6 +229,9 @@ export class RenderEventsMixin {
       else if (k === 'p') this.setTool('point');
       else if (k === 'd') this.setTool('smartdim');
       else if (k === 'b') this.setTool('fill');
+      else if (k === 'n') this.setTool('pen');
+      else if (k === 'g') this.setTool('marker');
+      else if (k === 'e') this.setTool('eraser');
       else if (k === 'm') this.setDimensionsVisible(!this.showDimensions);
       else if (k === 'k') this.setRelationsVisible(!this.showRelations);
       else if (k === 'f') this.zoomFit();

@@ -120,6 +120,13 @@ export class Renderer {
     }
     const paintSketch = project.active();
     for (const [layerId] of fillDisplay) { const l = project.layer(layerId); if (l && paintSketch) slot(l, paintSketch); }
+    // Freehand strokes, grouped by layer, drawn on top of the layer's shapes.
+    const inkByLayer = new Map();
+    for (const st of paintSketch?.strokes || []) {
+      const l = project.layer(st.layerId); if (!l) continue;
+      if (!inkByLayer.has(l.id)) { inkByLayer.set(l.id, []); slot(l, paintSketch); }
+      inkByLayer.get(l.id).push(st);
+    }
     for (const layer of project.layers) {
       if (!layer.visible) continue;
       for (const [s, { ents }] of buckets.get(layer)) {
@@ -132,9 +139,56 @@ export class Renderer {
           e.draw(ctx, v, this.styleFor(e, isActive));
           for (const c of e.children()) c.draw(ctx, v, this.styleFor(c, isActive, e));
         }
+        if (s === paintSketch) for (const st of inkByLayer.get(layer.id) || []) this.drawStroke(st);
         ctx.globalAlpha = 1;
       }
     }
+  }
+
+  /** A freehand stroke: one path through the midpoints of its samples
+   *  (quadratic smoothing), so marker ink doesn't darken where it
+   *  overlaps itself. Never thinner than a hairline on screen. */
+  drawStroke(st) {
+    const ctx = this.ctx, v = this.view;
+    const pts = st.points.map(p => v.worldToScreen(p));
+    if (!pts.length) return;
+    ctx.save();
+    ctx.globalAlpha *= st.opacity ?? 1;
+    ctx.strokeStyle = st.color === INK ? this.theme.ink : st.color;
+    ctx.fillStyle = ctx.strokeStyle;
+    const w = Math.max(0.75, st.width * v.zoom);
+    if (pts.length === 1 || (pts.length === 2 && Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y) < 0.5)) {
+      ctx.beginPath(); ctx.arc(pts[0].x, pts[0].y, w / 2, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      return;
+    }
+    ctx.lineWidth = w;
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length - 1; i++) {
+      const mx = (pts[i].x + pts[i + 1].x) / 2, my = (pts[i].y + pts[i + 1].y) / 2;
+      ctx.quadraticCurveTo(pts[i].x, pts[i].y, mx, my);
+    }
+    const end = pts[pts.length - 1];
+    ctx.lineTo(end.x, end.y);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  /** Brush footprint under the cursor for the Sketch tools. */
+  drawBrush(b) {
+    const ctx = this.ctx, v = this.view;
+    const c = v.worldToScreen(b.center);
+    const r = Math.max(2, b.r * v.zoom);
+    ctx.save();
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = this.theme.previewHalo;
+    ctx.beginPath(); ctx.arc(c.x, c.y, r + 1, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = b.erase ? this.theme.over : this.theme.preview;
+    if (b.erase) ctx.setLineDash([3, 2]);
+    ctx.beginPath(); ctx.arc(c.x, c.y, r, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
   }
 
   /** A painted area: outline and holes, even-odd. */

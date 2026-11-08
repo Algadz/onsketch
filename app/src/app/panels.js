@@ -21,6 +21,7 @@ export class PanelsMixin {
     this._refreshLayerPanel();
     this._refreshEquationsPanel();
     this._refreshColorsPanel();
+    this._refreshSketchWindow();
     this._refreshOptionsBar();
     document.getElementById('project-name').value = this.project.name;
   }

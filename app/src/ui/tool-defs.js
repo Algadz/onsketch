@@ -17,6 +17,9 @@ export const TOOL_ICONS = {
   arc: svg('<path d="M20 12a8 8 0 0 0-8-8"/><path d="M12 12h8M12 12V4" stroke-dasharray="3 3"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="20" cy="12" r="1.4" fill="currentColor"/><circle cx="12" cy="4" r="1.4" fill="currentColor"/>'),
   point: svg('<circle cx="12" cy="12" r="3"/>', 'fill="currentColor"'),
   smartdim: svg('<path d="M4 7v10M20 7v10"/><path d="M4 12h16"/><path d="M7 9.5L4 12l3 2.5M17 9.5l3 2.5-3 2.5"/>'),
+  pen: svg('<path d="M4 20l1-4L16 5l3 3L8 19z"/><path d="M14 7l3 3"/><path d="M4 20l4-1"/>'),
+  marker: svg('<path d="M9 15l-3 3v2h4l3-3"/><path d="M9 15l6-10 4 4-10 6z"/><path d="M4 21h16" stroke-width="3" opacity="0.45"/>'),
+  eraser: svg('<path d="M9 20h11"/><path d="M4.5 15.5l9-9a2 2 0 0 1 2.8 0l2.2 2.2a2 2 0 0 1 0 2.8L11 19H8z"/><path d="M9 11l5 5"/>'),
   fill: svg('<path d="M5 11l7-7 7 7-7 7z"/><path d="M5 11h14"/><path d="M19.5 15.5s1.5 2 1.5 3a1.5 1.5 0 0 1-3 0c0-1 1.5-3 1.5-3z" fill="currentColor"/>'),
 };
 
@@ -49,6 +52,7 @@ export const WINDOW_ICONS = {
   layers: svg('<path d="M12 4l9 5-9 5-9-5z"/><path d="M3 14l9 5 9-5"/>'),
   props: svg('<path d="M4 6h16M4 12h16M4 18h10"/>'),
   equations: svg('<path d="M17 5H7l6 7-6 7h10"/>'),
+  sketch: svg('<path d="M4 20l1-4L16 5l3 3L8 19z"/><path d="M14 7l3 3"/><path d="M13 20c2-1.5 4-1.5 7 0"/>'),
 };
 
 /** Drawing / editing tools, in Tools-window order. */
@@ -65,6 +69,9 @@ export const TOOLS = [
   { id: 'point',            label: 'Point',           key: 'P',       group: 'sketch' },
   { id: 'smartdim',         label: 'Smart Dimension', key: 'D',       group: 'dimension' },
   { id: 'fill',             label: 'Fill',            key: 'B',       group: 'paint' },
+  { id: 'pen',              label: 'Pen',             key: 'N',       group: 'freehand' },
+  { id: 'marker',           label: 'Marker',          key: 'G',       group: 'freehand' },
+  { id: 'eraser',           label: 'Eraser',          key: 'E',       group: 'freehand' },
 ];
 
 export const DRAW_TOOLS = new Set(TOOLS.filter(t => t.group === 'sketch').map(t => t.id));
