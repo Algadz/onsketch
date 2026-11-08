@@ -8,6 +8,9 @@
 // Deploy with "Verify JWT" OFF (Lemon Squeezy doesn't send a Supabase
 // token; the signature is the check). Secrets (Edge Functions → Secrets):
 //   LEMONSQUEEZY_SIGNING_SECRET  the signing secret set on the webhook
+//   LEMONSQUEEZY_LIVE_ONLY       optional: "1" once the store is live, so
+//                                test-mode events are logged but no longer
+//                                change anyone's plan
 // SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are provided by Supabase.
 //
 // The user comes from the checkout's custom data (meta.custom_data.user_id),
@@ -21,7 +24,7 @@ const SUBSCRIPTION_EVENTS = new Set(['subscription_created', 'subscription_updat
   'subscription_resumed', 'subscription_expired', 'subscription_paused', 'subscription_unpaused',
   'subscription_payment_success', 'subscription_payment_failed', 'subscription_payment_recovered']);
 /** OnSketch Pro in Lemon Squeezy (product or variant ids), to tell monthly from yearly. */
-const INTERVAL_BY_ID: Record<string, string> = { '1511078': 'month', '1511073': 'year' };
+const INTERVAL_BY_ID: Record<string, string> = { '1511119': 'month', '1511125': 'year', '1511078': 'month', '1511073': 'year' };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function hmacHex(secret: string, body: string): Promise<string> {
@@ -60,7 +63,7 @@ export function planRow(userId: string, sub: any, testMode: boolean) {
 }
 
 /** `admin`: a service-role supabase client (or a test double with from()). */
-export async function handleWebhook(req: Request, { secret, admin }: { secret: string; admin: any }): Promise<Response> {
+export async function handleWebhook(req: Request, { secret, admin, liveOnly = false }: { secret: string; admin: any; liveOnly?: boolean }): Promise<Response> {
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
   if (!secret) return new Response('Webhook secret not configured', { status: 500 });
   const raw = await req.text();
@@ -81,6 +84,7 @@ export async function handleWebhook(req: Request, { secret, admin }: { secret: s
 
   if (!SUBSCRIPTION_EVENTS.has(event) || sub?.type !== 'subscriptions') return new Response('Ignored', { status: 200 });
   if (!UUID.test(userId)) return new Response('No OnSketch user in custom data; logged', { status: 200 });
+  if (liveOnly && testMode) return new Response('Test-mode event ignored (live only); logged', { status: 200 });
 
   const row = planRow(userId, sub, testMode);
   const { error } = await admin.from('account_plans').upsert(row, { onConflict: 'user_id' });
@@ -92,5 +96,6 @@ declare const Deno: any;
 if (typeof Deno !== 'undefined') {
   const { createClient } = await import('jsr:@supabase/supabase-js@2');
   const admin = createClient(Deno.env.get('SUPABASE_URL'), Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'), { auth: { persistSession: false } });
-  Deno.serve((req: Request) => handleWebhook(req, { secret: Deno.env.get('LEMONSQUEEZY_SIGNING_SECRET') || '', admin }));
+  Deno.serve((req: Request) => handleWebhook(req, { secret: Deno.env.get('LEMONSQUEEZY_SIGNING_SECRET') || '', admin,
+    liveOnly: Deno.env.get('LEMONSQUEEZY_LIVE_ONLY') === '1' }));
 }

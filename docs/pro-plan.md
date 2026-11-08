@@ -31,7 +31,7 @@ Manage subscription ──▶ billing function {action:'portal'} ──▶ fresh
 ```
 
 - `supabase/functions/billing/index.ts`: `checkout` (month / year) and
-  `portal`. The product ids 1511078 (monthly) and 1511073 (yearly) may be
+  `portal`. The ids 1511119 (monthly) and 1511125 (yearly) may be
   product or variant ids: a product id is resolved to its published
   variant. Refuses a second subscription while one is active.
 - `supabase/functions/lemonsqueezy-webhook/index.ts`: verifies the
@@ -82,8 +82,17 @@ a local PostgreSQL.
 6. **Test mode first**: with Lemon Squeezy in test mode, buy Pro on
    onsketch.io/pricing with the test card 4242 4242 4242 4242; check that
    the page says "OnSketch Pro is on", that `account_plans` has the row and
-   `billing_events` the events; cancel from Manage subscription. Then
-   switch the store and the API key to live.
+   `billing_events` the events; cancel from Manage subscription.
+   Test mode works before the store is verified: use a **test-mode** API
+   key and create the webhook while the dashboard is in test mode.
+7. **Going live** (store verified): create a live API key and a live
+   webhook (same URL and secret) and put the live key in
+   `LEMONSQUEEZY_API_KEY`. Add the secret `LEMONSQUEEZY_LIVE_ONLY` = `1`
+   so leftover test events can't give Pro, and end the test subscriptions:
+   `update account_plans set plan = 'free' where test_mode;`
+   If Lemon Squeezy gives the live products new ids, update
+   `DEFAULT_IDS` in `supabase/functions/billing/index.ts` (or set the
+   secrets `LEMONSQUEEZY_MONTHLY_ID` / `LEMONSQUEEZY_YEARLY_ID`).
 
 ## Later
 

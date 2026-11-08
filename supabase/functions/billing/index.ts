@@ -19,7 +19,7 @@
 // No imports at the top: tests run handleBilling() under Node.
 
 const API = 'https://api.lemonsqueezy.com/v1';
-const DEFAULT_IDS = { month: '1511078', year: '1511073' };
+const DEFAULT_IDS = { month: '1511119', year: '1511125' };
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
