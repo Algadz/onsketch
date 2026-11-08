@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="OnSketch">
+  <title>OnSketch</title>
+  <!-- B: a painted swatch with a dimension line: colour, to scale -->
+  <path d="M5 4.5v6M27 4.5v6" stroke="#1b2028" stroke-width="1.6" stroke-linecap="round"/>
+  <path d="M5 7.5h22" stroke="#1b2028" stroke-width="1.6"/>
+  <path d="M5 7.5l3.6-2.4v4.8zM27 7.5l-3.6-2.4v4.8z" fill="#1b2028"/>
+  <rect x="5" y="13" width="22" height="15" rx="1.5" fill="#1f7ad6"/>
+  <circle cx="5" cy="13" r="2.2" fill="#fff" stroke="#1b2028" stroke-width="1.4"/>
+  <circle cx="27" cy="13" r="2.2" fill="#fff" stroke="#1b2028" stroke-width="1.4"/>
+</svg>

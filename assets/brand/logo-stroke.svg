@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="OnSketch">
+  <title>OnSketch</title>
+  <!-- C: app tile; a freehand stroke pinned between two exact vertices -->
+  <rect width="32" height="32" rx="7" fill="#1b2028"/>
+  <path d="M7 23 C 11 9, 15 9, 16 16 S 21 24, 25 9" fill="none" stroke="#5aa9ff" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="7" cy="23" r="2.6" fill="#fff"/>
+  <circle cx="25" cy="9" r="2.6" fill="#fff"/>
+</svg>
