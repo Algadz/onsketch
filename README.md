@@ -234,3 +234,10 @@ one layer per former sketch).
 Layers only affect display and picking. Constraints can link entities on
 different layers, and hidden layers are still solved. Project files are JSON
 (`version: 3`); older files load onto a single default layer.
+
+## Accounts and cloud projects (in progress)
+
+Optional sign-in and cloud storage on Supabase; plan and setup steps in
+`docs/cloud-plan.md`. The database schema is `supabase/migrations/`; the
+data layer is `app/src/cloud/`. With `app/src/cloud/config.js` empty (the
+default) the editor stays browser-only.
