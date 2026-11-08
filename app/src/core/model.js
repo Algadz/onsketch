@@ -24,6 +24,22 @@ function convertLegacyFills(items, sketch) {
 }
 import { ensureDimensionNames } from './equations.js';
 
+/** Point a constraint's references from one point id to another (the
+ *  fields that hold point ids, including nested line / arc references). */
+function retargetPoint(c, from, to) {
+  const skip = new Set(['id', 'kind', 'name', 'expr', 'layerId', 'value', 'driven', 'selected']);
+  const visit = (o) => {
+    for (const k of Object.keys(o)) {
+      if (skip.has(k)) continue;
+      const v = o[k];
+      if (v === from) o[k] = to;
+      else if (Array.isArray(v)) v.forEach(x => { if (x && typeof x === 'object') visit(x); });
+      else if (v && typeof v === 'object') visit(v);
+    }
+  };
+  visit(c);
+}
+
 /** Constraints that tie a point to itself or to a line it is an end of:
  *  always true, never useful, dropped on load. */
 function isSelfReferential(c) {
@@ -390,6 +406,7 @@ export class Project {
     p._mergeSketches(!(Array.isArray(o.layers) && o.layers.length));
     ensureDimensionNames(p);
     p.assignConstraintLayers();
+    p.separateLayerPoints();               // older files could share points across layers
     return p;
   }
 
@@ -420,6 +437,55 @@ export class Project {
     }
     base.visible = true;          // sketch visibility has no UI any more
     this.activeSketchId = base.id;
+  }
+
+  /**
+   * Layers never share a point. A point used by shapes on several layers
+   * (drawn from another layer's corner, a shape moved to another layer,
+   * older files) is split: the first layer keeps it, every other layer
+   * gets its own copy at the same place, joined by a coincident
+   * constraint on that layer, and that layer's own constraints are pointed
+   * at its copy. Deleting either side then leaves the other in place.
+   * @returns {number} how many copies were made
+   */
+  separateLayerPoints() {
+    let made = 0;
+    for (const s of this.sketches) {
+      const users = new Map();               // Point → [{ e, layerId }]
+      const use = (pt, e) => {
+        if (!users.has(pt)) users.set(pt, []);
+        users.get(pt).push({ e, layerId: this.layerOf(e).id });
+      };
+      for (const e of s.entities) {
+        if (e instanceof Point) use(e, e);
+        else if (e instanceof Line) { use(e.p1, e); use(e.p2, e); }
+        else if (e instanceof Circle || e instanceof Arc) use(e.center, e);
+      }
+      for (const [pt, list] of users) {
+        const layers = [...new Set(list.map(u => u.layerId))];
+        if (layers.length < 2) continue;
+        // The active layer keeps the point (shapes moved away get copies);
+        // else a standalone point keeps its own layer; else the first user.
+        const keeper = layers.includes(this.activeLayerId) ? this.activeLayerId
+          : (list.find(u => u.e === pt) || list[0]).layerId;
+        for (const layerId of layers) {
+          if (layerId === keeper) continue;
+          const copy = new Point(pt.x, pt.y);
+          copy.sketchId = s.id;
+          for (const { e, layerId: l } of list) {
+            if (l !== layerId) continue;
+            if (e instanceof Line) { if (e.p1 === pt) e.p1 = copy; if (e.p2 === pt) e.p2 = copy; }
+            else if (e instanceof Circle || e instanceof Arc) { if (e.center === pt) e.center = copy; }
+          }
+          for (const c of s.constraints) if (c.layerId === layerId) retargetPoint(c, pt.id, copy.id);
+          const link = new CoincidentConstraint(copy.id, pt.id);
+          link.layerId = layerId;
+          s.constraints.push(link);
+          made++;
+        }
+      }
+    }
+    return made;
   }
 
   /** Give every constraint without a layer one: the layer of the first

@@ -1,5 +1,6 @@
 import { EPS, TAU, angleArcFromPoints, angleSectorForValue, drawDirectedArcPath, lineIntersection, normalizeAngleValue } from '../core/math.js';
 import { Arc, Circle, Line, Point } from '../core/entities.js';
+import { CONSTRAINT_GLYPHS } from '../core/constraints.js';
 import { resolveStyle, dashFor, withAlpha } from '../core/style.js';
 import { getTheme, INK } from './theme.js';
 
@@ -275,6 +276,101 @@ export class Renderer {
   /** @param layerState (c) => 'active' | 'inactive' | 'hidden': dimensions
    *  belong to a layer; hidden ones aren't drawn, inactive ones are drawn
    *  grey and can't be picked (no hit rectangle). */
+  /* ---------------- Relation badges ----------------
+     Every geometric relation (coincident, horizontal, parallel, …) is
+     shown as a small badge where it acts: at the point it ties, at the
+     middle of each line it relates, or on the circle. Badges sharing a
+     spot are lined up side by side. Like dimensions they follow their
+     layer: hidden with it, grey when inactive, pickable only on the
+     active layer. */
+
+  /** World anchors of a relation: [{ x, y, kind:'point'|'line'|'circle', nx, ny }]. */
+  _relationAnchors(c, entMap) {
+    const P = (id) => { const e = entMap.get(id); return e && Number.isFinite(e.x) ? e : null; };
+    const L = (l) => { const a = P(l?.a), b = P(l?.b); return a && b ? { a, b } : null; };
+    const arcEnd = (ref) => {
+      const arc = entMap.get(ref?.arcId); if (!arc || !arc.syncEnds) return null;
+      arc.syncEnds(); return ref.which === 'end' ? arc.end : arc.start;
+    };
+    const ptRef = (ref) => ref?.pointId ? P(ref.pointId) : arcEnd(ref);
+    const atPoint = (p) => p ? [{ x: p.x, y: p.y, kind: 'point' }] : [];
+    const atLine = (l) => {
+      if (!l) return [];
+      const dx = l.b.x - l.a.x, dy = l.b.y - l.a.y, len = Math.hypot(dx, dy) || 1;
+      return [{ x: (l.a.x + l.b.x) / 2, y: (l.a.y + l.b.y) / 2, kind: 'line', nx: -dy / len, ny: dx / len }];
+    };
+    const lineById = (id) => { const e = entMap.get(id); return e instanceof Line ? { a: e.p1, b: e.p2 } : null; };
+    const atCircle = (id) => { const e = entMap.get(id); return e && e.center && Number.isFinite(e.r) ? [{ x: e.center.x, y: e.center.y + e.r, kind: 'circle' }] : []; };
+    switch (c.kind) {
+      case 'coincident': return atPoint(P(c.p1));
+      case 'fix': case 'midpoint': case 'pointOnLine': case 'pointOnCircle': return atPoint(P(c.pointId));
+      case 'arcEndpointCoincident': case 'arcEndpointFix': case 'arcEndpointMidpoint':
+      case 'arcEndpointOnLine': case 'arcEndpointOnCircle': return atPoint(arcEnd(c.ref));
+      case 'arcEndpointArcEndpointCoincident': return atPoint(arcEnd(c.ref1));
+      case 'symmetric': return [...atPoint(P(c.p1)), ...atPoint(P(c.p2))];
+      case 'concentric': return atPoint(P(c.p1));
+      case 'horizontal': case 'vertical': return atLine(lineById(c.lineId) || L({ a: c.p1, b: c.p2 }));
+      case 'pointRefHorizontal': case 'pointRefVertical': {
+        const a = ptRef(c.ref1), b = ptRef(c.ref2);
+        return a && b ? atLine({ a, b }) : [];
+      }
+      case 'parallel': case 'perpendicular': case 'collinear': case 'equalLength':
+        return [...atLine(L(c.l1)), ...atLine(L(c.l2))];
+      case 'equalRadius': return [...atCircle(c.c1), ...atCircle(c.c2)];
+      case 'tangent': return [...atLine(L(c.l)), ...atCircle(c.circleId)];
+      case 'tangentCC': return [...atCircle(c.c1), ...atCircle(c.c2)];
+    }
+    return [];
+  }
+
+  drawRelations(sketch, entMap, redundantIds, layerState = () => 'active') {
+    this.lastRelRects = [];
+    if (!sketch) return;
+    const ctx = this.ctx, v = this.view, t = this.theme;
+    const slots = new Map();                 // anchor key → badges placed there
+    const size = 15;
+    ctx.save();
+    ctx.font = '600 10px ui-sans-serif, system-ui, -apple-system, "Segoe UI"';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (const c of sketch.constraints) {
+      const glyph = CONSTRAINT_GLYPHS[c.kind];
+      if (!glyph || c.kind === 'offset' || c.value != null) continue;   // dimensions are drawn elsewhere
+      const st = layerState(c);
+      if (st === 'hidden') continue;
+      const anchors = this._relationAnchors(c, entMap);
+      if (!anchors.length) continue;
+      const colour = c.selected ? t.selected
+        : st !== 'active' ? t.dimGrey
+        : (redundantIds && redundantIds.has(c.id)) ? t.over : t.accent;
+      for (const an of anchors) {
+        const sp = v.worldToScreen(an);
+        let ox = 11, oy = -13;
+        if (an.kind === 'line') { ox = an.nx * 13; oy = -an.ny * 13; }
+        if (an.kind === 'circle') { ox = 0; oy = -12; }
+        const key = Math.round(sp.x + ox) + ',' + Math.round(sp.y + oy);
+        const n = slots.get(key) || 0;
+        slots.set(key, n + 1);
+        const x = sp.x + ox + n * (size + 2) - size / 2, y = sp.y + oy - size / 2;
+        ctx.globalAlpha = st === 'active' ? 1 : 0.7;
+        ctx.fillStyle = t.previewHalo;
+        ctx.strokeStyle = colour;
+        ctx.lineWidth = c.selected ? 1.6 : 1;
+        ctx.beginPath();
+        if (ctx.roundRect) ctx.roundRect(x, y, size, size, 3); else ctx.rect(x, y, size, size);
+        ctx.fill(); ctx.stroke();
+        ctx.fillStyle = colour;
+        ctx.fillText(glyph, x + size / 2, y + size / 2 + 0.5);
+        if (c.selected) {                     // show what it ties
+          ctx.beginPath(); ctx.arc(sp.x, sp.y, 5, 0, TAU); ctx.stroke();
+        }
+        if (st === 'active') this.lastRelRects.push({ constraint: c, x, y, w: size, h: size });
+      }
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
   drawDimensions(sketch, entMap, redundantIds, layerState = () => 'active') {
     if (!sketch) return;
     // remember the screen-space rect of every label we draw so the app can

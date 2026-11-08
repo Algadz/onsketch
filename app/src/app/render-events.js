@@ -26,6 +26,9 @@ export class RenderEventsMixin {
     if (sketch && this.showDimensions) {
       this.renderer.drawDimensions(sketch, entMap, this._lastSolve?.redundantIds, (c) => this.constraintLayerState(c));
     }
+    if (sketch && this.showRelations) {
+      this.renderer.drawRelations(sketch, entMap, this._lastSolve?.redundantIds, (c) => this.constraintLayerState(c));
+    } else this.renderer.lastRelRects = [];
 
     const prev = this.tool.getPreview && this.tool.getPreview();
     if (prev) {
@@ -212,6 +215,7 @@ export class RenderEventsMixin {
       else if (k === 'd') this.setTool('smartdim');
       else if (k === 'b') this.setTool('fill');
       else if (k === 'm') this.setDimensionsVisible(!this.showDimensions);
+      else if (k === 'k') this.setRelationsVisible(!this.showRelations);
       else if (k === 'f') this.zoomFit();
       else if (k === 'f5') { ev.preventDefault(); this.solveAndRender(); }
       this.tool.onKey && this.tool.onKey(ev);

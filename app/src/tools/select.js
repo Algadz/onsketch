@@ -14,6 +14,19 @@ export class SelectTool extends Tool {
     // and need their own select / edit / drag handling.
     const r = this.app.canvas.getBoundingClientRect();
     const sx = ev.clientX - r.left, sy = ev.clientY - r.top;
+    // Relation badges: click to select (Delete removes the relation).
+    const rel = this.app.hitRelationAtScreen(sx, sy);
+    if (rel) {
+      const isToggle = ev.ctrlKey || ev.metaKey;
+      if (isToggle) this.app.setSelected(rel, !rel.selected);
+      else {
+        if (!ev.shiftKey && !rel.selected) this.app.clearSelection();
+        this.app.setSelected(rel, true);
+      }
+      this.app.refreshUI();
+      this.app.requestRender();
+      return;
+    }
     const dim = this.app.hitDimAtScreen(sx, sy);
     if (dim) {
       const wasSelected = !!dim.selected;

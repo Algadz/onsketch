@@ -79,6 +79,16 @@ shared with it too), can't be picked, and shows grey vertices; snapping still
 uses all visible layers, so new geometry can attach to it. Switch layers to
 edit them. Layers have a name, visibility, opacity and order.
 
+Layers never share a point. Drawing from another layer's corner makes a new
+point tied to it by a coincident relation (on the new layer); moving shapes to
+another layer (Properties → layer) takes their own relations along and splits
+shared corners the same way; older files are split on load. Deleting either
+side leaves the other where it was.
+
+Relations (coincident, horizontal, parallel, tangent, …) are shown as small
+badges where they act (toggle: Relations / `K`); click one to select it and
+Delete to remove it.
+
 Constraints and dimensions belong to the layer they were created on: a hidden
 layer hides its dimensions, an inactive layer's dimensions are drawn grey and
 can't be picked, and deleting a layer deletes them. Status colours are per

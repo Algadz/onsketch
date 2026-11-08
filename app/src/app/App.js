@@ -120,9 +120,14 @@ export class App {
     // an existing corner only inside the active sketch. Endpoints from
     // inactive sketches stay reference geometry, so we create a new active
     // point and constrain it to the reference instead of sharing the object.
+    // Only a point of the active layer is shared; on another layer a new
+    // point is made and the caller ties it with a coincident constraint,
+    // so the layers stay independent.
     if (snap && snap.kind === 'endpoint' && snap.entity instanceof Point && !this.arcEndpointRef(snap.entity)) {
-      const owner = this.project.sketchOf(snap.entity);
-      if (owner && owner.id === sketch.id) return { point: snap.entity, reused: true };
+      const owner = this.project.ownerOf(snap.entity);
+      if (owner && sketch.entities.includes(owner) && this.project.layerOf(owner).id === this.project.activeLayerId) {
+        return { point: snap.entity, reused: true };
+      }
     }
     const wx = snap ? snap.x : world.x;
     const wy = snap ? snap.y : world.y;

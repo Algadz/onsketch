@@ -31,6 +31,7 @@ export const ACTION_ICONS = {
   grid: svg('<path d="M4 4h16v16H4z"/><path d="M4 10h16M4 16h16M10 4v16M16 4v16"/>', 'fill="none" stroke="currentColor" stroke-width="1.6"'),
   snap: svg('<path d="M12 4v4M12 16v4M4 12h4M16 12h4"/><circle cx="12" cy="12" r="3"/>'),
   dimensions: svg('<path d="M4 7v10M20 7v10"/><path d="M4 12h16"/><path d="M7 9.5L4 12l3 2.5M17 9.5l3 2.5-3 2.5"/>'),
+  relations: svg('<circle cx="7" cy="7" r="2.2" fill="currentColor"/><circle cx="17" cy="17" r="2.2" fill="currentColor"/><path d="M8.6 8.6l6.8 6.8" stroke-dasharray="2 2"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><path d="M15 7h4"/>'),
   'color-mode': svg('<path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.6-.9 1.2-1.8-.5-1-.1-2.2 1.1-2.2H17a4 4 0 0 0 4-4c0-5-4-10-9-10z"/><circle cx="7.5" cy="11" r="1.2" fill="currentColor"/><circle cx="10.5" cy="7" r="1.2" fill="currentColor"/><circle cx="15" cy="7.5" r="1.2" fill="currentColor"/>'),
   'zoom-fit': svg('<path d="M8 4H4v4M16 4h4v4M8 20H4v-4M16 20h4v-4"/><path d="M9 9h6v6H9z"/>'),
   'zoom-reset': svg('<circle cx="11" cy="11" r="6"/><path d="M16 16l4 4"/><path d="M11 8v6"/>'),

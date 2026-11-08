@@ -6,6 +6,16 @@ export class DimensionLabelsMixin {
   /** Hit-test in screen pixels against the rectangles the renderer recorded
    *  for every drawn dimension label. Used to detect select / edit /
    *  drag-to-reposition on existing dims. */
+  /** Relation badge under a screen point (active layer only). */
+  hitRelationAtScreen(sx, sy) {
+    const rects = this.renderer.lastRelRects || [];
+    for (let i = rects.length - 1; i >= 0; i--) {
+      const r = rects[i];
+      if (sx >= r.x && sx <= r.x + r.w && sy >= r.y && sy <= r.y + r.h) return r.constraint;
+    }
+    return null;
+  }
+
   hitDimAtScreen(sx, sy) {
     const rects = this.renderer.lastDimRects || [];
     for (let i = rects.length - 1; i >= 0; i--) {

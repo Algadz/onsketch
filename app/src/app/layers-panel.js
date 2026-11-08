@@ -57,10 +57,11 @@ export class LayersPanelMixin {
     this.setTheme(prefs.theme || (systemDark ? 'dark' : 'light'), false);
     this.setDimensionsVisible(prefs.showDimensions !== false, false);
     this.showDimNames = !!prefs.showDimNames;
+    this.setRelationsVisible(prefs.showRelations !== false, false);
   }
   _savePrefs() {
     try {
-      localStorage.setItem(PREFS_KEY, JSON.stringify({ theme: this.themeName, pen: this.pen, showDimensions: this.showDimensions, showDimNames: !!this.showDimNames }));
+      localStorage.setItem(PREFS_KEY, JSON.stringify({ theme: this.themeName, pen: this.pen, showDimensions: this.showDimensions, showDimNames: !!this.showDimNames, showRelations: this.showRelations !== false }));
     } catch { /* storage unavailable */ }
   }
   setTheme(name, save = true) {
@@ -160,6 +161,30 @@ export class LayersPanelMixin {
   }
 
 
+
+  /** Move the selected shapes to another layer. Their own relations and
+   *  dimensions (those that only involve them) go with them; corners they
+   *  share with shapes left behind are split on commit (each layer keeps
+   *  its own point, joined by a coincident). */
+  moveSelectionToLayer(layerId) {
+    const sketch = this.activeSketch();
+    if (!sketch || !this.project.layer(layerId) || layerId === this.project.activeLayerId) return;
+    const moving = sketch.entities.filter(e => e.selected);
+    if (!moving.length) return;
+    const ids = new Set();
+    for (const e of moving) { ids.add(e.id); for (const c of e.children()) ids.add(c.id); }
+    // Points still used by shapes that stay are not "only theirs".
+    for (const e of sketch.entities) if (!e.selected) for (const c of e.children()) ids.delete(c.id);
+    const movedEntities = new Set(moving.map(e => e.id));
+    const names = (c) => [c.lineId, c.circleId, c.c1, c.c2, c.ref?.arcId, c.ref1?.arcId, c.ref2?.arcId].filter(Boolean);
+    const own = (c) => names(c).some(id => movedEntities.has(id))           // e.g. the line's horizontal
+      || c.refs().filter(Boolean).every(id => ids.has(id));
+    for (const c of sketch.constraints) if (own(c)) c.layerId = layerId;
+    for (const e of moving) e.layerId = layerId;
+    this.clearSelection();
+    this.commit();
+    this.refreshUI();
+  }
 
   _deselectLayer(layerId) {
     for (const s of this.project.sketches) {

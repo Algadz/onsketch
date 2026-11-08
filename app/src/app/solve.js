@@ -7,6 +7,8 @@ export class SolveMixin {
     // New constraints and dimensions belong to the layer they were made on.
     const activeLayer = this.project.activeLayerId;
     for (const s of this.project.sketches) for (const c of s.constraints) if (!c.layerId) c.layerId = activeLayer;
+    // Layers never share a point (e.g. after moving a shape to another layer).
+    this.project.separateLayerPoints();
     // Equation changes (variables, formulas) reach every layer.
     if (this._applyEquations().changed) this._solveAllLayers();
     const diagnostics = options.diagnostics || 'defer';

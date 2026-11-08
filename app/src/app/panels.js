@@ -113,6 +113,14 @@ export class PanelsMixin {
     // ---- Properties ----
     const e = sel[0];
     const constructionTargets = sel.filter(x => x instanceof Line || x instanceof Circle || x instanceof Arc);
+    // Move the selected shapes (and their own relations) to another layer.
+    const movable = sel.filter(e => !(e instanceof Constraint) && sketch.entities.includes(e));
+    if (movable.length && this.project.layers.length > 1) {
+      const esc = (t) => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+      html += `<div class="prop-row"><label>layer</label><select data-move-layer>
+        ${[...this.project.layers].reverse().map(l => `<option value="${l.id}"${l.id === this.project.activeLayerId ? ' selected' : ''}>${esc(l.name)}</option>`).join('')}
+      </select></div>`;
+    }
     html += '<div class="sb-subhead">Properties</div>';
     if (sel.length > 1) {
       if (constructionTargets.length) {
@@ -147,6 +155,9 @@ export class PanelsMixin {
       constructionAll.indeterminate = constructionTargets.some(x => x.construction) &&
         !constructionTargets.every(x => x.construction);
     }
+
+    const mover = body.querySelector('select[data-move-layer]');
+    if (mover) mover.addEventListener('change', () => this.moveSelectionToLayer(mover.value));
 
     // Wire up buttons / inputs
     body.querySelectorAll('[data-rel]').forEach(b =>

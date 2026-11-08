@@ -260,3 +260,62 @@ test('editLayerId lets another layer be checked as if active', () => {
   p.editLayerId = null; p.syncLocks();
   assert.equal(p.activeLayerId, top.id); assert.equal(a.locked, true);
 });
+
+/* ---- Layers never share a point ---- */
+function twoLayerCorner() {
+  const p = new Project(); const s = p.addSketch('A');
+  const base = p.layers[0];
+  const a = new Line(new Point(0, 0), new Point(10, 0)); s.addEntity(a);           // base
+  const top = p.addLayer('Top');
+  const b = new Line(a.p2, new Point(10, 10)); s.addEntity(b);                      // top, shares a.p2
+  const h = new C.VerticalConstraint(b.id, b.p1.id, b.p2.id); h.layerId = top.id;
+  s.constraints.push(h);
+  return { p, s, base, top, a, b, h };
+}
+
+test('a point shared by two layers is split, joined by a coincident on the other layer', () => {
+  const { p, s, base, top, a, b, h } = twoLayerCorner();
+  p.activeLayerId = base.id;
+  assert.equal(p.separateLayerPoints(), 1);
+  assert.notEqual(a.p2, b.p1, 'separate points');
+  assert.equal(b.p1.x, 10); assert.equal(b.p1.y, 0);
+  const link = s.constraints.find(c => c.kind === 'coincident');
+  assert.equal(link.layerId, top.id);
+  assert.deepEqual([link.p1, link.p2].sort(), [a.p2.id, b.p1.id].sort());
+  assert.equal(h.p1, b.p1.id, "Top's own constraint now uses Top's copy");
+  assert.equal(p.separateLayerPoints(), 0, 'idempotent');
+});
+
+test('the active layer keeps the original point', () => {
+  const { p, top, a, b } = twoLayerCorner();
+  const shared = a.p2;
+  p.activeLayerId = top.id;
+  p.separateLayerPoints();
+  assert.equal(b.p1, shared); assert.notEqual(a.p2, shared);
+});
+
+test('after the split, deleting either side leaves the other where it was', () => {
+  const one = twoLayerCorner();
+  one.p.activeLayerId = one.base.id; one.p.separateLayerPoints();
+  one.s.removeEntity(one.a);
+  assert.deepEqual([one.b.p1.x, one.b.p1.y, one.b.p2.x, one.b.p2.y], [10, 0, 10, 10]);
+  assert.ok(!one.s.constraints.some(c => c.kind === 'coincident'), 'the link goes with the deleted point');
+  const two = twoLayerCorner();
+  two.p.activeLayerId = two.base.id; two.p.separateLayerPoints();
+  two.s.removeEntity(two.b);
+  assert.deepEqual([two.a.p1.x, two.a.p2.x, two.a.p2.y], [0, 10, 0]);
+  assert.ok(two.s.entities.includes(two.a));
+});
+
+test('older files with a point shared across layers are split on load', () => {
+  const pt = (id, x, y) => ({ type: 'point', id, x, y });
+  const p = Project.fromJSON({ version: 3, activeLayerId: 'ly1', layers: [{ id: 'ly1', name: 'A' }, { id: 'ly2', name: 'B' }],
+    sketches: [{ id: 's1', name: 'S', entities: [
+      { type: 'line', id: 'e3', layerId: 'ly1', p1: pt('e1', 0, 0), p2: pt('e2', 10, 0) },
+      { type: 'line', id: 'e5', layerId: 'ly2', p1: pt('e2', 10, 0), p2: pt('e4', 10, 10) }], constraints: [] }] });
+  const [x, y] = p.sketches[0].entities;
+  assert.notEqual(x.p2, y.p1);
+  const ids = new Set([x.p1.id, x.p2.id, y.p1.id, y.p2.id]);
+  assert.equal(ids.size, 4, 'the copy has a fresh id');
+  assert.equal(p.sketches[0].constraints.filter(c => c.kind === 'coincident').length, 1);
+});

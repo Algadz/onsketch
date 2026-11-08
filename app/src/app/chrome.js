@@ -16,7 +16,7 @@ import { WindowManager } from '../ui/windows.js';
 export class ChromeMixin {
   _setupChrome() {
     // Menu bar icons + labels.
-    const labels = { grid: 'Grid', snap: 'Snap', dimensions: 'Dimensions' };
+    const labels = { grid: 'Grid', snap: 'Snap', dimensions: 'Dimensions', relations: 'Relations' };
     document.querySelectorAll('#menubar [data-action]').forEach(b => {
       const a = b.dataset.action;
       b.innerHTML = (ACTION_ICONS[a] || '') + (labels[a] ? `<span class="btn-label">${labels[a]}</span>` : '');
@@ -58,6 +58,7 @@ export class ChromeMixin {
       case 'grid':         this.gridOn = !this.gridOn; b?.classList.toggle('on', this.gridOn); this.requestRender(); break;
       case 'snap':         this.snapOn = !this.snapOn; b?.classList.toggle('on', this.snapOn); this.requestRender(); break;
       case 'dimensions':   this.setDimensionsVisible(!this.showDimensions); break;
+      case 'relations':    this.setRelationsVisible(!this.showRelations); break;
       case 'zoom-fit':     this.zoomFit(); break;
       case 'zoom-reset':   this.view.zoom = 4; this.view.panX = 0; this.view.panY = 0; this.requestRender(); break;
       case 'theme':        this.setTheme(this.themeName === 'dark' ? 'light' : 'dark'); break;
@@ -70,6 +71,15 @@ export class ChromeMixin {
   _syncWindowButtons() {
     document.querySelectorAll('#menubar [data-window]').forEach(b =>
       b.classList.toggle('on', this.windows.isOpen(b.dataset.window)));
+  }
+
+  /* ---- Relations visibility ---- */
+  setRelationsVisible(on, save = true) {
+    this.showRelations = !!on;
+    document.querySelector('#menubar [data-action="relations"]')?.classList.toggle('on', this.showRelations);
+    if (!this.showRelations) this.renderer.lastRelRects = [];
+    if (save) this._savePrefs();
+    this.requestRender();
   }
 
   /* ---- Dimensions visibility ---- */

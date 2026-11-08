@@ -733,6 +733,87 @@ await page.evaluate(() => { const a = window._app; a.project.layer('ly1').visibl
     `overlapping painted circles pulled apart: each keeps its colour, the lens paint is gone (${after})`);
 }
 
+// Layers never share a point; relations are shown as badges.
+{
+  const click = async (x, y) => { const s = await W(x, y); await page.mouse.click(box.x + s.x, box.y + s.y); };
+  const pt = (id, x, y, fixed = false) => ({ type: 'point', id, x, y, fixed });
+  const load = (proj) => page.evaluate((proj) => {
+    const a = window._app; a.project = a.project.constructor.fromJSON(proj); a._afterStateSwap();
+    a.view.zoom = 5; a.view.panX = 0; a.view.panY = 0; a.commit({ diagnostics: 'sync' });
+    for (const w of ['equations', 'props', 'colors', 'tools', 'layers']) a.windows.toggle(w, false);
+    a.setTool('select');
+  }, proj);
+  const rectProj = { version: 3, activeLayerId: 'ly1', layers: [{ id: 'ly1', name: 'Base' }, { id: 'ly2', name: 'Top' }], sketches: [{ id: 's', name: 'S', entities: [
+    { type: 'line', id: 'r1', layerId: 'ly1', p1: pt('a', -40, -20), p2: pt('b', 0, -20) },
+    { type: 'line', id: 'r2', layerId: 'ly1', p1: pt('b', 0, -20), p2: pt('c', 0, 10) },
+    { type: 'line', id: 'r3', layerId: 'ly1', p1: pt('c', 0, 10), p2: pt('d', -40, 10) },
+    { type: 'line', id: 'r4', layerId: 'ly1', p1: pt('d', -40, 10), p2: pt('a', -40, -20) }], constraints: [
+    { id: 'k1', kind: 'horizontal', lineId: 'r1', p1: 'a', p2: 'b' }, { id: 'k2', kind: 'vertical', lineId: 'r2', p1: 'b', p2: 'c' }] }] };
+
+  // 1. Draw on Top from Base's corner (0,10).
+  await load(rectProj);
+  await page.evaluate(() => { const a = window._app; a.project.activeLayerId = 'ly2'; a.project.syncLocks(); a.clearSelection(); a.solveAndRender(); });
+  await page.keyboard.press('l'); await click(0, 10); await click(30, 30); await page.keyboard.press('Escape'); await page.keyboard.press('Escape'); await page.keyboard.press('s');
+  const drawn = await page.evaluate(() => {
+    const a = window._app, s = a.activeSketch();
+    const top = s.entities.find(e => e.layerId === 'ly2'); const base = s.entities.find(e => e.id === 'r2');
+    const link = s.constraints.find(c => c.kind === 'coincident' && [c.p1, c.p2].includes(top.p1.id));
+    return { shared: top.p1 === base.p2, sameId: top.p1.id === base.p2.id, link: link && { other: link.p1 === top.p1.id ? link.p2 : link.p1, layer: link.layerId }, cId: 'c' };
+  });
+  check(!drawn.shared && drawn.link && drawn.link.other === 'c' && drawn.link.layer === 'ly2',
+    `line drawn on Top from Base's corner gets its own point + coincident on Top (${JSON.stringify(drawn)})`);
+  await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
+  const badges = await page.evaluate(() => window._app.renderer.lastRelRects.map(r => r.constraint.kind).sort().join(','));
+  check(/coincident/.test(badges), `the coincident is shown as a badge (${badges})`);
+
+  // 2. Delete Base's vertical line (switch to Base): Top line stays.
+  const topBefore = await page.evaluate(() => { const l = window._app.activeSketch().entities.find(e => e.layerId === 'ly2'); return [l.p1.x, l.p1.y, l.p2.x, l.p2.y]; });
+  await page.evaluate(() => { const a = window._app; a.project.activeLayerId = 'ly1'; a.project.syncLocks(); a.clearSelection(); a.solveAndRender(); });
+  await click(0, -5); await page.keyboard.press('Delete');
+  const afterDelBase = await page.evaluate(() => { const s = window._app.activeSketch(); const l = s.entities.find(e => e.layerId === 'ly2'); return { r2: !!s.entities.find(e => e.id === 'r2'), top: l && [l.p1.x, l.p1.y, l.p2.x, l.p2.y], link: s.constraints.some(c => c.kind === 'coincident') }; });
+  check(!afterDelBase.r2 && JSON.stringify(afterDelBase.top) === JSON.stringify(topBefore),
+    `deleting Base's line leaves Top's line where it was (${JSON.stringify(afterDelBase)})`);
+  // 3. Undo, delete the Top line instead: Base untouched.
+  await page.evaluate(() => window._app.undo());
+  const baseBefore = await page.evaluate(() => window._app.activeSketch().entities.filter(e => e.layerId === 'ly1').map(e => [e.id, e.p1.x, e.p1.y, e.p2.x, e.p2.y].join(':')).join('|'));
+  await page.evaluate(() => { const a = window._app; a.project.activeLayerId = 'ly2'; a.project.syncLocks(); a.clearSelection(); a.solveAndRender(); });
+  await click(15, 20); await page.keyboard.press('Delete');
+  const afterDelTop = await page.evaluate(() => ({ top: window._app.activeSketch().entities.filter(e => e.layerId === 'ly2').length,
+    base: window._app.activeSketch().entities.filter(e => e.layerId === 'ly1').map(e => [e.id, e.p1.x, e.p1.y, e.p2.x, e.p2.y].join(':')).join('|') }));
+  check(afterDelTop.top === 0 && afterDelTop.base === baseBefore, 'deleting Top\'s line leaves Base untouched');
+
+  // 4. Move a Base line (sharing corners) to Top via the selection layer menu.
+  await load(rectProj);
+  await page.evaluate(() => window._app.windows.toggle('props', true));
+  await click(-20, -20);           // r1
+  await page.selectOption('#sel-body select[data-move-layer]', 'ly2');
+  const moved = await page.evaluate(() => {
+    const s = window._app.activeSketch(); const r1 = s.entities.find(e => e.id === 'r1'), r2 = s.entities.find(e => e.id === 'r2'), r4 = s.entities.find(e => e.id === 'r4');
+    const links = s.constraints.filter(c => c.kind === 'coincident' && c.layerId === 'ly2').length;
+    const h = s.constraints.find(c => c.id === 'k1');
+    return { sharedB: r1.p2 === r2.p1, sharedA: r1.p1 === r4.p2, links, hOnCopy: h.p1 === r1.p1.id && h.p2 === r1.p2.id };
+  });
+  check(!moved.sharedA && !moved.sharedB && moved.links === 2 && moved.hOnCopy, `moving a shape to another layer splits its shared corners (${JSON.stringify(moved)})`);
+
+  // 5. Older file with a point shared across layers is split on load.
+  await load({ version: 3, activeLayerId: 'ly1', layers: [{ id: 'ly1', name: 'A' }, { id: 'ly2', name: 'B' }], sketches: [{ id: 's', name: 'S', entities: [
+    { type: 'line', id: 'x1', layerId: 'ly1', p1: pt('m', 0, 0), p2: pt('n', 20, 0) },
+    { type: 'line', id: 'x2', layerId: 'ly2', p1: pt('n', 20, 0), p2: pt('o', 20, 20) }], constraints: [] }] });
+  const legacy = await page.evaluate(() => { const s = window._app.activeSketch(); const [x1, x2] = s.entities; return { shared: x1.p2 === x2.p1, links: s.constraints.filter(c => c.kind === 'coincident').length }; });
+  check(!legacy.shared && legacy.links === 1, `older shared point split on load (${JSON.stringify(legacy)})`);
+
+  // 6. Select a relation badge and delete it.
+  await load(rectProj);
+  await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
+  const rect = await page.evaluate(() => { const r = window._app.renderer.lastRelRects.find(r => r.constraint.kind === 'horizontal'); return r && { x: r.x + r.w / 2, y: r.y + r.h / 2 }; });
+  await page.mouse.click(box.x + rect.x, box.y + rect.y);
+  const sel = await page.evaluate(() => window._app.activeSketch().constraints.filter(c => c.selected).map(c => c.kind).join(','));
+  await page.keyboard.press('Delete');
+  const left = await page.evaluate(() => window._app.activeSketch().constraints.map(c => c.kind).join(','));
+  check(sel === 'horizontal' && left === 'vertical', `click a relation badge, Delete removes it (selected ${sel}; left ${left})`);
+
+}
+
 await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
 if (shot) await page.screenshot({ path: shot });
 check(errors.length === 0, `no page errors${errors.length ? ': ' + errors.join(' / ') : ''}`);
