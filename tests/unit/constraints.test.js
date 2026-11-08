@@ -86,6 +86,19 @@ test('point-line distance, midpoint, point on line / circle', () => {
   assert.ok(near(q.y, 0)); assert.ok(near(Math.hypot(r.x - c.center.x, r.y - c.center.y), c.r));
 });
 
+test('point-line distance converges at building scale (metres in mm)', () => {
+  // A fixed 1.8 m line and a point that starts 400 mm short of 900 mm away.
+  // The residual is in mm, so the solver's absolute tolerance is met.
+  const s = sketch(); const a = line(s, 0, 0, 1800, 0);
+  const p = point(s, 600, 500);
+  s.constraints.push(new C.FixConstraint(a.p1.id, 0, 0));
+  s.constraints.push(new C.FixConstraint(a.p2.id, 1800, 0));
+  s.constraints.push(new C.PointLineDistanceConstraint(p.id, ref(a), 900));
+  const r = solve(s);
+  assert.ok(r.residual < 1e-4, `residual ${r.residual}`);
+  assert.ok(near(Math.abs(p.y), 900, 1e-4));
+});
+
 test('tangency and concentric', () => {
   const s = sketch(); const a = line(s, -10, 0, 10, 0);
   const c = circle(s, 0, 4, 2), c2 = circle(s, 9, 3, 3), c3 = circle(s, 1, 1, 1);

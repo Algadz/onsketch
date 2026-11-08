@@ -1,0 +1,574 @@
+{
+ "version": 3,
+ "name": "Desk concept",
+ "units": "mm",
+ "activeSketchId": "s2",
+ "activeLayerId": "ly1",
+ "layers": [
+  {
+   "id": "ly1",
+   "name": "Desk",
+   "opacity": 1,
+   "visible": true
+  },
+  {
+   "id": "ly3",
+   "name": "Notes",
+   "opacity": 1,
+   "visible": true
+  }
+ ],
+ "sketches": [
+  {
+   "id": "s2",
+   "name": "Sketch 1",
+   "visible": true,
+   "entities": [
+    {
+     "type": "line",
+     "id": "e8",
+     "construction": false,
+     "fixed": false,
+     "p1": {
+      "type": "point",
+      "id": "e4",
+      "construction": false,
+      "fixed": false,
+      "x": -700,
+      "y": -550
+     },
+     "p2": {
+      "type": "point",
+      "id": "e5",
+      "construction": false,
+      "fixed": false,
+      "x": 700,
+      "y": -550
+     },
+     "layerId": "ly1"
+    },
+    {
+     "type": "line",
+     "id": "e9",
+     "construction": false,
+     "fixed": false,
+     "p1": {
+      "type": "point",
+      "id": "e5",
+      "construction": false,
+      "fixed": false,
+      "x": 700,
+      "y": -550
+     },
+     "p2": {
+      "type": "point",
+      "id": "e6",
+      "construction": false,
+      "fixed": false,
+      "x": 700,
+      "y": 150
+     },
+     "layerId": "ly1"
+    },
+    {
+     "type": "line",
+     "id": "e10",
+     "construction": false,
+     "fixed": false,
+     "p1": {
+      "type": "point",
+      "id": "e6",
+      "construction": false,
+      "fixed": false,
+      "x": 700,
+      "y": 150
+     },
+     "p2": {
+      "type": "point",
+      "id": "e7",
+      "construction": false,
+      "fixed": false,
+      "x": -700,
+      "y": 150
+     },
+     "layerId": "ly1"
+    },
+    {
+     "type": "line",
+     "id": "e11",
+     "construction": false,
+     "fixed": false,
+     "p1": {
+      "type": "point",
+      "id": "e7",
+      "construction": false,
+      "fixed": false,
+      "x": -700,
+      "y": 150
+     },
+     "p2": {
+      "type": "point",
+      "id": "e4",
+      "construction": false,
+      "fixed": false,
+      "x": -700,
+      "y": -550
+     },
+     "layerId": "ly1"
+    },
+    {
+     "type": "line",
+     "id": "e20",
+     "construction": false,
+     "fixed": false,
+     "p1": {
+      "type": "point",
+      "id": "e16",
+      "construction": false,
+      "fixed": false,
+      "x": -350,
+      "y": -490
+     },
+     "p2": {
+      "type": "point",
+      "id": "e17",
+      "construction": false,
+      "fixed": false,
+      "x": 350,
+      "y": -490
+     },
+     "layerId": "ly1"
+    },
+    {
+     "type": "line",
+     "id": "e21",
+     "construction": false,
+     "fixed": false,
+     "p1": {
+      "type": "point",
+      "id": "e17",
+      "construction": false,
+      "fixed": false,
+      "x": 350,
+      "y": -490
+     },
+     "p2": {
+      "type": "point",
+      "id": "e18",
+      "construction": false,
+      "fixed": false,
+      "x": 350,
+      "y": -210
+     },
+     "layerId": "ly1"
+    },
+    {
+     "type": "line",
+     "id": "e22",
+     "construction": false,
+     "fixed": false,
+     "p1": {
+      "type": "point",
+      "id": "e18",
+      "construction": false,
+      "fixed": false,
+      "x": 350,
+      "y": -210
+     },
+     "p2": {
+      "type": "point",
+      "id": "e19",
+      "construction": false,
+      "fixed": false,
+      "x": -350,
+      "y": -210
+     },
+     "layerId": "ly1"
+    },
+    {
+     "type": "line",
+     "id": "e23",
+     "construction": false,
+     "fixed": false,
+     "p1": {
+      "type": "point",
+      "id": "e19",
+      "construction": false,
+      "fixed": false,
+      "x": -350,
+      "y": -210
+     },
+     "p2": {
+      "type": "point",
+      "id": "e16",
+      "construction": false,
+      "fixed": false,
+      "x": -350,
+      "y": -490
+     },
+     "layerId": "ly1"
+    },
+    {
+     "type": "circle",
+     "id": "e29",
+     "construction": false,
+     "fixed": false,
+     "center": {
+      "type": "point",
+      "id": "e28",
+      "construction": false,
+      "fixed": false,
+      "x": 0,
+      "y": 0
+     },
+     "r": 50,
+     "layerId": "ly1"
+    }
+   ],
+   "constraints": [
+    {
+     "id": "c12",
+     "kind": "horizontal",
+     "lineId": "e8",
+     "p1": "e4",
+     "p2": "e5",
+     "layerId": "ly1"
+    },
+    {
+     "id": "c13",
+     "kind": "horizontal",
+     "lineId": "e10",
+     "p1": "e6",
+     "p2": "e7",
+     "layerId": "ly1"
+    },
+    {
+     "id": "c14",
+     "kind": "vertical",
+     "lineId": "e9",
+     "p1": "e5",
+     "p2": "e6",
+     "layerId": "ly1"
+    },
+    {
+     "id": "c15",
+     "kind": "vertical",
+     "lineId": "e11",
+     "p1": "e7",
+     "p2": "e4",
+     "layerId": "ly1"
+    },
+    {
+     "id": "c24",
+     "kind": "horizontal",
+     "lineId": "e20",
+     "p1": "e16",
+     "p2": "e17",
+     "layerId": "ly1"
+    },
+    {
+     "id": "c25",
+     "kind": "horizontal",
+     "lineId": "e22",
+     "p1": "e18",
+     "p2": "e19",
+     "layerId": "ly1"
+    },
+    {
+     "id": "c26",
+     "kind": "vertical",
+     "lineId": "e21",
+     "p1": "e17",
+     "p2": "e18",
+     "layerId": "ly1"
+    },
+    {
+     "id": "c27",
+     "kind": "vertical",
+     "lineId": "e23",
+     "p1": "e19",
+     "p2": "e16",
+     "layerId": "ly1"
+    },
+    {
+     "id": "c30",
+     "kind": "fix",
+     "pointId": "e28",
+     "x": 0,
+     "y": 0,
+     "layerId": "ly1"
+    },
+    {
+     "id": "c31",
+     "kind": "distance",
+     "p1": "e4",
+     "p2": "e5",
+     "value": 1400,
+     "layerId": "ly1",
+     "name": "D1"
+    },
+    {
+     "id": "c32",
+     "kind": "distance",
+     "p1": "e5",
+     "p2": "e6",
+     "value": 700,
+     "layerId": "ly1",
+     "name": "D2",
+     "expr": "D1 / 2"
+    },
+    {
+     "id": "c33",
+     "kind": "radius",
+     "circleId": "e29",
+     "value": 50,
+     "isDiameter": true,
+     "layerId": "ly1",
+     "name": "D3"
+    },
+    {
+     "id": "c34",
+     "kind": "pointLineDistance",
+     "pointId": "e28",
+     "l": {
+      "a": "e6",
+      "b": "e7"
+     },
+     "value": 150,
+     "layerId": "ly1",
+     "name": "D4"
+    },
+    {
+     "id": "c35",
+     "kind": "pointLineDistance",
+     "pointId": "e28",
+     "l": {
+      "a": "e7",
+      "b": "e4"
+     },
+     "value": 700,
+     "layerId": "ly1",
+     "name": "D5",
+     "expr": "D1 / 2"
+    },
+    {
+     "id": "c36",
+     "kind": "distance",
+     "p1": "e16",
+     "p2": "e17",
+     "value": 700,
+     "layerId": "ly1",
+     "name": "D6",
+     "expr": "D1 / 2"
+    },
+    {
+     "id": "c37",
+     "kind": "distance",
+     "p1": "e17",
+     "p2": "e18",
+     "value": 280,
+     "layerId": "ly1",
+     "name": "D7",
+     "expr": "D2 * 0.4"
+    },
+    {
+     "id": "c38",
+     "kind": "pointLineDistance",
+     "pointId": "e16",
+     "l": {
+      "a": "e4",
+      "b": "e5"
+     },
+     "value": 60,
+     "layerId": "ly1",
+     "name": "D8"
+    },
+    {
+     "id": "c39",
+     "kind": "pointLineDistance",
+     "pointId": "e16",
+     "l": {
+      "a": "e7",
+      "b": "e4"
+     },
+     "value": 350,
+     "layerId": "ly1",
+     "name": "D9",
+     "expr": "D1 / 4"
+    }
+   ],
+   "fills": [
+    {
+     "id": "f1",
+     "layerId": "ly1",
+     "color": "#c8955f",
+     "opacity": 0.85,
+     "seed": {
+      "x": -660,
+      "y": -530
+     }
+    },
+    {
+     "id": "f2",
+     "layerId": "ly1",
+     "color": "#47698f",
+     "opacity": 0.9,
+     "seed": {
+      "x": 0,
+      "y": -470
+     }
+    }
+   ],
+   "strokes": [
+    {
+     "id": "k1",
+     "layerId": "ly3",
+     "kind": "pen",
+     "color": "#d63a3a",
+     "opacity": 1,
+     "width": 9,
+     "pts": [
+      99.659,
+      59.287,
+      95.227,
+      78.244,
+      72.098,
+      81.344,
+      53.254,
+      84.854,
+      42.268,
+      103.091,
+      23.782,
+      110.264,
+      3.214,
+      98.662,
+      -14.683,
+      98.614,
+      -36.554,
+      108.158,
+      -53.511,
+      98.094,
+      -62.562,
+      79.519,
+      -81.872,
+      75.344,
+      -103.836,
+      69.591,
+      -105.007,
+      49.831,
+      -104.264,
+      32.324,
+      -122.333,
+      19.951,
+      -129.798,
+      3.197,
+      -113.739,
+      -12.806,
+      -108.618,
+      -27.758,
+      -116.33,
+      -47.984,
+      -104.179,
+      -61.976,
+      -80.923,
+      -66.491,
+      -71.851,
+      -81.065,
+      -62.73,
+      -99.955,
+      -40.692,
+      -99.247,
+      -20.358,
+      -94.389,
+      -3.482,
+      -106.901,
+      16.755,
+      -112.525,
+      32.71,
+      -96.782,
+      48.103,
+      -88.181,
+      72.097,
+      -91.639,
+      87.549,
+      -80.568,
+      88.773,
+      -59.496,
+      102.053,
+      -48.429,
+      122.993,
+      -38.131,
+      120.604,
+      -19.669,
+      110.375,
+      -2.719,
+      120.449,
+      13.561,
+      125.588,
+      32.095,
+      106.098,
+      43.764,
+      91.989,
+      54.724,
+      91.92,
+      75.527,
+      78.487,
+      88.552,
+      54.141,
+      86.268,
+      38.593,
+      94.128
+     ]
+    },
+    {
+     "id": "k2",
+     "layerId": "ly3",
+     "kind": "pen",
+     "color": "#d63a3a",
+     "opacity": 1,
+     "width": 9,
+     "pts": [
+      460,
+      330,
+      330,
+      230,
+      200,
+      125,
+      140,
+      80
+     ]
+    },
+    {
+     "id": "k3",
+     "layerId": "ly3",
+     "kind": "pen",
+     "color": "#d63a3a",
+     "opacity": 1,
+     "width": 9,
+     "pts": [
+      205,
+      85,
+      140,
+      80,
+      158,
+      140
+     ]
+    },
+    {
+     "id": "k4",
+     "layerId": "ly3",
+     "kind": "marker",
+     "color": "#c9a400",
+     "opacity": 0.45,
+     "width": 70,
+     "pts": [
+      -300,
+      110,
+      300,
+      110
+     ]
+    }
+   ]
+  }
+ ]
+}

@@ -228,8 +228,13 @@ export class PointLineDistanceConstraint extends Constraint {
     const bx=L(this.l.b,'x'),     by=L(this.l.b,'y');
     const dx=bx-ax, dy=by-ay;
     const cross = dx*(py-ay) - dy*(px-ax);
-    const len2 = dx*dx + dy*dy;
-    return [ cross*cross - this.value*this.value*len2 ];
+    const len = Math.sqrt(dx*dx + dy*dy);
+    // In length units, like every other dimension, so the solver's absolute
+    // tolerances mean the same thing at any drawing size. (The squared form
+    // cross² − v²·len² grows with len⁴ and reads as "not solved" for
+    // metre-sized drawings in mm.) Signed for 0, so "on the line" stays smooth.
+    if (len < 1e-12) return [ Math.hypot(px-ax, py-ay) - this.value ];
+    return [ this.value === 0 ? cross / len : Math.abs(cross) / len - this.value ];
   }
   toJSON() {
     const o = { id:this.id, kind:'pointLineDistance', pointId:this.pointId, l:this.l, value:this.value };

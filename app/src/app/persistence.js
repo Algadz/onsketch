@@ -38,6 +38,37 @@ export class PersistenceMixin {
       return true;
     } catch (e) { console.warn('load failed', e); return false; }
   }
+  /** /app/?example=<slug> opens app/examples/<slug>.json. The drawing that
+   *  was open stays one Undo away; the parameter is dropped from the URL
+   *  so a reload keeps whatever the user did with the example. */
+  async openExampleFromURL() {
+    const params = new URLSearchParams(location.search);
+    const slug = params.get('example');
+    if (!slug) return false;
+    params.delete('example');
+    const clean = location.pathname + (params.toString() ? '?' + params : '') + location.hash;
+    history.replaceState(null, '', clean);
+    if (!/^[a-z0-9-]{1,40}$/.test(slug)) return false;
+    const hint = document.getElementById('status-hint');
+    try {
+      const res = await fetch(`examples/${slug}.json`, { cache: 'no-cache' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const project = Project.fromJSON(await res.json());
+      this.project = project;
+      this.selectionOrder = [];
+      if (this.tool && this.tool.activate) this.tool.activate();
+      this.commit({ diagnostics: 'sync' });
+      this.refreshUI();
+      this.zoomFit();
+      if (hint) hint.textContent = `Example "${project.name}" opened. Ctrl+Z goes back to your previous drawing.`;
+      return true;
+    } catch (e) {
+      console.warn('example failed', e);
+      if (hint) hint.textContent = `Couldn't open the example "${slug}".`;
+      return false;
+    }
+  }
+
   _setupAutosave() {
     const flush = () => this._writeLocal();
     window.addEventListener('pagehide', flush);

@@ -886,6 +886,23 @@ await page.evaluate(() => { const a = window._app; a.project.layer('ly1').visibl
   check(before === after && JSON.parse(after).e > 0, `project restored after reload (${before} → ${after})`);
 }
 
+// /app/?example=desk opens the landing page's desk, fully defined, and
+// stays fully defined when the width changes (metre-scale dimensions).
+{
+  await page.goto(`http://localhost:${port}/app/?example=desk`);
+  await page.waitForFunction(() => window._app && window._app.project.name === 'Desk concept');
+  await page.waitForTimeout(400);
+  const st = () => page.evaluate(() => ({ state: document.getElementById('status-state').textContent, url: location.search,
+    fills: window._app.activeSketch().fills.length, strokes: window._app.activeSketch().strokes.length }));
+  const a = await st();
+  check(a.state === 'Fully defined' && a.url === '' && a.fills === 2 && a.strokes === 4, `example opens fully defined (${JSON.stringify(a)})`);
+  const d = await page.evaluate(() => { const app = window._app, s = app.activeSketch(); const c = s.constraints.find(c => c.name === 'D1');
+    app.setDimensionFromText(c, '1.8m'); return s.constraints.filter(c => c.name).map(c => c.name + '=' + Math.round(c.isDiameter ? c.value * 2 : c.value)).join(' '); });
+  await page.waitForTimeout(400);
+  const b = await st();
+  check(b.state === 'Fully defined' && /D2=900/.test(d) && /D6=900/.test(d), `example follows a new width (${d}; ${b.state})`);
+}
+
 await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
 if (shot) await page.screenshot({ path: shot });
 check(errors.length === 0, `no page errors${errors.length ? ': ' + errors.join(' / ') : ''}`);

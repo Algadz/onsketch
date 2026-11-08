@@ -4,3 +4,4 @@ import { App } from './app/App.js';
 const app = new App();
 app.undoStack.push(JSON.stringify(app.project.toJSON()));
 window._app = app;
+app.openExampleFromURL();

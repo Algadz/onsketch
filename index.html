@@ -368,6 +368,25 @@
   #demo .badges text { font: 11px system-ui, sans-serif; fill: var(--accent); dominant-baseline: central; text-anchor: middle; }
   #demo .tags text { font: 600 10.5px var(--mono); fill: var(--accent); letter-spacing: 0.04em; text-transform: uppercase; }
   #demo .tags text { paint-order: stroke; stroke: var(--panel-2); stroke-width: 4px; stroke-linejoin: round; }
+  #demo .area { cursor: pointer; fill-opacity: 0.85; transition: fill 0.25s; }
+  #demo .area:hover { fill-opacity: 1; }
+  #demo .ink path { fill: none; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+  #demo .ink .pen { stroke: #d63a3a; stroke-width: 2.4; }
+  #demo .ink .marker { stroke: #c9a400; stroke-width: 14; stroke-opacity: 0.45; }
+  #demo .geom, #demo .geom-c, #demo .construction, #demo .dims, #demo .badges, #demo .pts, #demo .tags { pointer-events: none; }
+  #demo .lbl.edit { pointer-events: auto; cursor: text; }
+  .paint-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 14px; border-top: 1px solid var(--border-soft); }
+  .swatches { display: inline-flex; gap: 5px; }
+  .swatches button {
+    width: 22px; height: 22px; padding: 0; border-radius: 5px; cursor: pointer; background: var(--sw);
+    border: 1px solid color-mix(in srgb, var(--text) 22%, transparent);
+  }
+  .swatches button[aria-checked="true"] { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .paint-hint { font-size: 12.5px; color: var(--text-muted); }
+  .eqs-foot { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 0 14px; margin-top: 6px; }
+  .eqs-foot .eqs-hint { margin: 0; }
+  .open-ex { font-size: 13px; font-weight: 600; color: var(--accent); white-space: nowrap; }
+  .open-ex:hover { text-decoration: underline; }
   .eqs { padding: 4px 0 12px; background: var(--panel); }
   .eqs-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 14px 6px; }
   .pill { font-size: 11px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--border); }
@@ -447,14 +466,16 @@
           <a class="btn" href="#examples">See examples</a>
         </div>
         </div>
-        <figure class="demo" aria-label="Interactive example: a desk top with dimensions, an equation and constraints">
+        <figure class="demo" aria-label="Interactive example: a desk drawn to scale with dimensions, equations, constraints, fills and ink">
           <div class="demo-canvas">
-            <svg id="demo" viewBox="0 0 560 330" role="img" aria-labelledby="demo-desc">
-              <desc id="demo-desc">A desk top drawn in OnSketch. Its width is dimension D1, its depth is the equation D2 = D1 / 2, a cable hole stays centred through a midpoint constraint, and edges carry horizontal and vertical constraints. Change the width and everything follows.</desc>
-              <path id="d-fill" fill="#d9a066" fill-opacity="0.55" fill-rule="evenodd"/>
+            <svg id="demo" viewBox="0 0 560 312" role="img" aria-labelledby="demo-desc">
+              <desc id="demo-desc">A desk drawn in OnSketch. Its width is dimension D1; its depth is the equation D2 = D1 / 2; a desk mat is half the width. The cable hole is fixed and the edges carry horizontal and vertical constraints. The desk and the mat are filled with colour, and red pen ink circles the hole. Change the width and everything follows; pick a colour and click the desk or the mat to paint it.</desc>
+              <path id="d-fill-top" class="area" data-area="top" fill-rule="evenodd"/>
+              <path id="d-fill-mat" class="area" data-area="mat"/>
               <line id="d-axis" class="construction"/>
               <g id="d-lines" class="geom"></g>
               <circle id="d-hole" class="geom-c"/>
+              <g id="d-ink" class="ink"></g>
               <g id="d-dims" class="dims"></g>
               <g id="d-badges" class="badges"></g>
               <g id="d-pts" class="pts"></g>
@@ -466,9 +487,24 @@
             <table>
               <tr><td class="nm">D1</td><td class="what">width</td><td class="ex"><label class="sr" for="d1-input">Desk width, D1</label><input id="d1-input" value="1400 mm" spellcheck="false" autocomplete="off" /></td><td class="val" id="v-d1">1400 mm</td></tr>
               <tr><td class="nm">D2</td><td class="what">depth</td><td class="ex"><span class="sigma">Σ</span> = D1 / 2</td><td class="val" id="v-d2">700 mm</td></tr>
-              <tr><td class="nm">D3</td><td class="what">hole</td><td class="ex">⌀ 100</td><td class="val">100 mm</td></tr>
+              <tr><td class="nm">D6</td><td class="what">mat</td><td class="ex"><span class="sigma">Σ</span> = D1 / 2</td><td class="val" id="v-mat">700 mm</td></tr>
             </table>
-            <p class="eqs-hint">Type a width, like <code>1.8m</code> or <code>60in</code>. The depth and the hole follow.</p>
+            <div class="paint-row">
+              <span class="fwin-title">Fill</span>
+              <span class="swatches" role="radiogroup" aria-label="Fill colour">
+                <button type="button" role="radio" style="--sw:#c8955f" data-c="#c8955f" aria-label="Oak" aria-checked="true"></button>
+                <button type="button" role="radio" style="--sw:#9cbfae" data-c="#9cbfae" aria-label="Sage" aria-checked="false"></button>
+                <button type="button" role="radio" style="--sw:#e9e2d4" data-c="#e9e2d4" aria-label="Linen" aria-checked="false"></button>
+                <button type="button" role="radio" style="--sw:#47698f" data-c="#47698f" aria-label="Blue" aria-checked="false"></button>
+                <button type="button" role="radio" style="--sw:#d63a3a" data-c="#d63a3a" aria-label="Red" aria-checked="false"></button>
+                <button type="button" role="radio" style="--sw:#2b2f36" data-c="#2b2f36" aria-label="Graphite" aria-checked="false"></button>
+              </span>
+              <span class="paint-hint">then click the desk or the mat</span>
+            </div>
+            <div class="eqs-foot">
+              <p class="eqs-hint">Type a width like <code>1.8m</code> or <code>60in</code>.</p>
+              <a class="open-ex" href="/app/?example=desk">Open this example in the editor &rarr;</a>
+            </div>
           </div>
         </figure>
         </div>
@@ -676,8 +712,9 @@
     </div>
   </footer>
   <script>
-    /* Hero demo: the depth follows the width (D2 = D1 / 2), the hole stays
-       centred (midpoint relation), the fill follows the outline. */
+    /* Hero demo: the same desk as /app/?example=desk. The depth follows the
+       width (D2 = D1 / 2), the mat is half the width, the hole is the fixed
+       point, fills follow their areas and can be repainted with a click. */
     (() => {
       const svg = document.getElementById('demo');
       const input = document.getElementById('d1-input');
@@ -685,18 +722,19 @@
       const NS = 'http://www.w3.org/2000/svg';
       const $ = (id) => document.getElementById(id);
       const el = (tag, attrs, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; };
-      const S = 0.2, OX = 64, OY = 268, HOLE = 100, BACK = 150;     // px per mm, origin (bottom-left), hole Ø and inset
+      const S = 0.2, CX = 280, T = 66, BACK = 150, HOLE = 100, MAT_FRONT = 60;   // px per mm; back edge fixed
       const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
       const UNITS = { mm: 1, cm: 10, m: 1000, in: 25.4, '"': 25.4, ft: 304.8 };
+      const colors = { top: '#c8955f', mat: '#47698f' };
+      let brush = '#c8955f';
       let w = 1400, target = 1400, anim = null, auto = !reduce, timer = null;
 
       const label = (g, x, y, text, { edit = false, sigma = false } = {}) => {
         const grp = el('g', { class: 'lbl' + (edit ? ' edit' : '') }, g);
         const tw = text.length * 7.4 + (sigma ? 14 : 0) + 12;
         el('rect', { x: x - tw / 2, y: y - 10, width: tw, height: 20, rx: 4 }, grp);
-        if (sigma) { el('text', { x: x - tw / 2 + 11, y, class: 'sig' }, grp).textContent = 'Σ'; }
+        if (sigma) el('text', { x: x - tw / 2 + 11, y, class: 'sig' }, grp).textContent = 'Σ';
         el('text', { x: x + (sigma ? 6 : 0), y }, grp).textContent = text;
-        return grp;
       };
       const arrow = (g, x, y, dx, dy) => {
         const L = 7, H = 3;
@@ -706,56 +744,72 @@
         el('rect', { x: x - 8, y: y - 8, width: 16, height: 16, rx: 3 }, g);
         el('text', { x, y: y + 0.5 }, g).textContent = glyph;
       };
-      const tag = (g, x, y, text, anchor = 'middle') => {
-        el('text', { x, y, 'text-anchor': anchor }, g).textContent = text;
-      };
+      const tag = (g, x, y, text, anchor = 'middle') => { el('text', { x, y, 'text-anchor': anchor }, g).textContent = text; };
+
+      // Ink never moves: it sits around the fixed hole.
+      const hx = CX, hy = T + BACK * S, hr = HOLE / 2 * S;
+      (() => {
+        const ink = $('d-ink');
+        el('path', { class: 'marker', d: `M${CX - 62} ${T + 8} L${CX + 62} ${T + 8}` }, ink);
+        let d = '';
+        for (let i = 0; i <= 44; i++) {
+          const t = i / 40 * Math.PI * 2 + 0.6, r = 21 + 1.8 * Math.sin(i * 1.7);
+          d += (i ? 'L' : 'M') + (hx + r * 1.15 * Math.cos(t)).toFixed(1) + ' ' + (hy + r * Math.sin(t)).toFixed(1);
+        }
+        el('path', { class: 'pen', d }, ink);
+        el('path', { class: 'pen', d: `M${hx + 92} ${hy + 40} Q${hx + 62} ${hy + 26} ${hx + 30} ${hy + 10}` }, ink);
+        el('path', { class: 'pen', d: `M${hx + 41} ${hy + 6} L${hx + 30} ${hy + 10} L${hx + 38} ${hy + 19}` }, ink);
+      })();
 
       function draw() {
-        const d = w / 2;                                  // D2 = D1 / 2
-        const W = w * S, D = d * S;
-        const L = OX, R = OX + W, B = OY, T = OY - D;
-        const cx = (L + R) / 2, cy = T + BACK * S, r = HOLE / 2 * S;
-        $('d-fill').setAttribute('d', `M${L} ${B}H${R}V${T}H${L}Z M${cx + r} ${cy} A${r} ${r} 0 1 0 ${cx - r} ${cy} A${r} ${r} 0 1 0 ${cx + r} ${cy} Z`);
-        const ax = $('d-axis'); ax.setAttribute('x1', cx); ax.setAttribute('x2', cx); ax.setAttribute('y1', T - 6); ax.setAttribute('y2', B + 6);
+        const d = w / 2, W = w * S, D = d * S;
+        const L = CX - W / 2, R = CX + W / 2, B = T + D;
+        const mw = w / 2 * S, md = D * 0.4, mB = B - MAT_FRONT * S, mT = mB - md, mL = CX - mw / 2, mR = CX + mw / 2;
+        const circ = `M${hx + hr} ${hy} A${hr} ${hr} 0 1 0 ${hx - hr} ${hy} A${hr} ${hr} 0 1 0 ${hx + hr} ${hy} Z`;
+        const top = $('d-fill-top'), mat = $('d-fill-mat');
+        top.setAttribute('d', `M${L} ${B}H${R}V${T}H${L}Z ${circ} M${mL} ${mB}H${mR}V${mT}H${mL}Z`);
+        mat.setAttribute('d', `M${mL} ${mB}H${mR}V${mT}H${mL}Z`);
+        top.setAttribute('fill', colors.top); mat.setAttribute('fill', colors.mat);
+        const ax = $('d-axis'); ax.setAttribute('x1', CX); ax.setAttribute('x2', CX); ax.setAttribute('y1', T - 6); ax.setAttribute('y2', B + 6);
         const lines = $('d-lines'); lines.replaceChildren();
-        for (const [x1, y1, x2, y2] of [[L, B, R, B], [R, B, R, T], [R, T, L, T], [L, T, L, B]]) el('line', { x1, y1, x2, y2 }, lines);
-        const hole = $('d-hole'); hole.setAttribute('cx', cx); hole.setAttribute('cy', cy); hole.setAttribute('r', r);
+        for (const [x1, y1, x2, y2] of [[L, B, R, B], [R, B, R, T], [R, T, L, T], [L, T, L, B], [mL, mB, mR, mB], [mR, mB, mR, mT], [mR, mT, mL, mT], [mL, mT, mL, mB]]) el('line', { x1, y1, x2, y2 }, lines);
+        const hole = $('d-hole'); hole.setAttribute('cx', hx); hole.setAttribute('cy', hy); hole.setAttribute('r', hr);
         const pts = $('d-pts'); pts.replaceChildren();
-        for (const [x, y] of [[L, B], [R, B], [R, T], [L, T], [cx, cy]]) el('circle', { cx: x, cy: y, r: 3 }, pts);
+        for (const [x, y] of [[L, B], [R, B], [R, T], [L, T], [mL, mB], [mR, mB], [mR, mT], [mL, mT], [hx, hy]]) el('circle', { cx: x, cy: y, r: 3 }, pts);
 
-        // Dimensions: D1 (typed), D2 (equation), D3 (diameter)
         const dims = $('d-dims'); dims.replaceChildren();
         const yd = T - 30;
         el('path', { d: `M${L} ${T - 4}V${yd - 6}M${R} ${T - 4}V${yd - 6}M${L} ${yd}H${R}` }, dims);
         arrow(dims, L, yd, -1, 0); arrow(dims, R, yd, 1, 0);
-        label(dims, (L + R) / 2, yd, Math.round(w) + '.00', { edit: true });
+        label(dims, CX, yd, Math.round(w) + '.00', { edit: true });
         const xd = R + 34;
         el('path', { d: `M${R + 4} ${T}H${xd + 6}M${R + 4} ${B}H${xd + 6}M${xd} ${T}V${B}` }, dims);
         arrow(dims, xd, T, 0, -1); arrow(dims, xd, B, 0, 1);
         label(dims, xd, (T + B) / 2, Math.round(d) + '.00', { sigma: true });
-        const lx = cx + 34, ly = cy - 26;
-        el('path', { d: `M${cx + r * 0.7} ${cy - r * 0.7}L${lx - 26} ${ly + 6}` }, dims);
-        label(dims, lx, ly, '⌀' + HOLE + '.00');
+        const ym = B + 22;
+        el('path', { d: `M${mL} ${mB + 4}V${ym + 6}M${mR} ${mB + 4}V${ym + 6}M${mL} ${ym}H${mR}` }, dims);
+        arrow(dims, mL, ym, -1, 0); arrow(dims, mR, ym, 1, 0);
+        label(dims, CX, ym, Math.round(w / 2) + '.00', { sigma: true });
 
-        // Relation badges, as the editor shows them
         const bd = $('d-badges'); bd.replaceChildren();
-        badge(bd, (L + R) / 2 + 40, B + 14, '━');
+        badge(bd, L + 26, B + 14, '━');
         badge(bd, L - 14, (T + B) / 2, '┃');
-        badge(bd, cx - 16, cy + 14, '⌐');
-        badge(bd, L - 12, B + 12, '⚓');
+        badge(bd, hx - 24, hy - 14, '⚓');
 
-        // What's what
         const tg = $('d-tags'); tg.replaceChildren();
-        tag(tg, (L + R) / 2, yd - 18, 'dimension');
+        tag(tg, CX, yd - 18, 'dimension');
         tag(tg, xd, (T + B) / 2 + 24, 'equation');
-        tag(tg, L - 22, B + 40, 'constraints', 'start');
+        tag(tg, L - 22, B + 38, 'constraints', 'start');
+        tag(tg, hx - 32, hy + 4, 'ink', 'end');
+        tag(tg, mL + 8, mT + 16, 'fill', 'start');
 
         $('v-d1').textContent = Math.round(w) + ' mm';
         $('v-d2').textContent = Math.round(d) + ' mm';
+        $('v-mat').textContent = Math.round(w / 2) + ' mm';
       }
 
       function setWidth(mm, animate) {
-        target = Math.max(900, Math.min(2000, mm));
+        target = Math.max(1000, Math.min(2000, mm));
         if (!animate || reduce) { w = target; draw(); return; }
         const from = w, t0 = performance.now();
         cancelAnimationFrame(anim);
@@ -768,8 +822,7 @@
       }
       function parse(text) {
         const m = String(text).trim().toLowerCase().match(/^(\d+(?:[.,]\d+)?)\s*(mm|cm|m|in|"|ft)?$/);
-        if (!m) return null;
-        return parseFloat(m[1].replace(',', '.')) * UNITS[m[2] || 'mm'];
+        return m ? parseFloat(m[1].replace(',', '.')) * UNITS[m[2] || 'mm'] : null;
       }
       const stopAuto = () => { auto = false; clearInterval(timer); };
       input.addEventListener('focus', stopAuto);
@@ -780,7 +833,18 @@
       });
       input.addEventListener('keydown', (e) => { if (e.key === 'Enter') input.blur(); });
       input.addEventListener('blur', () => { if (parse(input.value) != null) input.value = Math.round(target) + ' mm'; input.classList.remove('bad'); });
-      svg.addEventListener('pointerdown', () => { stopAuto(); input.focus(); input.select(); });
+
+      // Paint: pick a swatch, click an area (the Fill tool, in miniature).
+      const swatches = [...document.querySelectorAll('.paint-row [data-c]')];
+      swatches.forEach(b => b.addEventListener('click', () => {
+        brush = b.dataset.c;
+        swatches.forEach(x => x.setAttribute('aria-checked', String(x === b)));
+      }));
+      svg.addEventListener('click', (e) => {
+        const area = e.target.closest('[data-area]');
+        if (area) { stopAuto(); colors[area.dataset.area] = brush; draw(); return; }
+        if (e.target.closest('.lbl.edit')) { stopAuto(); input.focus(); input.select(); }
+      });
 
       draw();
       if (auto) {
