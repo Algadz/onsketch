@@ -15,7 +15,7 @@ the tool.
 | Highlighting | none | **Phase 1, shipped** (Marker) |
 | Removing ink without touching geometry | none | **Phase 1, shipped** (Eraser) |
 | Ink colour separate from geometry status colour | lines always show constraint state | **Phase 1, shipped** (ink colour) |
-| Move / resize / recolour / delete a stroke | none | Phase 2 |
+| Move / recolour / delete a stroke | none | **Shipped** (Select tool) |
 | Text labels ("Kitchen", "Ø 40 bore", titles) | none | Phase 2 |
 | Arrows, leaders and callouts | none | Phase 2 |
 | Annotation that follows the geometry when a dimension changes | none | Phase 3 |
@@ -87,11 +87,10 @@ that hard and would not fit "to scale".
 
 ## Phase 2: edit ink, text and arrows
 
-1. **Select ink with the Select tool.** Click or box-select strokes on the
-   active layer; Delete; drag to move; Shift-drag handles to scale; the
-   Properties window shows colour, width, opacity and layer ("Move to
-   layer" reuses `moveSelectionToLayer`). Selection outline: dashed bounding
-   box, not the orange stroke colour (ink keeps its colour).
+1. **Select ink with the Select tool.** *Shipped:* click / Ctrl / Shift /
+   box select on the active layer, drag to move (with selected shapes too),
+   Delete, Properties for colour, opacity, width and layer, dashed orange
+   box as the selection mark. *Still to do:* scale / rotate handles.
 2. **Text tool (T).** Click to place, type, Enter to finish. Text height in
    world units (default 1/40 of the view) or "screen size" for titles.
    Options: font size, bold, colour (ink), background pill (none,

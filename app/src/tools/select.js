@@ -107,6 +107,15 @@ export class SelectTool extends Tool {
         !sketch?.constraints.some(c => c.kind === 'radius' && c.circleId === hit.id);
       const canDrag = pts.length || hitIsResizableCircle;
       this.dragging = canDrag ? this.app.beginLocalizedDrag(world, pts, hit, rigidLines) : null;
+      this.inkDrag = this.app.beginInkDrag(world);           // selected ink moves along
+      this.app.refreshUI();
+      this.app.requestRender();
+    } else if (this.app.hitStrokeAt(world)) {
+      const ink = this.app.hitStrokeAt(world);
+      if (isToggle) this.app.setStrokeSelected(ink, !ink.selected);
+      else if (isAdd) this.app.setStrokeSelected(ink, true);
+      else if (!ink.selected) { this.app.clearSelection(); this.app.setStrokeSelected(ink, true); }
+      this.inkDrag = ink.selected ? this.app.beginInkDrag(world) : null;
       this.app.refreshUI();
       this.app.requestRender();
     } else {
@@ -132,6 +141,8 @@ export class SelectTool extends Tool {
       }
       return;
     }
+    if (this.inkDrag) this.app.dragInk(this.inkDrag, world);
+    if (this.inkDrag && !this.dragging) return;
     if (this.dragging) {
       // Pick a single "primary" handle to latch the cursor delta onto its
       // snap target — translation can only satisfy one alignment at a
@@ -192,9 +203,16 @@ export class SelectTool extends Tool {
         }
       }
       if (changed) this.app.requestRender();
+      // Ink is selectable and movable: show it under the cursor.
+      this.app.canvas.style.cursor = !hit && this.app.hitStrokeAt(world) ? 'move' : 'default';
     }
   }
   onPointerUp(world, snap, ev) {
+    if (this.inkDrag) {
+      const moved = this.inkDrag.moved;
+      this.inkDrag = null;
+      if (moved && !this.dragging) { this.app.commit(); this.app.refreshUI(); return; }
+    }
     if (this.dimAction) {
       if (this.dimAction.moved) {
         // The label position was mutated in-place during pointermove; just
@@ -253,6 +271,7 @@ export class SelectTool extends Tool {
           }
         }
       }
+      if (!wasOffsetBox && !wasMirrorBox) for (const st of this.app.strokesInBox(x0, y0, x1, y1)) this.app.setStrokeSelected(st, true);
       if (wasOffsetBox) {
         this.app.offsetAnchorId = this.app.offsetEntityIds[0] || null;
         this.app.offsetPhase = this.app.offsetEntityIds.length ? 'placing' : 'selecting';

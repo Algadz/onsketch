@@ -46,8 +46,15 @@ export class PanelsMixin {
   _refreshSelectionPanel() {
     const sel = this.selectedEntitiesAndPoints();
     const body = document.getElementById('sel-body');
-    document.getElementById('sel-count').textContent = sel.length + (sel.length === 1 ? ' item' : ' items');
+    const ink = this.selectedStrokes();
+    const count = sel.length + ink.length;
+    document.getElementById('sel-count').textContent = count + (count === 1 ? ' item' : ' items');
 
+    if (sel.length === 0 && ink.length) {
+      body.innerHTML = this._inkSectionHTML(ink);
+      this._bindInkSection(body);
+      return;
+    }
     if (sel.length === 0) {
       body.innerHTML = '<div class="empty">Click an entity to select. Ctrl-click to add or remove from selection.</div>';
       return;
@@ -150,7 +157,8 @@ export class PanelsMixin {
       }
     }
 
-    body.innerHTML = html;
+    body.innerHTML = html + this._inkSectionHTML(ink);
+    this._bindInkSection(body);
     const constructionAll = body.querySelector('input[data-toggle="construction-all"]');
     if (constructionAll) {
       constructionAll.indeterminate = constructionTargets.some(x => x.construction) &&

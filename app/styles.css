@@ -625,6 +625,9 @@
     text-align: left;
     cursor: pointer;
   }
+  .unit-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .unit-row input { flex: 1; min-width: 0; }
+  .unit-row span { font-size: 11px; color: var(--text-soft); }
   .context-menu-sep { height: 1px; margin: 4px 2px; background: var(--border-soft); }
   .context-menu-item.action .glyph { font-weight: 400; }
   .context-menu-item:hover {

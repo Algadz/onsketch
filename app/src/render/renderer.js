@@ -160,6 +160,7 @@ export class Renderer {
     if (pts.length === 1 || (pts.length === 2 && Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y) < 0.5)) {
       ctx.beginPath(); ctx.arc(pts[0].x, pts[0].y, w / 2, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
+      if (st.selected) this._drawInkSelection(pts, w);
       return;
     }
     ctx.lineWidth = w;
@@ -173,6 +174,22 @@ export class Renderer {
     const end = pts[pts.length - 1];
     ctx.lineTo(end.x, end.y);
     ctx.stroke();
+    ctx.restore();
+    if (st.selected) this._drawInkSelection(pts, w);
+  }
+
+  /** Selected ink: a dashed box around it, in the selection colour. */
+  _drawInkSelection(pts, w) {
+    const ctx = this.ctx;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const p of pts) { if (p.x < x0) x0 = p.x; if (p.y < y0) y0 = p.y; if (p.x > x1) x1 = p.x; if (p.y > y1) y1 = p.y; }
+    const m = w / 2 + 4;
+    ctx.save();
+    ctx.globalAlpha = 1;
+    ctx.lineWidth = 1.2;
+    ctx.setLineDash([4, 3]);
+    ctx.strokeStyle = this.theme.selected;
+    ctx.strokeRect(x0 - m, y0 - m, x1 - x0 + 2 * m, y1 - y0 + 2 * m);
     ctx.restore();
   }
 

@@ -41,7 +41,11 @@ cached modules after a deploy. `npm test` fails if the stamp is out of date.
   size of the current tool (or Fill / Erase for the bucket). Strokes are
   vector, in world units, on the active layer and drawn on top of its
   shapes; the solver, dimensions, snapping and the Fill tool ignore them.
-  The eraser removes whole strokes on the active layer. Roadmap:
+  The eraser removes whole strokes on the active layer. With the Select
+  tool, strokes on the active layer are selected like shapes (click,
+  Ctrl / Shift-click, box), dragged, deleted, and edited in Properties
+  (colour, opacity, width, layer); geometry under the cursor wins, and
+  selected ink moves along when a selected shape is dragged. Roadmap:
   `docs/sketch-tools-plan.md`.
 - **Colors** window: one place for both colours, Paint.NET style. Two
   chips, Ink (Pen, Marker) and Fill (the bucket); the highlighted one follows

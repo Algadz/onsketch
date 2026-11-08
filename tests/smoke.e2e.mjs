@@ -886,6 +886,73 @@ await page.evaluate(() => { const a = window._app; a.project.layer('ly1').visibl
   check(before === after && JSON.parse(after).e > 0, `project restored after reload (${before} → ${after})`);
 }
 
+// Ink with the Select tool: click, Ctrl-click, box, drag, delete, mixed drags.
+{
+  const P = (id, x, y) => ({ type: 'point', id, x, y });
+  const proj = { version: 3, activeLayerId: 'la', layers: [{ id: 'la', name: 'A' }, { id: 'lb', name: 'B' }], sketches: [{ id: 's', name: 'S',
+    entities: [{ type: 'line', id: 'g1', layerId: 'la', p1: P('ga', -30, 10), p2: P('gb', 30, 10) }],
+    constraints: [],
+    strokes: [
+      { id: 'k1', layerId: 'la', kind: 'pen', color: '#d63a3a', opacity: 1, width: 0.6, pts: [-20, -10, 0, -14, 20, -10] },
+      { id: 'k2', layerId: 'la', kind: 'pen', color: '#1f7ad6', opacity: 1, width: 0.6, pts: [-20, -25, 20, -25] },
+      { id: 'k3', layerId: 'lb', kind: 'pen', color: '#14946b', opacity: 1, width: 0.6, pts: [-20, -35, 20, -35] },
+      { id: 'k4', layerId: 'la', kind: 'marker', color: '#c9a400', opacity: 0.4, width: 4, pts: [-25, 10, 25, 10] },
+    ] }] };
+  await page.evaluate((proj) => {
+    const a = window._app; a.project = a.project.constructor.fromJSON(proj); a._afterStateSwap();
+    a.view.zoom = 5; a.view.panX = 0; a.view.panY = 0; a.commit({ diagnostics: 'sync' }); a.setTool('select');
+    for (const w of ['colors', 'tools', 'layers', 'sketch', 'equations']) a.windows.toggle(w, false);
+    a.windows.toggle('props', true);
+  }, proj);
+  const scr = (x, y) => page.evaluate(([x, y]) => window._app.view.worldToScreen({ x, y }), [x, y]).then(p => ({ x: box.x + p.x, y: box.y + p.y }));
+  const sel = () => page.evaluate(() => window._app.activeSketch().strokes.filter(s => s.selected).map(s => s.id).join(','));
+  const pts = (id) => page.evaluate((id) => window._app.activeSketch().strokes.find(s => s.id === id)?.points.map(p => [Math.round(p.x * 10) / 10, Math.round(p.y * 10) / 10]), id);
+
+  let at = await scr(0, -14);
+  await page.mouse.click(at.x, at.y);
+  check(await sel() === 'k1' && /Ink \(1 stroke\)/.test(await page.textContent('#sel-body')), 'click selects a stroke; Properties shows Ink');
+  const to = await scr(10, -4);
+  await page.mouse.move(at.x, at.y); await page.mouse.down(); await page.mouse.move(to.x, to.y, { steps: 6 }); await page.mouse.up();
+  const moved = await pts('k1');
+  check(JSON.stringify(moved) === JSON.stringify([[-10, 0], [10, -4], [30, 0]]), `dragging moves the stroke (${JSON.stringify(moved)})`);
+  await page.keyboard.press('Control+z');
+  check(JSON.stringify(await pts('k1')) === JSON.stringify([[-20, -10], [0, -14], [20, -10]]), 'undo puts it back');
+
+  at = await scr(0, -14); await page.mouse.click(at.x, at.y);
+  const at2 = await scr(0, -25); await page.keyboard.down('Control'); await page.mouse.click(at2.x, at2.y); await page.keyboard.up('Control');
+  check(await sel() === 'k1,k2', `Ctrl-click adds a stroke (${await sel()})`);
+  await page.keyboard.press('Delete');
+  check(await page.evaluate(() => window._app.activeSketch().strokes.map(s => s.id).join(',')) === 'k3,k4', 'Delete removes the selected strokes');
+  await page.keyboard.press('Control+z');
+
+  const b0 = await scr(-40, -30), b1 = await scr(40, -5);
+  await page.mouse.move(b0.x, b0.y); await page.mouse.down(); await page.mouse.move(b1.x, b1.y, { steps: 5 }); await page.mouse.up();
+  check(await sel() === 'k1,k2', `box selects strokes inside it, not other layers (${await sel()})`);
+  await page.keyboard.press('Escape');
+
+  at = await scr(0, -35); await page.mouse.click(at.x, at.y);
+  check(await sel() === '', 'strokes on another layer are not picked');
+
+  at = await scr(10, 10); await page.mouse.click(at.x, at.y);
+  const lineSel = await page.evaluate(() => window._app.activeSketch().entities.find(e => e.id === 'g1').selected);
+  check(lineSel && await sel() === '', 'a shape under the cursor wins over ink');
+  const atInk = await scr(0, -14);
+  await page.keyboard.down('Shift'); await page.mouse.click(atInk.x, atInk.y); await page.keyboard.up('Shift');
+  const g0 = await scr(-10, 10), g1 = await scr(-10, 20);
+  await page.mouse.move(g0.x, g0.y); await page.mouse.down(); await page.mouse.move(g1.x, g1.y, { steps: 6 }); await page.mouse.up();
+  const both = await page.evaluate(() => { const s = window._app.activeSketch(); const l = s.entities.find(e => e.id === 'g1'); const k = s.strokes.find(x => x.id === 'k1');
+    return [Math.round(l.p1.y), Math.round(k.points[0].y)]; });
+  check(both[0] === 20 && both[1] === 0, `selected ink moves with a dragged shape (${both})`);
+
+  await page.evaluate(() => { window._app.clearSelection(); });
+  at = await scr(0, -25); await page.mouse.click(at.x, at.y);
+  await page.fill('#sel-body input[data-ink-k="width"]', '1.5'); await page.press('#sel-body input[data-ink-k="width"]', 'Enter');
+  await page.$eval('#sel-body input[data-ink-k="color"]', (el) => { el.value = '#8a4fd1'; el.dispatchEvent(new Event('change', { bubbles: true })); });
+  const k2 = await page.evaluate(() => { const k = window._app.activeSketch().strokes.find(x => x.id === 'k2'); return [k.width, k.color]; });
+  check(k2[0] === 1.5 && k2[1] === '#8a4fd1', `Properties changes ink width and colour (${k2})`);
+  await page.keyboard.press('Escape');
+}
+
 // Right-click actions, Blender-style scrubbing, click-to-link dimensions.
 {
   const P = (id, x, y) => ({ type: 'point', id, x, y });

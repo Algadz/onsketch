@@ -43,6 +43,7 @@ export class SelectionMixin {
       }
       for (const c of s.constraints) c.selected = false;
     }
+    this.clearStrokeSelection();
     this.selectionOrder = [];
     this.refreshUI();
     this.requestRender();
@@ -57,7 +58,11 @@ export class SelectionMixin {
       return false;
     });
     const hasSelectedConstraints = sketch.constraints.some(c => c.selected);
-    if (!toDelete.length && !hasSelectedConstraints) return;
+    const inkDeleted = this.deleteSelectedStrokes();
+    if (!toDelete.length && !hasSelectedConstraints) {
+      if (inkDeleted) { this.commit(); this.refreshUI(); this.requestRender(); }
+      return;
+    }
     sketch.constraints = sketch.constraints.filter(c => !c.selected);
     for (const e of toDelete) sketch.removeEntity(e);
     this.commit();
