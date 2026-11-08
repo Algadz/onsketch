@@ -14,7 +14,7 @@ const SUPABASE_ESM = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/
 const LIST_COLUMNS = 'id,name,description,visibility,revision,updated_at,created_at';
 const THUMBS = 'thumbnails';
 
-export const TITLE_MIN = 3, TITLE_MAX = 80, DESC_MIN = 10, DESC_MAX = 500, NAME_MIN = 2, NAME_MAX = 40;
+export const TITLE_MIN = 3, TITLE_MAX = 80, DESC_MIN = 10, DESC_MAX = 500;
 const LIBRARY_COLUMNS = 'id,owner_id,name,description,created_at,updated_at,author_name,author_avatar,likes';
 /** Projects allowed per plan (null = no limit); mirrors plan_project_limit() in SQL. */
 export const PLAN_LIMITS = { free: 3, premium: null };
@@ -237,41 +237,40 @@ export class Cloud {
     if (error) throw error;
   }
 
-  /* ---- Public profile: the name shown with public sketches ---- */
+  /* ---- Public profile: the username shown with public sketches ---- */
+  /** The signed-in user's profile { user_id, username, avatar_url } or null.
+   *  `username` is null until the user has chosen one (migration 0004). */
   async profile() {
     const user = await this.user();
     if (!user) return null;
-    const { data, error } = await this.client.from('public_profiles').select('user_id,display_name,avatar_url').eq('user_id', user.id).maybeSingle();
+    const { data, error } = await this.client.from('public_profiles').select('user_id,username,avatar_url').eq('user_id', user.id).maybeSingle();
     if (error) throw error;
     return data;
   }
-  /** Creates the profile on first sign-in, from the account's name
-   *  (Google) or "OnSketch user"; never from the email address. */
-  async ensureProfile() {
-    const user = await this.user();
-    if (!user) return null;
-    const existing = await this.profile().catch(() => null);
-    if (existing) return existing;
-    const meta = user.user_metadata || {};
-    let name = cleanText(meta.full_name || meta.name || '').slice(0, NAME_MAX);
-    if (name.length < NAME_MIN) name = 'OnSketch user';
-    const avatar = typeof meta.avatar_url === 'string' && /^https:\/\//.test(meta.avatar_url) && meta.avatar_url.length <= 500 ? meta.avatar_url : null;
-    const { data, error } = await this.client.from('public_profiles')
-      .insert({ display_name: name, avatar_url: avatar }).select('user_id,display_name,avatar_url').single();
-    if (error) { if (error.code === '23505') return this.profile(); throw error; }
-    return data;
+  /** Exact, case-insensitive: is `name` free (or already mine)? */
+  async usernameAvailable(name) {
+    const { data, error } = await this.client.rpc('username_available', { name: cleanText(name) });
+    if (error) throw error;
+    return !!data;
   }
-  /** Changes the display name (2–40 characters); `showPicture` false removes the picture. */
-  async saveProfile({ displayName, showPicture = true }) {
+  /** The Google (or other provider) picture, if the account has one. */
+  async accountPicture() {
+    const meta = (await this.user())?.user_metadata || {};
+    return typeof meta.avatar_url === 'string' && /^https:\/\//.test(meta.avatar_url) && meta.avatar_url.length <= 500 ? meta.avatar_url : null;
+  }
+  /** Sets the username and whether the account picture is shown. */
+  async saveProfile({ username, showPicture = false }) {
     const user = await this.user();
     if (!user) throw new Error('Not signed in.');
-    const name = cleanText(displayName);
-    if (name.length < NAME_MIN || name.length > NAME_MAX) throw new Error(`Your name needs ${NAME_MIN} to ${NAME_MAX} characters.`);
-    const meta = user.user_metadata || {};
-    const avatar = showPicture && typeof meta.avatar_url === 'string' && /^https:\/\//.test(meta.avatar_url) ? meta.avatar_url.slice(0, 500) : null;
+    const problem = usernameProblem(username);
+    if (problem) throw new Error(problem);
+    const avatar = showPicture ? await this.accountPicture() : null;
     const { data, error } = await this.client.from('public_profiles')
-      .upsert({ user_id: user.id, display_name: name, avatar_url: avatar }).select('user_id,display_name,avatar_url').single();
-    if (error) throw error;
+      .upsert({ user_id: user.id, username: cleanText(username), avatar_url: avatar }).select('user_id,username,avatar_url').single();
+    if (error) {
+      if (error.code === '23505') throw new Error('This username is taken. Try another one.');
+      throw fromDb(error);
+    }
     return data;
   }
 
@@ -306,6 +305,18 @@ export function rowFor(json) {
   if (!json || typeof json !== 'object' || !Array.isArray(json.sketches)) throw new Error('not a project');
   return { name: cleanName(json.name), data: json };
 }
+/** Why `name` can't be a username, or '' if its form is fine (mirrors
+ *  public_profiles_touch() in SQL; uniqueness is checked by the server). */
+export function usernameProblem(name) {
+  const n = cleanText(name);
+  if (n.length < 3 || n.length > 24) return 'A username has 3 to 24 characters.';
+  if (!/^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(n)) return 'Use letters, digits, _ . or -, starting with a letter or digit.';
+  if (RESERVED.has(n.toLowerCase())) return 'This username is reserved.';
+  return '';
+}
+const RESERVED = new Set(['admin', 'administrator', 'onsketch', 'support', 'help', 'moderator', 'mod', 'staff', 'team',
+  'root', 'system', 'official', 'library', 'anonymous', 'null', 'undefined', 'onsketch_user']);
+
 /** A search string made safe for a PostgREST or=() filter. */
 export function librarySearch(s) {
   return cleanText(String(s ?? '').replace(/[,()%*\\:."]/g, ' ')).slice(0, 60);

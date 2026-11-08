@@ -25,6 +25,10 @@ export const TOOL_ICONS = {
 
 export const ACTION_ICONS = {
   new: svg('<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v5h4"/><path d="M9 14h6M12 11v6"/>'),
+  'my-sketches': svg('<rect x="3" y="4" width="8" height="7" rx="1"/><rect x="13" y="4" width="8" height="7" rx="1"/><rect x="3" y="13" width="8" height="7" rx="1"/><path d="M17 14v6M14 17h6"/>'),
+  library: svg('<path d="M4 4h4v16H4zM10 4h4v16h-4z"/><path d="M16.5 4.5l3.5 1-3.8 14.5-3.5-1"/>'),
+  profile: svg('<circle cx="12" cy="8" r="4"/><path d="M4 21c1-4.5 4.4-6.5 8-6.5s7 2 8 6.5"/>'),
+  signout: svg('<path d="M10 4H5v16h5"/><path d="M14 8l4 4-4 4M18 12H9"/>'),
   open: svg('<path d="M3 7h6l2 2h10v10H3z"/><path d="M3 19l3-7h16l-3 7"/>'),
   account: svg('<circle cx="12" cy="8" r="4"/><path d="M4 21c1-4.5 4.4-6.5 8-6.5s7 2 8 6.5"/>'),
   save: svg('<path d="M5 4h12l2 2v14H5z"/><path d="M8 4v6h8V4"/><path d="M8 20v-6h8v6"/>'),

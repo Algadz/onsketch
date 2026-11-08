@@ -608,6 +608,38 @@
   #account-btn[data-status="offline"] .cloud-status,
   #account-btn[data-status="conflict"] .cloud-status { color: var(--overc); }
   .compact #account-btn { display: none; }
+  /* Account menu (avatar ▾, cloud-ui.js) */
+  #account-btn .am-caret { font-size: 10px; color: var(--text-muted); margin-left: -2px; }
+  .account-menu {
+    position: fixed; z-index: 1100; width: 260px; padding: 6px; display: flex; flex-direction: column;
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.18);
+  }
+  .account-menu[hidden] { display: none; }
+  .am-head { display: flex; align-items: center; gap: 10px; padding: 8px 8px 6px; }
+  .am-head .avatar {
+    width: 34px; height: 34px; flex: 0 0 auto; border-radius: 50%; background: var(--accent); color: #fff; font-weight: 700;
+    display: inline-flex; align-items: center; justify-content: center; object-fit: cover;
+  }
+  .am-who { display: flex; flex-direction: column; min-width: 0; }
+  .am-who b, .am-who span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .am-who span { font-size: 12px; }
+  .am-plan { font-size: 12px; padding: 0 8px 6px; border-bottom: 1px solid var(--border-soft); margin-bottom: 4px; }
+  .am-plan:empty { display: none; }
+  .am-item {
+    display: block; width: 100%; text-align: left; padding: 7px 10px; border: 0; border-radius: 6px; background: none;
+    color: var(--text); font: inherit; font-size: 13px; text-decoration: none; cursor: pointer;
+  }
+  .am-item:hover, .am-item:focus-visible { background: var(--hover); outline: none; }
+  .am-sep { height: 1px; background: var(--border-soft); margin: 4px 2px; }
+  /* Profile dialog */
+  .username-row { display: flex; align-items: center; border: 1px solid var(--border); border-radius: 6px; background: var(--field); }
+  .username-row:focus-within { outline: 2px solid var(--accent-border); border-color: var(--accent); }
+  .username-row .at { padding: 0 2px 0 9px; color: var(--text-muted); }
+  .modal.account .username-row input, .modal.account .username-row input:focus { border: 0; outline: none; box-shadow: none; flex: 1; min-width: 0; background: transparent; padding-left: 2px; }
+  .username-hint { font-size: 12px; min-height: 1.2em; }
+  .username-hint[data-state="good"] { color: #2c8a3a; }
+  .username-hint[data-state="bad"] { color: var(--overc); }
+  .picture-opt img { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; }
   /* File group: New / Open / Save with their text, and the save status */
   #menubar .file-btn { gap: 6px; padding: 0 10px; }
   #menubar .file-btn[hidden] { display: none; }

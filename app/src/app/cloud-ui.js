@@ -1,6 +1,6 @@
 import { Project } from '../core/model.js';
 import { isConfigured, openCloud, ConflictError, LimitError, TITLE_MIN } from '../cloud/cloud.js';
-import { openDetailsDialog, openNameDialog } from '../cloud/details-dialog.js';
+import { openDetailsDialog, openProfileDialog } from '../cloud/details-dialog.js';
 import { renderThumbnail, thumbnailBlob } from '../render/thumbnail.js';
 
 /* =============== ACCOUNT AND CLOUD PROJECTS ====================
@@ -23,6 +23,7 @@ const LINK_KEY = 'onsketch:cloud';
 const PUSH_DELAY = 2500;
 const THUMB_EVERY = 30000;        // at most one thumbnail upload per 30 s
 const PAGE_PARAMS = ['project', 'view', 'new', 'signin'];
+const PROFILE_ASKED = 'onsketch:profile-asked';   // sessionStorage: "Later" was clicked this session
 const PENDING_SAVE = 'onsketch:after-sign-in';   // sessionStorage: 'save' | 'open', survives the sign-in redirect
 const AUTH_PARAMS = ['code', 'error', 'error_code', 'error_description'];
 
@@ -51,7 +52,7 @@ export class CloudMixin {
     btn.hidden = false;
     const open = document.querySelector('#menubar [data-action="open"]');
     if (open) open.hidden = false;
-    btn.addEventListener('click', () => this.openAccount());
+    btn.addEventListener('click', (e) => { e.stopPropagation(); if (this.cloudUser) this.toggleAccountMenu(); else this.openAccount(); });
     this._renderAccountButton();
     window.addEventListener('online', () => { if (this.cloudLink?.dirty) this._cloudPushSoon(0); });
 
@@ -131,13 +132,99 @@ export class CloudMixin {
     this._renderAccountButton();
     if (this.compact) this._refreshMoreMenu?.();
     if (user && !was) {
-      this.cloud.plan().then(p => { this.cloudPlan = p; if (this._accountOpen && !this._conflictRow) this._renderAccount(); }).catch(() => {});
-      this.cloud.ensureProfile().catch(() => {});              // the name shown in the library
-      if (this._accountOpen) this._renderAccount();
-      this._cloudSync();
-      this._resumePendingSave();
+      if (this._accountOpen && !this._conflictRow && !this._openList) this.closeAccount();   // signed in: the dialog's job is done
+      else if (this._accountOpen) this._renderAccount();
+      this._afterSignIn();
     }
-    if (!user) this.cloudPlan = null;
+    if (!user) { this.cloudPlan = null; this.cloudProfile = null; this.toggleAccountMenu(false); }
+  }
+  /** Plan, profile (asks for a username the first time), sync, then what
+   *  the user was doing when asked to sign in (Save / Open). */
+  async _afterSignIn() {
+    this.cloud.plan().then(p => { this.cloudPlan = p; }).catch(() => {});
+    this._cloudSync();
+    this.cloudProfile = await this.cloud.profile().catch(() => null);
+    this._renderAccountButton();
+    const pending = this._pending();
+    let asked = false;
+    try { asked = sessionStorage.getItem(PROFILE_ASKED) === '1'; } catch { /* storage unavailable */ }
+    if (!this.cloudProfile?.username && pending !== 'save' && !asked) {
+      try { sessionStorage.setItem(PROFILE_ASKED, '1'); } catch { /* storage unavailable */ }
+      await this.editProfile({ firstTime: true });
+    }
+    this._resumePendingSave();
+  }
+
+  /** Public username + picture. Resolves to the saved profile or null. */
+  async editProfile({ firstTime = false, reason = '' } = {}) {
+    this.toggleAccountMenu(false);
+    const p = this.cloudProfile;
+    const saved = await openProfileDialog({
+      username: p?.username || '', picture: await this.cloud.accountPicture(), showPicture: !!p?.avatar_url,
+      firstTime, reason, checkAvailable: (n) => this.cloud.usernameAvailable(n),
+      onSubmit: (v) => this.cloud.saveProfile(v),
+    });
+    if (saved) {
+      this.cloudProfile = saved;
+      this._renderAccountButton();
+      this._hint(`Your public username is @${saved.username}.`);
+    }
+    return saved;
+  }
+  /** Saving publishes (free plan), so a username is needed first. */
+  async _ensureUsername() {
+    if (!this.cloudProfile) this.cloudProfile = await this.cloud.profile().catch(() => null);
+    if (this.cloudProfile?.username) return true;
+    const saved = await this.editProfile({ firstTime: true,
+      reason: 'Sketches you save on the free plan are public in the library, shown with this username. Choose it before saving. Your email address and your real name are never shown.' });
+    return !!saved;
+  }
+
+  /* ---- Account menu (avatar, top right) ---- */
+  toggleAccountMenu(open) {
+    let menu = document.getElementById('account-menu');
+    const show = open ?? !(menu && !menu.hidden);
+    if (!show) { if (menu) menu.hidden = true; return; }
+    if (!this.cloudUser) return;
+    if (!menu) {
+      menu = document.createElement('div');
+      menu.id = 'account-menu'; menu.className = 'account-menu'; menu.setAttribute('role', 'menu');
+      document.body.appendChild(menu);
+      document.addEventListener('pointerdown', (e) => { if (!e.target.closest('#account-menu, #account-btn')) this.toggleAccountMenu(false); });
+      document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !menu.hidden) this.toggleAccountMenu(false); });
+    }
+    const u = this.cloudUser, p = this.cloudProfile;
+    const plan = this.cloudPlan;
+    menu.innerHTML = `
+      <div class="am-head">
+        ${this._avatarHTML()}
+        <div class="am-who"><b>${p?.username ? '@' + esc(p.username) : 'No public username yet'}</b><span class="muted">${esc(u.email || '')}</span></div>
+      </div>
+      <div class="am-plan muted">${plan ? (plan.plan === 'premium' ? '<b>Premium</b>' : `<b>Free plan</b> · up to ${plan.limit} sketches`) : ''}</div>
+      <a role="menuitem" class="am-item" href="projects/">My sketches</a>
+      <a role="menuitem" class="am-item" href="/library/">Library</a>
+      <button type="button" role="menuitem" class="am-item" data-a="profile">${p?.username ? 'Public profile…' : 'Choose a username…'}</button>
+      ${this.cloudLink ? '<button type="button" role="menuitem" class="am-item" data-a="details">Sketch details…</button>' : ''}
+      <div class="am-sep"></div>
+      <button type="button" role="menuitem" class="am-item" data-a="signout">Sign out</button>`;
+    menu.querySelector('[data-a="profile"]').addEventListener('click', () => this.editProfile());
+    menu.querySelector('[data-a="signout"]').addEventListener('click', () => { this.toggleAccountMenu(false); this.cloudSignOut(); });
+    menu.querySelector('[data-a="details"]')?.addEventListener('click', async () => {
+      this.toggleAccountMenu(false);
+      try { this.editCloudDetails(await this.cloud.load(this.cloudLink.id)); } catch (e) { this._hint("Couldn't load the sketch details."); }
+    });
+    const r = document.getElementById('account-btn').getBoundingClientRect();
+    menu.style.top = `${Math.round(r.bottom + 6)}px`;
+    menu.style.right = `${Math.max(8, Math.round(innerWidth - r.right))}px`;
+    menu.hidden = false;
+    menu.querySelector('.am-item')?.focus();
+    if (!plan) this.cloud.plan().then(pl => { this.cloudPlan = pl; if (!menu.hidden) this.toggleAccountMenu(true); }).catch(() => {});
+  }
+  _avatarHTML() {
+    const u = this.cloudUser, p = this.cloudProfile;
+    const pic = p?.avatar_url || u?.user_metadata?.avatar_url;
+    const initial = (p?.username || u?.email || '?').trim()[0].toUpperCase();
+    return pic ? `<img class="avatar" src="${esc(pic)}" alt="" referrerpolicy="no-referrer">` : `<span class="avatar">${esc(initial)}</span>`;
   }
 
   /* ---- Link between the drawing and a cloud project ---- */
@@ -246,10 +333,9 @@ export class CloudMixin {
     if (!btn || !this.cloudEnabled) return;
     const u = this.cloudUser;
     if (u) {
-      const initial = (u.user_metadata?.full_name || u.email || '?').trim()[0].toUpperCase();
-      const pic = u.user_metadata?.avatar_url;
-      btn.innerHTML = pic ? `<img class="avatar" src="${esc(pic)}" alt="" referrerpolicy="no-referrer">` : `<span class="avatar">${esc(initial)}</span>`;
-      btn.title = `${u.email || 'Account'}: your account`;
+      btn.innerHTML = this._avatarHTML() + '<span class="am-caret" aria-hidden="true">▾</span>';
+      btn.title = 'Account: my sketches, library, profile, sign out';
+      btn.setAttribute('aria-haspopup', 'menu');
     } else {
       btn.innerHTML = '<span class="btn-label">Sign in</span>';
       btn.title = 'Sign in to save your sketches';
@@ -289,6 +375,7 @@ export class CloudMixin {
     return back;
   }
   async openAccount() {
+    if (this.cloudUser) { this.toggleAccountMenu(true); return; }
     this._accountOpen = true;
     this._openList = false;
     this._signInStep = null;
@@ -296,6 +383,7 @@ export class CloudMixin {
     this._renderAccount('Loading…');
     const cloud = await this._ensureCloud();
     if (!this._accountOpen) return;
+    if (this.cloudUser) { this.closeAccount(); this.toggleAccountMenu(true); return; }
     if (!cloud) { this._renderAccount("Couldn't reach the server. Check your connection and try again."); return; }
     this._renderAccount();
   }
@@ -317,8 +405,8 @@ export class CloudMixin {
     }
     if (this._conflictRow) this._renderConflict(box);
     else if (this.cloudUser && this._openList) this._renderOpen(box);
-    else if (this.cloudUser) this._renderProjects(box);
-    else this._renderSignIn(box);
+    else if (!this.cloudUser) this._renderSignIn(box);
+    else this.closeAccount();
   }
 
   _renderSignIn(box) {
@@ -376,51 +464,6 @@ export class CloudMixin {
   }
   /** Where sign-in redirects come back to: the editor, without parameters. */
   _returnURL() { return location.origin + location.pathname; }
-
-  /** Signed in: who, plan and usage, the open drawing, My sketches. */
-  async _renderProjects(box) {
-    const u = this.cloudUser;
-    const linked = this.cloudLink;
-    box.innerHTML = `<h3>Your account</h3>
-      <div class="body">
-        <div class="account-who"><span>${esc(u.email || '')}</span><button type="button" class="link" data-a="signout">Sign out</button></div>
-        <div class="account-plan muted">Loading…</div>
-        <div class="account-name muted"></div>
-        <div class="account-current"><span class="muted">${linked ? 'This drawing is saved in your account; changes are saved as you work.' : 'This drawing is only in this browser.'}</span></div>
-        <a class="btn primary account-page" href="projects/">My sketches →</a>
-        <a class="link" href="/library/">Browse the public library</a>
-        <p class="account-msg" role="status"></p>
-      </div>
-      <div class="footer"><button type="button" class="btn" data-a="close">Close</button></div>`;
-    box.querySelector('[data-a="close"]').addEventListener('click', () => this.closeAccount());
-    box.querySelector('[data-a="signout"]').addEventListener('click', () => this.cloudSignOut());
-
-    let rows = [], plan = this.cloudPlan || { plan: 'free', limit: 3 }, profile = null;
-    try { [rows, plan, profile] = await Promise.all([this.cloud.list(), this.cloud.plan(), this.cloud.ensureProfile().catch(() => null)]); this.cloudPlan = plan; }
-    catch (e) { box.querySelector('.account-plan').textContent = e.message || "Couldn't load your account."; return; }
-    if (!this._accountOpen || !box.isConnected || box.querySelector('[data-a="signout"]') === null) return;
-    const used = rows.length, full = plan.limit != null && used >= plan.limit;
-    box.querySelector('.account-plan').innerHTML = plan.plan === 'premium'
-      ? `<b>Premium</b> · ${used} sketch${used === 1 ? '' : 'es'}`
-      : `<b>Free plan</b> · ${used} of ${plan.limit} sketches used`;
-    if (profile) {
-      const nameBox = box.querySelector('.account-name');
-      nameBox.innerHTML = `Name in the library: <b>${esc(profile.display_name)}</b> <button type="button" class="link" data-a="name">Change</button>`;
-      nameBox.querySelector('[data-a="name"]').addEventListener('click', () => this.editPublicName(profile));
-    }
-    const cur = box.querySelector('.account-current');
-    const row = linked && rows.find(r => r.id === linked.id);
-    if (row) {
-      cur.innerHTML = `<span><b>${esc(row.name)}</b><br><span class="muted">${row.description ? 'Saved in your account; changes are saved as you work.' : 'Saved in your account. Add a description (10+ characters).'}</span></span>
-        <button type="button" class="btn${row.description ? '' : ' primary'}" data-a="details">Edit details</button>`;
-      cur.querySelector('[data-a="details"]').addEventListener('click', () => this.editCloudDetails(row));
-    } else if (!full) {
-      cur.innerHTML = `<span class="muted">This drawing is only in this browser.</span><button type="button" class="btn primary" data-a="upload">Save to my account</button>`;
-      cur.querySelector('[data-a="upload"]').addEventListener('click', () => this.saveToAccount());
-    } else {
-      cur.innerHTML = `<span class="muted">This drawing is only in this browser. You've used your ${plan.limit} free sketches: delete one on My sketches to save it, or go Premium.</span>`;
-    }
-  }
 
   /* ---- Save (button, ⋯ menu, Ctrl+S) ---- */
   /** Signed in: saves now (first time: title + description). Signed out:
@@ -514,7 +557,9 @@ export class CloudMixin {
 
   /** First save of the open drawing: asks for title + description. */
   async saveToAccount() {
+    this.closeAccount();
     const plan = this.cloudPlan || await this.cloud.plan().catch(() => ({ plan: 'free', limit: 3 }));
+    if (plan.plan !== 'premium' && !(await this._ensureUsername())) { this._hint('Not saved: a public username is needed to save on the free plan.'); return; }
     const name = (this.project.name || '').trim();
     this.closeAccount();
     const row = await openDetailsDialog({
@@ -540,16 +585,6 @@ export class CloudMixin {
       onSubmit: (details) => this.cloud.updateDetails(row.id, details),
     });
     if (updated && this.cloudLink?.id === updated.id) { this._setProjectName(updated.name); this._writeLocal(); }
-  }
-
-  async editPublicName(profile) {
-    const meta = this.cloudUser?.user_metadata || {};
-    this.closeAccount();
-    const saved = await openNameDialog({
-      displayName: profile.display_name, hasPicture: !!meta.avatar_url, showPicture: !!profile.avatar_url,
-      onSubmit: (v) => this.cloud.saveProfile(v),
-    });
-    if (saved) this._hint(`Your sketches now show "${saved.display_name}" in the library.`);
   }
 
   _setProjectName(name) {

@@ -46,6 +46,13 @@ function installFake() {
       signInWithOAuth: async () => ({ error: null }),
       signOut: async () => { setSession(null); return { error: null }; },
     },
+    rpc: async (fn, args) => {
+      if (fn !== 'username_available') return { data: null, error: new Error('no such function') };
+      const me = session()?.user?.id;
+      const taken = JSON.parse(localStorage.getItem('fake-sb:t:public_profiles') || '[]')
+        .some(p => p.username && p.username.toLowerCase() === args.name.toLowerCase() && p.user_id !== me);
+      return { data: !taken, error: null };
+    },
     storage: { from: () => ({
       upload: async (path, blob) => {
         const url = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(blob); });
@@ -80,7 +87,7 @@ function installFake() {
           let out = load(DB).filter(r => r.visibility === 'public' && r.description != null).map(r => {
             const a = profiles.find(x => x.user_id === r.owner_id);
             return { id: r.id, owner_id: r.owner_id, name: r.name, description: r.description, created_at: r.created_at || r.updated_at, updated_at: r.updated_at,
-              author_name: a ? a.display_name : 'OnSketch user', author_avatar: a ? a.avatar_url : null, likes: likes.filter(l => l.project_id === r.id).length };
+              author_name: a && a.username ? a.username : 'OnSketch user', author_avatar: a && a.username ? a.avatar_url : null, likes: likes.filter(l => l.project_id === r.id).length };
           }).filter(m);
           const [k, asc] = q.order || ['created_at', false];
           out.sort((a, b) => (asc ? 1 : -1) * (typeof a[k] === 'number' ? a[k] - b[k] : String(a[k]).localeCompare(String(b[k]))));
@@ -102,6 +109,7 @@ function installFake() {
             out = [{ project_id: q.p.project_id, user_id: me() }]; all.push(out[0]);
           } else if (table === 'public_profiles') {
             const r = { user_id: me(), ...q.p };
+            if (r.username && all.some(x => x.user_id !== r.user_id && (x.username || '').toLowerCase() === r.username.toLowerCase())) return fail('duplicate key', '23505');
             const i = all.findIndex(x => x.user_id === r.user_id);
             if (i >= 0 && q.op === 'insert') return fail('duplicate key', '23505');
             if (i >= 0) all[i] = { ...all[i], ...r }; else all.push(r);
@@ -190,7 +198,21 @@ await page.fill('#account-modal input[name=code]', '123456');
 await page.click('#account-modal button[type=submit]');
 check(await page.locator('#account-btn .avatar').count() === 1 || await page.waitForSelector('#account-btn .avatar').then(() => true), 'account button shows an avatar');
 
-// Right after signing in, the save goes on: title + description required.
+// Signed in from Save: first a public username (saving publishes on the free plan).
+await page.waitForSelector('#profile-modal');
+check((await page.textContent('#profile-heading')) === 'Choose your public username', 'saving asks for a public username first');
+check((await page.inputValue('#profile-username')) === '', 'no username pre-filled from the account');
+check(!(await page.isVisible('#profile-modal .picture-opt')), 'no picture option without an account picture');
+await page.fill('#profile-username', 'Admin');
+await page.waitForFunction(() => /reserved/.test(document.querySelector('.username-hint').textContent));
+check(await page.isDisabled('#profile-modal [data-a="ok"]'), 'reserved username refused');
+await page.fill('#profile-username', 'alban.m');
+await page.waitForFunction(() => /available/.test(document.querySelector('.username-hint').textContent));
+check(true, 'username availability is checked as you type');
+if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + '/profile-dialog.png', clip: { x: 400, y: 200, width: 600, height: 500 } });
+await page.click('#profile-modal [data-a="ok"]');
+
+// Then the save goes on: title + description required.
 await page.waitForSelector('#details-modal');
 check(await page.isVisible('#details-modal .details-preview canvas'), 'save dialog shows a preview');
 check((await page.inputValue('#details-name')) === 'Shelf', 'title pre-filled from the project name');
@@ -315,28 +337,30 @@ await page.reload();
 await page.waitForFunction(() => window._app && window._app.cloudUser);
 check(await app(() => window._app.cloudLink?.id) === rows[0].id, 'reload: still signed in and linked');
 
-// Name in the library: defaults to "OnSketch user" (never the email), can be changed.
+// Account menu (avatar): username, My sketches, Library, profile, sign out.
 await page.click('#account-btn');
-await page.waitForSelector('#account-modal .account-name [data-a="name"]');
-check((await page.textContent('#account-modal .account-name')).includes('OnSketch user'), 'library name defaults to "OnSketch user", not the email');
-await page.click('#account-modal .account-name [data-a="name"]');
-await page.fill('#name-input', 'A');
-await page.click('#name-modal button[type=submit]');
-check((await page.textContent('#name-modal .account-msg')).includes('2 to 40'), 'a 1-character name is refused');
-await page.fill('#name-input', 'Alban M');
-await page.click('#name-modal button[type=submit]');
-await page.waitForFunction(() => !document.getElementById('name-modal'));
+await page.waitForSelector('#account-menu:not([hidden])');
+check(await app(() => { const m = document.getElementById('account-menu'); return m.textContent.includes('@alban.m') && m.textContent.includes('me@example.com')
+  && ['My sketches', 'Library', 'Public profile…', 'Sketch details…', 'Sign out'].every(t => [...m.querySelectorAll('.am-item')].some(i => i.textContent.trim() === t)); }),
+  'avatar opens a menu: @username, My sketches, Library, Public profile, Sketch details, Sign out');
+if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + '/account-menu.png', clip: { x: 1000, y: 0, width: 400, height: 380 } });
+await page.keyboard.press('Escape');
+check(await page.isHidden('#account-menu'), 'Escape closes the menu');
+await page.click('#account-btn');
+await page.click('#account-menu [data-a="profile"]');
+await page.waitForSelector('#profile-modal');
+check((await page.inputValue('#profile-username')) === 'alban.m', 'Public profile shows the username');
+await page.click('#profile-modal [data-a="cancel"]');
 await page.goto(base.replace('/app/', '/library/'));
 await page.waitForSelector('.lib-card .author-name');
-check((await page.textContent('.lib-card .author-name')) === 'Alban M', 'library shows the author name');
+check((await page.textContent('.lib-card .author-name')) === 'alban.m', 'library shows the chosen username');
 check(await page.locator('.lib-card .like-btn[disabled]').count() === 2, 'no thumbs-up on your own sketches');
 await page.goto(base);
 await page.waitForFunction(() => window._app && window._app.cloudUser);
 
 // Sign out keeps the drawing locally, unlinked.
 await page.click('#account-btn');
-await page.waitForSelector('#account-modal [data-a="signout"]');
-await page.click('#account-modal [data-a="signout"]');
+await page.click('#account-menu [data-a="signout"]');
 await page.waitForFunction(() => !window._app.cloudUser);
 check(await app(() => window._app.cloudLink === null && window._app.project.name === 'Shelf v2'), 'sign out: drawing stays, unlinked');
 check((await page.textContent('#account-btn')).includes('Sign in'), 'account button says Sign in again');
@@ -353,8 +377,7 @@ await page.waitForSelector('#account-modal.show .open-item');
 check((await page.textContent('#account-modal h3')) === 'Open a sketch', 'after signing in, the Open list appears');
 await page.click('#account-modal [data-a="close"]');
 await page.click('#account-btn');
-await page.waitForSelector('#account-modal [data-a="signout"]');
-await page.click('#account-modal [data-a="signout"]');
+await page.click('#account-menu [data-a="signout"]');
 await page.waitForFunction(() => !window._app.cloudUser);
 // Public library, signed out: the account's two sketches are listed.
 await page.goto(base.replace('/app/', '/library/'));
@@ -403,6 +426,13 @@ await page.waitForSelector('#account-modal input[name=code]');
 await page.fill('#account-modal input[name=code]', '123456');
 await page.click('#account-modal button[type=submit]');
 await page.waitForFunction(() => window._app.cloudUser?.email === 'other@example.com');
+await page.waitForSelector('#profile-modal');
+check((await page.textContent('#profile-heading')) === 'Choose your public username', 'first sign-in asks for a public username');
+await page.fill('#profile-username', 'ALBAN.M');
+await page.waitForFunction(() => /taken/.test(document.querySelector('.username-hint').textContent));
+check(true, "someone else's username is taken, ignoring case");
+await page.click('#profile-modal [data-a="cancel"]');
+check(await app(() => !document.getElementById('profile-modal')), '"Later" skips it');
 await page.goto(base.replace('/app/', '/library/'));
 const shelf = () => page.locator('.lib-card').filter({ has: page.locator('.card-title', { hasText: /^Shelf v2$/ }) });
 await shelf().locator('.like-btn:not([disabled])').waitFor();
@@ -418,7 +448,7 @@ await page.waitForFunction(() => document.querySelector('.lib-card .card-title')
 check(true, 'Most liked puts it first');
 await shelf().locator('.card-title a').click();
 await page.waitForSelector('#lib-detail .like-btn.on');
-check((await page.textContent('#lib-detail .author-name')) === 'Alban M', 'detail view shows the author and the thumbs-up');
+check((await page.textContent('#lib-detail .author-name')) === 'alban.m', 'detail view shows the author and the thumbs-up');
 if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + '/library-detail-likes.png' });
 await page.click('#lib-detail .like-btn');
 await page.waitForFunction(() => JSON.parse(localStorage.getItem('fake-sb:t:project_likes') || '[]').length === 0);

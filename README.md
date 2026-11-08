@@ -257,8 +257,9 @@ different layers, and hidden layers are still solved. Project files are JSON
 
 Optional sign-in (Google, or an emailed link / code) on Supabase. The
 **Sign in** button at the right of the menu bar (⋯ menu on phones) opens
-the account dialog: plan and usage, the open drawing, **My sketches**,
-sign out.
+the sign-in dialog; signed in, it shows the avatar, which opens the
+account menu: @username and email, plan, **My sketches**, **Library**,
+**Public profile…**, **Sketch details…** (for the open sketch), **Sign out**.
 
 - **Save to my account** asks for a **title** (3–80 characters) and a
   **description** (10–500), with a preview; from then on every change is
@@ -276,12 +277,17 @@ sign out.
   detail view with a shareable link (`/library/?s=<id>`), *Copy link*,
   *Report* (Formspree) and *Open a copy in the editor* (`/app/?view=<id>`:
   a browser-only copy, the previous drawing one Undo away). Works signed out.
-  Each sketch shows its **author** (the name chosen in the account dialog
-  or on My sketches, pre-filled from the Google name, never the email)
-  and a **👍 thumbs-up** button: one per signed-in user, not on your own
-  sketches, counted publicly; sort by *Most liked*. My sketches shows the
-  count on public cards. Tables `public_profiles`, `project_likes` and the
-  view `library_sketches` (migration 0003).
+  Each sketch shows its **author**: the public **username** the user chose
+  (3–24 letters, digits, _ . -, unique ignoring case, checked as they
+  type; a few names reserved), or "OnSketch user" until they choose one;
+  never the email or the Google name. The account picture appears only
+  if they tick it. The editor asks for the username on first sign-in
+  (*Later* skips it for the session) and always before a first save on
+  the free plan, since saving publishes. A **👍 thumbs-up** button: one
+  per signed-in user, not on your own sketches, counted publicly; sort by
+  *Most liked*. My sketches shows the count on public cards. Tables
+  `public_profiles`, `project_likes`, the view `library_sketches` and
+  `username_available()` (migrations 0003–0004).
 - Saves carry the revision they started from, so a save from a stale tab
   or device asks which version to keep instead of overwriting. Only the
   drawing moves the revision; title and description edits never conflict.

@@ -1,4 +1,4 @@
-import { TITLE_MIN, TITLE_MAX, DESC_MIN, DESC_MAX, NAME_MIN, NAME_MAX, LimitError, cleanText } from './cloud.js';
+import { TITLE_MIN, TITLE_MAX, DESC_MIN, DESC_MAX, LimitError, cleanText, usernameProblem } from './cloud.js';
 
 /* =============== SKETCH DETAILS DIALOG ==========================
    Title + description (+ visibility for Premium) for a cloud project.
@@ -91,44 +91,77 @@ export function openDetailsDialog({ heading = 'Sketch details', submitLabel = 'S
   });
 }
 
-/** "Your name in the library": display name (2–40) and whether to show the
- *  account picture. onSubmit({ displayName, showPicture }) may throw. */
-export function openNameDialog({ displayName = '', hasPicture = false, showPicture = true, onSubmit }) {
+/** Public profile: username (unique, checked as you type) and whether the
+ *  account picture is shown. `firstTime` words it as the sign-up step.
+ *  Resolves to onSubmit's result, or null when cancelled / "Later". */
+export function openProfileDialog({ username = '', picture = null, showPicture = false, firstTime = false,
+  reason = '', checkAvailable, onSubmit }) {
   return new Promise((resolve) => {
     const back = document.createElement('div');
     back.className = 'modal-backdrop show';
-    back.id = 'name-modal';
+    back.id = 'profile-modal';
     back.innerHTML = `
-      <form class="modal account" role="dialog" aria-modal="true" aria-labelledby="name-heading" novalidate>
-        <h3 id="name-heading">Your name in the library</h3>
+      <form class="modal account profile" role="dialog" aria-modal="true" aria-labelledby="profile-heading" novalidate>
+        <h3 id="profile-heading">${firstTime ? 'Choose your public username' : 'Your public profile'}</h3>
         <div class="body">
-          <p class="muted">Shown next to your public sketches. Your email address is never shown.</p>
-          <label for="name-input">Name</label>
-          <input type="text" id="name-input" name="name" minlength="${NAME_MIN}" maxlength="${NAME_MAX}" autocomplete="nickname" value="${esc(displayName)}" />
-          ${hasPicture ? `<label class="check"><input type="checkbox" name="pic" ${showPicture ? 'checked' : ''} /> Show my account picture</label>` : ''}
+          <p class="muted">${esc(reason || 'Sketches on the free plan are public: the library shows them with this username. Your email address and your real name are never shown.')}</p>
+          <label for="profile-username">Username</label>
+          <div class="username-row"><span class="at">@</span><input type="text" id="profile-username" name="username" maxlength="24" autocomplete="username"
+            autocapitalize="none" spellcheck="false" value="${esc(username)}" placeholder="e.g. woodshop_tom" /></div>
+          <p class="username-hint muted" aria-live="polite">3 to 24 letters, digits, _ . or -</p>
+          ${picture ? `<label class="check picture-opt"><input type="checkbox" name="pic" ${showPicture ? 'checked' : ''} />
+            <img src="${esc(picture)}" alt="" referrerpolicy="no-referrer"> Show my account picture next to my sketches</label>` : ''}
           <p class="account-msg" role="status"></p>
         </div>
         <div class="footer">
-          <button type="button" class="btn" data-a="cancel">Cancel</button>
-          <button type="submit" class="btn primary">Save</button>
+          <button type="button" class="btn" data-a="cancel">${firstTime ? 'Later' : 'Cancel'}</button>
+          <button type="submit" class="btn primary" data-a="ok">${firstTime ? 'Continue' : 'Save'}</button>
         </div>
       </form>`;
     document.body.appendChild(back);
     const form = back.querySelector('form');
+    const input = form.elements.username;
+    const hint = back.querySelector('.username-hint');
     const msg = back.querySelector('.account-msg');
-    const close = (v) => { back.remove(); resolve(v); };
+    const ok = back.querySelector('[data-a="ok"]');
+    let seq = 0, timer, available = null;
+    const setHint = (text, state) => { hint.textContent = text; hint.dataset.state = state || ''; };
+    const check = () => {
+      const name = cleanText(input.value);
+      const problem = usernameProblem(name);
+      available = null;
+      if (problem) { setHint(name ? problem : '3 to 24 letters, digits, _ . or -', name ? 'bad' : ''); ok.disabled = true; return; }
+      if (name.toLowerCase() === username.toLowerCase() && username) { available = true; setHint('This is your username.', 'good'); ok.disabled = false; return; }
+      setHint('Checking…'); ok.disabled = true;
+      const mine = ++seq;
+      clearTimeout(timer);
+      timer = setTimeout(async () => {
+        let free;
+        try { free = await checkAvailable(name); } catch { free = null; }
+        if (mine !== seq) return;
+        available = free;
+        if (free === false) setHint(`@${name} is taken. Try another one.`, 'bad');
+        else setHint(free ? `@${name} is available.` : "Couldn't check right now; it will be checked when you save.", free ? 'good' : '');
+        ok.disabled = free === false;
+      }, 300);
+    };
+    const close = (v) => { clearTimeout(timer); back.remove(); resolve(v); };
+    input.addEventListener('input', () => { msg.textContent = ''; msg.classList.remove('error'); check(); });
     back.querySelector('[data-a="cancel"]').addEventListener('click', () => close(null));
-    back.addEventListener('pointerdown', (e) => { if (e.target === back) close(null); });
+    back.addEventListener('pointerdown', (e) => { if (e.target === back && !firstTime) close(null); });
     back.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.stopPropagation(); close(null); } });
     form.addEventListener('submit', async (ev) => {
       ev.preventDefault();
-      const name = cleanText(form.elements.name.value);
-      if (name.length < NAME_MIN || name.length > NAME_MAX) { msg.textContent = `Your name needs ${NAME_MIN} to ${NAME_MAX} characters.`; msg.classList.add('error'); return; }
+      const name = cleanText(input.value);
+      const problem = usernameProblem(name);
+      if (problem || available === false) { msg.textContent = problem || 'This username is taken.'; msg.classList.add('error'); return; }
+      ok.disabled = true;
       msg.classList.remove('error'); msg.textContent = 'Saving…';
-      try { close(await onSubmit({ displayName: name, showPicture: hasPicture ? form.elements.pic.checked : false })); }
-      catch (e) { msg.classList.add('error'); msg.textContent = e.message || "Couldn't save."; }
+      try { close(await onSubmit({ username: name, showPicture: !!form.elements.pic?.checked })); }
+      catch (e) { ok.disabled = false; msg.classList.add('error'); msg.textContent = e.message || "Couldn't save."; }
     });
-    form.elements.name.focus();
-    form.elements.name.select();
+    check();
+    input.focus();
+    input.select();
   });
 }

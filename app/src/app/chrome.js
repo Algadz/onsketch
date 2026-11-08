@@ -67,6 +67,10 @@ export class ChromeMixin {
       case 'theme':        this.setTheme(this.themeName === 'dark' ? 'light' : 'dark'); break;
       case 'reset-layout': this.windows.reset(); break;
       case 'account':      this.openAccount(); break;
+      case 'my-sketches':  location.href = 'projects/'; break;
+      case 'library':      location.href = '/library/'; break;
+      case 'profile':      this.editProfile(); break;
+      case 'signout':      this.cloudSignOut(); break;
     }
   }
 

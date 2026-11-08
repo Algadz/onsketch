@@ -1,5 +1,5 @@
 import { openCloud, isConfigured, LimitError } from '../cloud/cloud.js';
-import { openDetailsDialog, openNameDialog } from '../cloud/details-dialog.js';
+import { openDetailsDialog, openProfileDialog } from '../cloud/details-dialog.js';
 
 /* =============== MY SKETCHES (/app/projects/) ==================
    The signed-in user's cloud projects as cards: preview, title,
@@ -68,7 +68,7 @@ class Page {
 
   async load() {
     try {
-      [this.rows, this.plan, this.profile] = await Promise.all([this.cloud.list(), this.cloud.plan(), this.cloud.ensureProfile().catch(() => null)]);
+      [this.rows, this.plan, this.profile] = await Promise.all([this.cloud.list(), this.cloud.plan(), this.cloud.profile().catch(() => null)]);
     } catch (e) { return this.message(esc(e.message || "Couldn't load your sketches.")); }
     this.message('');
     [this.thumbs, this.likes] = await Promise.all([
@@ -91,10 +91,10 @@ class Page {
         <button type="button" class="link" data-a="upgrade">Upgrade →</button>`;
       usage.querySelector('[data-a="upgrade"]').addEventListener('click', () => this.upgrade());
     }
-    if (this.profile) {
-      usage.insertAdjacentHTML('beforeend', `<span class="usage-name">Shown in the <a href="/library/">library</a> as <b>${esc(this.profile.display_name)}</b> <button type="button" class="link" data-a="name">Change</button></span>`);
-      usage.querySelector('[data-a="name"]').addEventListener('click', () => this.editName());
-    }
+    usage.insertAdjacentHTML('beforeend', this.profile?.username
+      ? `<span class="usage-name">Shown in the <a href="/library/">library</a> as <b>@${esc(this.profile.username)}</b> <button type="button" class="link" data-a="name">Edit profile</button></span>`
+      : `<span class="usage-name">No public username yet <button type="button" class="link" data-a="name">Choose one</button></span>`);
+    usage.querySelector('[data-a="name"]').addEventListener('click', () => this.editName());
 
     const open = linkedId();
     const cards = this.rows.map(r => {
@@ -161,9 +161,9 @@ class Page {
   }
 
   async editName() {
-    const meta = this.user.user_metadata || {};
-    const saved = await openNameDialog({
-      displayName: this.profile.display_name, hasPicture: !!meta.avatar_url, showPicture: !!this.profile.avatar_url,
+    const saved = await openProfileDialog({
+      username: this.profile?.username || '', picture: await this.cloud.accountPicture(), showPicture: !!this.profile?.avatar_url,
+      firstTime: !this.profile?.username, checkAvailable: (n) => this.cloud.usernameAvailable(n),
       onSubmit: (v) => this.cloud.saveProfile(v),
     });
     if (saved) { this.profile = saved; this.render(); }

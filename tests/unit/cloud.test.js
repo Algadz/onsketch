@@ -148,3 +148,13 @@ test('save keeps the cloud title when the project name is too short', async () =
   const urls = await cloud.thumbnailURLs([row]);
   assert.match(urls.get(row.id), /u1\/.*\.webp$/);
 });
+
+test('usernames: 3–24 letters, digits, _ . -, not reserved', async () => {
+  const { usernameProblem } = await import('../../app/src/cloud/cloud.js');
+  for (const ok of ['alban', 'woodshop_tom', 'a.b-c', 'X12']) assert.equal(usernameProblem(ok), '', ok);
+  assert.match(usernameProblem('ab'), /3 to 24/);
+  assert.match(usernameProblem('x'.repeat(25)), /3 to 24/);
+  assert.match(usernameProblem('_tom'), /starting with a letter/);
+  assert.match(usernameProblem('tom smith'), /letters, digits/);
+  assert.match(usernameProblem('Admin'), /reserved/);
+});
