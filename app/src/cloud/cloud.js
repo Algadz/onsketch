@@ -49,7 +49,7 @@ export class Cloud {
     const { error } = await this.client.auth.signInWithOtp({ email, options: { emailRedirectTo: redirectTo } });
     if (error) throw error;
   }
-  /** Signs in with the 6-digit code from the sign-in email. */
+  /** Signs in with the code from the sign-in email (6 to 10 digits, set in Supabase). */
   async verifyEmailCode(email, code) {
     const { data, error } = await this.client.auth.verifyOtp({ email, token: String(code).trim(), type: 'email' });
     if (error) throw error;

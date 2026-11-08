@@ -258,7 +258,7 @@ export class CloudMixin {
         <p class="muted">Keep your projects in your account and open them on any device. Without an account, OnSketch keeps working in this browser.</p>
         ${step ? `
           <p>We sent a link to <b>${esc(step.email)}</b>. Open it on this device, or type the code from the email:</p>
-          <input type="text" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="123456" />
+          <input type="text" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="Code from the email" />
           <button type="submit" class="btn primary">Sign in</button>
           <button type="button" class="link" data-a="back">Use another email</button>`
         : `

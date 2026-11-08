@@ -48,7 +48,7 @@ Policies: owners read / insert / update / delete their rows; anyone reads
 ### Phase 2: account UI ✅
 - Menu bar: **Sign in** button (account chip with avatar / email once signed
   in; menu: My projects, Sign out). Phone layout: same entries in the ⋯ menu.
-- Sign-in dialog: email → "check your inbox" (magic link, plus the 6-digit
+- Sign-in dialog: email → "check your inbox" (magic link, plus the emailed
   code for phones where the link opens another browser); Google / GitHub
   buttons for the providers that are enabled.
 - Return from the email / OAuth redirect lands back in `/app/` signed in
