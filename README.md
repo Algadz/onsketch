@@ -259,6 +259,12 @@ sign out.
   detail view with a shareable link (`/library/?s=<id>`), *Copy link*,
   *Report* (Formspree) and *Open a copy in the editor* (`/app/?view=<id>`:
   a browser-only copy, the previous drawing one Undo away). Works signed out.
+  Each sketch shows its **author** (the name chosen in the account dialog
+  or on My sketches, pre-filled from the Google name, never the email)
+  and a **👍 thumbs-up** button: one per signed-in user, not on your own
+  sketches, counted publicly; sort by *Most liked*. My sketches shows the
+  count on public cards. Tables `public_profiles`, `project_likes` and the
+  view `library_sketches` (migration 0003).
 - Saves carry the revision they started from, so a save from a stale tab
   or device asks which version to keep instead of overwriting. Only the
   drawing moves the revision; title and description edits never conflict.

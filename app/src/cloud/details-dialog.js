@@ -1,4 +1,4 @@
-import { TITLE_MIN, TITLE_MAX, DESC_MIN, DESC_MAX, LimitError, cleanText } from './cloud.js';
+import { TITLE_MIN, TITLE_MAX, DESC_MIN, DESC_MAX, NAME_MIN, NAME_MAX, LimitError, cleanText } from './cloud.js';
 
 /* =============== SKETCH DETAILS DIALOG ==========================
    Title + description (+ visibility for Premium) for a cloud project.
@@ -88,5 +88,47 @@ export function openDetailsDialog({ heading = 'Sketch details', submitLabel = 'S
     });
     validate();
     (name.length >= TITLE_MIN ? form.elements.description : form.elements.name).focus();
+  });
+}
+
+/** "Your name in the library": display name (2–40) and whether to show the
+ *  account picture. onSubmit({ displayName, showPicture }) may throw. */
+export function openNameDialog({ displayName = '', hasPicture = false, showPicture = true, onSubmit }) {
+  return new Promise((resolve) => {
+    const back = document.createElement('div');
+    back.className = 'modal-backdrop show';
+    back.id = 'name-modal';
+    back.innerHTML = `
+      <form class="modal account" role="dialog" aria-modal="true" aria-labelledby="name-heading" novalidate>
+        <h3 id="name-heading">Your name in the library</h3>
+        <div class="body">
+          <p class="muted">Shown next to your public sketches. Your email address is never shown.</p>
+          <label for="name-input">Name</label>
+          <input type="text" id="name-input" name="name" minlength="${NAME_MIN}" maxlength="${NAME_MAX}" autocomplete="nickname" value="${esc(displayName)}" />
+          ${hasPicture ? `<label class="check"><input type="checkbox" name="pic" ${showPicture ? 'checked' : ''} /> Show my account picture</label>` : ''}
+          <p class="account-msg" role="status"></p>
+        </div>
+        <div class="footer">
+          <button type="button" class="btn" data-a="cancel">Cancel</button>
+          <button type="submit" class="btn primary">Save</button>
+        </div>
+      </form>`;
+    document.body.appendChild(back);
+    const form = back.querySelector('form');
+    const msg = back.querySelector('.account-msg');
+    const close = (v) => { back.remove(); resolve(v); };
+    back.querySelector('[data-a="cancel"]').addEventListener('click', () => close(null));
+    back.addEventListener('pointerdown', (e) => { if (e.target === back) close(null); });
+    back.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.stopPropagation(); close(null); } });
+    form.addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const name = cleanText(form.elements.name.value);
+      if (name.length < NAME_MIN || name.length > NAME_MAX) { msg.textContent = `Your name needs ${NAME_MIN} to ${NAME_MAX} characters.`; msg.classList.add('error'); return; }
+      msg.classList.remove('error'); msg.textContent = 'Saving…';
+      try { close(await onSubmit({ displayName: name, showPicture: hasPicture ? form.elements.pic.checked : false })); }
+      catch (e) { msg.classList.add('error'); msg.textContent = e.message || "Couldn't save."; }
+    });
+    form.elements.name.focus();
+    form.elements.name.select();
   });
 }

@@ -17,17 +17,17 @@ const day = (iso) => new Date(iso).toLocaleDateString(undefined, { day: 'numeric
 const PLACEHOLDER = `<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M7 23 C 11 9, 15 9, 16 16 S 21 24, 25 9" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><circle cx="7" cy="23" r="2.2" fill="currentColor"/><circle cx="25" cy="9" r="2.2" fill="currentColor"/></svg>`;
 
 class Library {
-  constructor() { this.rows = []; this.thumbs = new Map(); this.offset = 0; this.query = { search: '', sort: 'new' }; this.seq = 0; }
+  constructor() { this.rows = []; this.thumbs = new Map(); this.liked = new Set(); this.user = null; this.offset = 0; this.query = { search: '', sort: 'new' }; this.seq = 0; }
 
   async start() {
     if (!isConfigured()) return this.message('The library is not available on this site.');
     try { this.cloud = await openCloud({ createClient: window.__onsketchCreateClient || null }); }
     catch { return this.message("Couldn't reach the server. Check your connection and reload."); }
-    this.cloud.user().then(u => {
-      if (!u) return;
+    this.user = await this.cloud.user().catch(() => null);
+    if (this.user) {
       const a = $('lib-account');
       a.textContent = 'My sketches'; a.href = '/app/projects/';
-    }).catch(() => {});
+    }
 
     const form = $('lib-search');
     let timer;
@@ -59,9 +59,12 @@ class Library {
     try { res = await this.cloud.library({ ...this.query, offset: this.offset, limit: PAGE }); }
     catch (e) { if (seq === this.seq) this.message(esc(e.message || "Couldn't load the library.")); btn.disabled = false; return; }
     if (seq !== this.seq) return;                 // a newer search started meanwhile
-    const thumbs = await this.cloud.thumbnailURLs(res.rows).catch(() => new Map());
+    const [thumbs, liked] = await Promise.all([
+      this.cloud.thumbnailURLs(res.rows).catch(() => new Map()),
+      this.user ? this.cloud.likedIds(res.rows.map(r => r.id)).catch(() => new Set()) : new Set()]);
     if (seq !== this.seq) return;
     for (const [k, v] of thumbs) this.thumbs.set(k, v);
+    for (const id of liked) this.liked.add(id);
     this.rows.push(...res.rows);
     this.offset += res.rows.length;
     btn.hidden = !res.more; btn.disabled = false;
@@ -71,6 +74,7 @@ class Library {
     $('grid').insertAdjacentHTML('beforeend', res.rows.map(r => this.card(r)).join(''));
     $('grid').querySelectorAll('.sketch-card:not([data-ready])').forEach(li => {
       li.dataset.ready = '1';
+      li.querySelector('.like-btn').addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); this.toggleLike(li.dataset.id); });
       li.addEventListener('click', (e) => {
         if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;   // new tab: follow the link
         e.preventDefault();
@@ -88,9 +92,44 @@ class Library {
       <div class="card-body">
         <h2 class="card-title"><a href="?s=${encodeURIComponent(r.id)}">${esc(r.name)}</a></h2>
         <p class="card-desc">${esc(r.description)}</p>
-        <div class="card-meta"><span>${esc(day(r.created_at || r.updated_at))}</span></div>
+        <div class="card-meta">${this.author(r)}${this.likeButton(r)}</div>
       </div>
     </li>`;
+  }
+
+  author(r, big = false) {
+    const pic = r.author_avatar
+      ? `<img class="avatar" src="${esc(r.author_avatar)}" alt="" referrerpolicy="no-referrer" loading="lazy">`
+      : `<span class="avatar">${esc((r.author_name || '?').trim()[0].toUpperCase())}</span>`;
+    return `<span class="author${big ? ' big' : ''}">${pic}<span class="author-name">${esc(r.author_name || 'OnSketch user')}</span>${big ? '' : ` · ${esc(day(r.created_at || r.updated_at))}`}</span>`;
+  }
+  likeButton(r) {
+    const mine = this.user && r.owner_id === this.user.id;
+    const on = this.liked.has(r.id);
+    const title = mine ? 'Your sketch' : (this.user ? (on ? 'Remove your thumbs-up' : 'Thumbs up: this is a good sketch') : 'Sign in to give a thumbs-up');
+    return `<button type="button" class="like-btn${on ? ' on' : ''}" data-like="${esc(r.id)}" aria-pressed="${on}" title="${title}" aria-label="${title} (${r.likes || 0})"${mine ? ' disabled' : ''}>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10v11H3V10zM7 10l4-8c1.7 0 3 1.3 3 3v4h5.5a2 2 0 0 1 2 2.4l-1.4 7A2 2 0 0 1 18.1 21H7"/></svg>
+      <span class="like-count">${r.likes || 0}</span></button>`;
+  }
+  async toggleLike(id) {
+    if (!this.user) { location.href = '/app/?signin'; return; }
+    const row = this.rows.find(r => r.id === id) || this._detailRow;
+    if (!row || row.owner_id === this.user.id || this._liking) return;
+    const was = this.liked.has(id);
+    this._liking = true;
+    const copies = [...new Set([row, this.rows.find(x => x.id === id)].filter(Boolean))];   // card and detail may be two objects
+    const apply = (on) => {
+      if (on) this.liked.add(id); else this.liked.delete(id);
+      for (const r of copies) r.likes = Math.max(0, (r.likes || 0) + (on ? 1 : -1));
+      document.querySelectorAll(`.like-btn[data-like="${CSS.escape(id)}"]`).forEach(b => {
+        b.classList.toggle('on', on); b.setAttribute('aria-pressed', on);
+        b.querySelector('.like-count').textContent = copies[0].likes;
+      });
+    };
+    apply(!was);
+    try { if (was) await this.cloud.unlike(id); else await this.cloud.like(id); }
+    catch { apply(was); }
+    finally { this._liking = false; }
   }
 
   /* ---- Detail view (/library/?s=<id>) ---- */
@@ -113,6 +152,10 @@ class Library {
       back.querySelector('[data-a="close"]').addEventListener('click', () => this.closeDetail(true));
       return;
     }
+    this._detailRow = row;
+    if (this.user && !this.liked.has(row.id) && !this.rows.includes(row)) {
+      for (const lid of await this.cloud.likedIds([row.id]).catch(() => new Set())) this.liked.add(lid);
+    }
     document.title = `${row.name} - OnSketch library`;
     const thumb = this.thumbs.get(row.id);
     const link = `${location.origin}/library/?s=${encodeURIComponent(row.id)}`;
@@ -120,6 +163,7 @@ class Library {
       <div class="lib-detail-thumb">${thumb ? `<img src="${esc(thumb)}" alt="Preview of ${esc(row.name)}">` : `<span class="thumb-empty">${PLACEHOLDER}<span>No preview yet</span></span>`}</div>
       <div class="body">
         <h3 id="lib-detail-title">${esc(row.name)}</h3>
+        <div class="lib-detail-by">${this.author(row, true)}${this.likeButton(row)}</div>
         <p class="lib-detail-desc">${esc(row.description)}</p>
         <p class="muted">Shared ${esc(day(row.created_at || row.updated_at))}${row.updated_at && row.created_at && day(row.updated_at) !== day(row.created_at) ? ` · updated ${esc(day(row.updated_at))}` : ''}</p>
         <p class="account-msg" role="status"></p>
@@ -135,6 +179,7 @@ class Library {
       catch { msg.textContent = link; }
     });
     back.querySelector('[data-a="report"]').addEventListener('click', () => this.report(row, msg));
+    back.querySelector('.like-btn').addEventListener('click', () => this.toggleLike(row.id));
     back.querySelector('a.btn.primary').focus();
   }
   detailBox() {

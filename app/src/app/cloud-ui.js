@@ -1,6 +1,6 @@
 import { Project } from '../core/model.js';
 import { isConfigured, openCloud, ConflictError, LimitError, TITLE_MIN } from '../cloud/cloud.js';
-import { openDetailsDialog } from '../cloud/details-dialog.js';
+import { openDetailsDialog, openNameDialog } from '../cloud/details-dialog.js';
 import { renderThumbnail, thumbnailBlob } from '../render/thumbnail.js';
 
 /* =============== ACCOUNT AND CLOUD PROJECTS ====================
@@ -129,6 +129,7 @@ export class CloudMixin {
     if (this.compact) this._refreshMoreMenu?.();
     if (user && !was) {
       this.cloud.plan().then(p => { this.cloudPlan = p; if (this._accountOpen && !this._conflictRow) this._renderAccount(); }).catch(() => {});
+      this.cloud.ensureProfile().catch(() => {});              // the name shown in the library
       if (this._accountOpen) this._renderAccount();
       this._cloudSync();
     }
@@ -358,6 +359,7 @@ export class CloudMixin {
       <div class="body">
         <div class="account-who"><span>${esc(u.email || '')}</span><button type="button" class="link" data-a="signout">Sign out</button></div>
         <div class="account-plan muted">Loading…</div>
+        <div class="account-name muted"></div>
         <div class="account-current"><span class="muted">${linked ? 'This drawing is saved in your account; changes are saved as you work.' : 'This drawing is only in this browser.'}</span></div>
         <a class="btn primary account-page" href="projects/">My sketches →</a>
         <a class="link" href="/library/">Browse the public library</a>
@@ -367,14 +369,19 @@ export class CloudMixin {
     box.querySelector('[data-a="close"]').addEventListener('click', () => this.closeAccount());
     box.querySelector('[data-a="signout"]').addEventListener('click', () => this.cloudSignOut());
 
-    let rows = [], plan = this.cloudPlan || { plan: 'free', limit: 3 };
-    try { [rows, plan] = await Promise.all([this.cloud.list(), this.cloud.plan()]); this.cloudPlan = plan; }
+    let rows = [], plan = this.cloudPlan || { plan: 'free', limit: 3 }, profile = null;
+    try { [rows, plan, profile] = await Promise.all([this.cloud.list(), this.cloud.plan(), this.cloud.ensureProfile().catch(() => null)]); this.cloudPlan = plan; }
     catch (e) { box.querySelector('.account-plan').textContent = e.message || "Couldn't load your account."; return; }
     if (!this._accountOpen || !box.isConnected || box.querySelector('[data-a="signout"]') === null) return;
     const used = rows.length, full = plan.limit != null && used >= plan.limit;
     box.querySelector('.account-plan').innerHTML = plan.plan === 'premium'
       ? `<b>Premium</b> · ${used} sketch${used === 1 ? '' : 'es'}`
       : `<b>Free plan</b> · ${used} of ${plan.limit} sketches used`;
+    if (profile) {
+      const nameBox = box.querySelector('.account-name');
+      nameBox.innerHTML = `Name in the library: <b>${esc(profile.display_name)}</b> <button type="button" class="link" data-a="name">Change</button>`;
+      nameBox.querySelector('[data-a="name"]').addEventListener('click', () => this.editPublicName(profile));
+    }
     const cur = box.querySelector('.account-current');
     const row = linked && rows.find(r => r.id === linked.id);
     if (row) {
@@ -417,6 +424,16 @@ export class CloudMixin {
       onSubmit: (details) => this.cloud.updateDetails(row.id, details),
     });
     if (updated && this.cloudLink?.id === updated.id) { this._setProjectName(updated.name); this._writeLocal(); }
+  }
+
+  async editPublicName(profile) {
+    const meta = this.cloudUser?.user_metadata || {};
+    this.closeAccount();
+    const saved = await openNameDialog({
+      displayName: profile.display_name, hasPicture: !!meta.avatar_url, showPicture: !!profile.avatar_url,
+      onSubmit: (v) => this.cloud.saveProfile(v),
+    });
+    if (saved) this._hint(`Your sketches now show "${saved.display_name}" in the library.`);
   }
 
   _setProjectName(name) {

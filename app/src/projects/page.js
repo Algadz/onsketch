@@ -1,5 +1,5 @@
 import { openCloud, isConfigured, LimitError } from '../cloud/cloud.js';
-import { openDetailsDialog } from '../cloud/details-dialog.js';
+import { openDetailsDialog, openNameDialog } from '../cloud/details-dialog.js';
 
 /* =============== MY SKETCHES (/app/projects/) ==================
    The signed-in user's cloud projects as cards: preview, title,
@@ -68,10 +68,12 @@ class Page {
 
   async load() {
     try {
-      [this.rows, this.plan] = await Promise.all([this.cloud.list(), this.cloud.plan()]);
+      [this.rows, this.plan, this.profile] = await Promise.all([this.cloud.list(), this.cloud.plan(), this.cloud.ensureProfile().catch(() => null)]);
     } catch (e) { return this.message(esc(e.message || "Couldn't load your sketches.")); }
     this.message('');
-    this.thumbs = await this.cloud.thumbnailURLs(this.rows).catch(() => new Map());
+    [this.thumbs, this.likes] = await Promise.all([
+      this.cloud.thumbnailURLs(this.rows).catch(() => new Map()),
+      this.cloud.likeCounts(this.rows.filter(r => r.visibility === 'public').map(r => r.id)).catch(() => new Map())]);
     this.render();
   }
 
@@ -88,6 +90,10 @@ class Page {
         <span class="meter${used >= limit ? ' full' : ''}" role="meter" aria-valuemin="0" aria-valuemax="${limit}" aria-valuenow="${used}" aria-label="Sketches used"><span style="width:${pct}%"></span></span>
         <button type="button" class="link" data-a="upgrade">Upgrade →</button>`;
       usage.querySelector('[data-a="upgrade"]').addEventListener('click', () => this.upgrade());
+    }
+    if (this.profile) {
+      usage.insertAdjacentHTML('beforeend', `<span class="usage-name">Shown in the <a href="/library/">library</a> as <b>${esc(this.profile.display_name)}</b> <button type="button" class="link" data-a="name">Change</button></span>`);
+      usage.querySelector('[data-a="name"]').addEventListener('click', () => this.editName());
     }
 
     const open = linkedId();
@@ -106,7 +112,7 @@ class Page {
           <p class="card-desc">${r.description ? esc(r.description) : '<span class="missing">No description yet. <button type="button" class="link" data-a="details">Add one</button></span>'}</p>
           <div class="card-meta">
             <span>${esc(when(r.updated_at))}</span>
-            <span class="tag ${r.visibility === 'private' ? 'private' : 'public'}">${r.visibility === 'private' ? '🔒 Private' : 'Public'}</span>
+            <span class="card-tags">${r.visibility === 'public' && this.likes?.has(r.id) ? `<span class="likes-pill" title="Thumbs-up in the library">👍 ${this.likes.get(r.id)}</span>` : ''}<span class="tag ${r.visibility === 'private' ? 'private' : 'public'}">${r.visibility === 'private' ? '🔒 Private' : 'Public'}</span></span>
           </div>
         </div>
       </li>`;
@@ -154,6 +160,14 @@ class Page {
     });
   }
 
+  async editName() {
+    const meta = this.user.user_metadata || {};
+    const saved = await openNameDialog({
+      displayName: this.profile.display_name, hasPicture: !!meta.avatar_url, showPicture: !!this.profile.avatar_url,
+      onSubmit: (v) => this.cloud.saveProfile(v),
+    });
+    if (saved) { this.profile = saved; this.render(); }
+  }
   async editDetails(row) {
     const thumb = this.thumbs.get(row.id);
     const updated = await openDetailsDialog({

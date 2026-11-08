@@ -14,7 +14,8 @@ const SUPABASE_ESM = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/
 const LIST_COLUMNS = 'id,name,description,visibility,revision,updated_at,created_at';
 const THUMBS = 'thumbnails';
 
-export const TITLE_MIN = 3, TITLE_MAX = 80, DESC_MIN = 10, DESC_MAX = 500;
+export const TITLE_MIN = 3, TITLE_MAX = 80, DESC_MIN = 10, DESC_MAX = 500, NAME_MIN = 2, NAME_MAX = 40;
+const LIBRARY_COLUMNS = 'id,owner_id,name,description,created_at,updated_at,author_name,author_avatar,likes';
 /** Projects allowed per plan (null = no limit); mirrors plan_project_limit() in SQL. */
 export const PLAN_LIMITS = { free: 3, premium: null };
 
@@ -191,25 +192,85 @@ export class Cloud {
     }
   }
 
-  /* ---- Public library ---- */
-  /** Public sketches (with a description), newest first. `search` matches
-   *  title or description. Returns { rows, more }. */
+  /* ---- Public library (view library_sketches, migration 0003) ---- */
+  /** Public sketches with author and likes. sort: 'new' | 'updated' |
+   *  'popular'. `search` matches title or description. Returns { rows, more }. */
   async library({ search = '', offset = 0, limit = 24, sort = 'new' } = {}) {
-    let q = this.client.from('projects')
-      .select('id,owner_id,name,description,updated_at,created_at')
-      .eq('visibility', 'public').not('description', 'is', null);
+    let q = this.client.from('library_sketches').select(LIBRARY_COLUMNS);
     const words = librarySearch(search);
     if (words) q = q.or(`name.ilike.%${words}%,description.ilike.%${words}%`);
-    q = q.order(sort === 'updated' ? 'updated_at' : 'created_at', { ascending: false }).range(offset, offset + limit);
-    const { data, error } = await q;
+    if (sort === 'popular') q = q.order('likes', { ascending: false }).order('created_at', { ascending: false });
+    else q = q.order(sort === 'updated' ? 'updated_at' : 'created_at', { ascending: false });
+    const { data, error } = await q.range(offset, offset + limit);
     if (error) throw error;
     return { rows: data.slice(0, limit), more: data.length > limit };
   }
   /** One public sketch (no drawing data), or null. */
   async libraryItem(id) {
-    const { data, error } = await this.client.from('projects')
-      .select('id,owner_id,name,description,updated_at,created_at,visibility')
-      .eq('id', id).eq('visibility', 'public').maybeSingle();
+    const { data, error } = await this.client.from('library_sketches').select(LIBRARY_COLUMNS).eq('id', id).maybeSingle();
+    if (error) throw error;
+    return data;
+  }
+  /** Like counts of some of the user's public sketches: Map id → count. */
+  async likeCounts(ids) {
+    if (!ids.length) return new Map();
+    const { data, error } = await this.client.from('library_sketches').select('id,likes').in('id', ids);
+    if (error) return new Map();
+    return new Map(data.map(r => [r.id, r.likes]));
+  }
+  /** Which of `ids` the signed-in user has liked (a Set). */
+  async likedIds(ids) {
+    const user = await this.user();
+    if (!user || !ids.length) return new Set();
+    const { data, error } = await this.client.from('project_likes').select('project_id').eq('user_id', user.id).in('project_id', ids);
+    if (error) return new Set();
+    return new Set(data.map(r => r.project_id));
+  }
+  async like(id) {
+    const { error } = await this.client.from('project_likes').insert({ project_id: id });
+    if (error && error.code !== '23505') throw error;          // already liked: fine
+  }
+  async unlike(id) {
+    const user = await this.user();
+    if (!user) return;
+    const { error } = await this.client.from('project_likes').delete().eq('project_id', id).eq('user_id', user.id);
+    if (error) throw error;
+  }
+
+  /* ---- Public profile: the name shown with public sketches ---- */
+  async profile() {
+    const user = await this.user();
+    if (!user) return null;
+    const { data, error } = await this.client.from('public_profiles').select('user_id,display_name,avatar_url').eq('user_id', user.id).maybeSingle();
+    if (error) throw error;
+    return data;
+  }
+  /** Creates the profile on first sign-in, from the account's name
+   *  (Google) or "OnSketch user"; never from the email address. */
+  async ensureProfile() {
+    const user = await this.user();
+    if (!user) return null;
+    const existing = await this.profile().catch(() => null);
+    if (existing) return existing;
+    const meta = user.user_metadata || {};
+    let name = cleanText(meta.full_name || meta.name || '').slice(0, NAME_MAX);
+    if (name.length < NAME_MIN) name = 'OnSketch user';
+    const avatar = typeof meta.avatar_url === 'string' && /^https:\/\//.test(meta.avatar_url) && meta.avatar_url.length <= 500 ? meta.avatar_url : null;
+    const { data, error } = await this.client.from('public_profiles')
+      .insert({ display_name: name, avatar_url: avatar }).select('user_id,display_name,avatar_url').single();
+    if (error) { if (error.code === '23505') return this.profile(); throw error; }
+    return data;
+  }
+  /** Changes the display name (2–40 characters); `showPicture` false removes the picture. */
+  async saveProfile({ displayName, showPicture = true }) {
+    const user = await this.user();
+    if (!user) throw new Error('Not signed in.');
+    const name = cleanText(displayName);
+    if (name.length < NAME_MIN || name.length > NAME_MAX) throw new Error(`Your name needs ${NAME_MIN} to ${NAME_MAX} characters.`);
+    const meta = user.user_metadata || {};
+    const avatar = showPicture && typeof meta.avatar_url === 'string' && /^https:\/\//.test(meta.avatar_url) ? meta.avatar_url.slice(0, 500) : null;
+    const { data, error } = await this.client.from('public_profiles')
+      .upsert({ user_id: user.id, display_name: name, avatar_url: avatar }).select('user_id,display_name,avatar_url').single();
     if (error) throw error;
     return data;
   }
