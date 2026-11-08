@@ -483,6 +483,24 @@ if (process.env.SHOT_DIR) { await page.click('#site-account .site-acc-btn'); awa
 check(errors.length === 0, 'no page errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
 await ctx.close();
 
+// Start-up: while the modules load, only a clean shell in the saved theme shows.
+{
+  const c4 = await browser.newContext({ colorScheme: 'dark' });
+  await c4.route(/umami|jsdelivr|supabase\.co/, r => r.abort());
+  const p4 = await c4.newPage();
+  let release; const gate = new Promise(r => { release = r; });
+  await p4.route(/\/src\/main\.js/, async r => { await gate; r.continue(); });
+  p4.goto(base).catch(() => {});
+  await p4.waitForSelector('#menubar');
+  const during = await p4.evaluate(() => ({ booting: document.documentElement.classList.contains('booting'), theme: document.documentElement.dataset.theme,
+    win: getComputedStyle(document.querySelector('.fwin')).visibility, btn: getComputedStyle(document.querySelector('#menubar [data-action="save"]')).visibility }));
+  check(during.booting && during.theme === 'dark' && during.win === 'hidden' && during.btn === 'hidden', `start-up: windows and buttons hidden, theme set before the editor loads (${JSON.stringify(during)})`);
+  release();
+  await p4.waitForFunction(() => window._app && !document.documentElement.classList.contains('booting'));
+  check(await p4.evaluate(() => getComputedStyle(document.querySelector('.fwin')).visibility === 'visible'), 'start-up: everything shows once the editor is ready');
+  await c4.close();
+}
+
 // Signed out, nothing cloud-related is downloaded.
 {
   const c2 = await browser.newContext();

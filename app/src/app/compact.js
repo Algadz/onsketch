@@ -13,6 +13,7 @@ import { ACTION_ICONS, DRAW_TOOLS, TOOLS, TOOL_ICONS, WINDOW_ICONS, toolDef } fr
    Mouse / desktop screens never match the media query, so the desktop
    layout is unchanged; all compact styles live under `.compact`.
    ============================================================ */
+// Also used by the inline start-up script in app/index.html: keep both in step.
 const COMPACT_QUERY = '(pointer: coarse) and (max-width: 699px), (pointer: coarse) and (max-height: 499px)';
 const PAINT_TOOLS = ['fill', 'pen', 'marker', 'eraser'];
 const PANELS = [['layers', 'Layers'], ['colors', 'Colours'], ['props', 'Properties'], ['equations', 'Equations']];
@@ -39,7 +40,7 @@ export class CompactMixin {
 
   setCompact(on) {
     on = !!on;
-    if (this.compact === on) return;
+    if (this.compact === on && document.documentElement.classList.contains('compact') === on) return;
     this.compact = on;
     document.documentElement.classList.toggle('compact', on);
     this.windows.setCompact(on);

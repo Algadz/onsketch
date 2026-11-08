@@ -22,6 +22,13 @@ node scripts/landing-shots.mjs # regenerate landing page images (hero + examples
 node scripts/build-examples.mjs # regenerate app/examples/*.json (opened with /app/?example=<slug>)
 ```
 
+While the modules load, `app/index.html` shows only a clean shell: an
+inline script sets the saved theme and the phone layout before the first
+paint, `html.booting` hides the menu bar buttons, windows and status bar,
+and a "Loading the editor…" note appears only after 0.4 s. `main.js`
+removes the class once the windows are placed and fades the interface in;
+if the editor fails to start (or takes over 12 s), the note offers Reload.
+
 `app/index.html` carries an import map that points every module at
 `file.js?v=<content hash>`, so browsers never mix a fresh page with stale
 cached modules after a deploy. `npm test` fails if the stamp is out of date.

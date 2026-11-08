@@ -543,6 +543,31 @@
   .report-status.error { color: var(--overc); }
   .btn:disabled { opacity: 0.55; cursor: default; }
 
+  /* ---------- Start-up (html.booting until main.js has built the UI) ---------- */
+  html.booting #menubar > :not(.brand),
+  html.booting #optbar > *,
+  html.booting #statusbar > *,
+  html.booting .fwin,
+  html.booting #mobilebar,
+  html.booting #fab-delete { visibility: hidden; }
+  #boot { display: none; }
+  html.booting #boot {
+    position: fixed; inset: 0; z-index: 5; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 12px; color: var(--text-muted); font-size: 13px; pointer-events: none;
+    opacity: 0; animation: boot-in .25s ease-out .4s forwards;      /* only shows when loading is slow */
+  }
+  html.boot-slow #boot { pointer-events: auto; animation-delay: 0s; }
+  #boot svg { width: 40px; height: 40px; animation: boot-pulse 1.4s ease-in-out infinite; }
+  #boot a { color: var(--accent); }
+  @keyframes boot-in { to { opacity: 1; } }
+  @keyframes boot-pulse { 50% { opacity: .45; } }
+  @keyframes ui-in { from { opacity: 0; } }
+  html.ui-in #menubar > :not(.brand), html.ui-in #optbar > *, html.ui-in #statusbar > *, html.ui-in .fwin { animation: ui-in .2s ease-out; }
+  @media (prefers-reduced-motion: reduce) {
+    #boot svg { animation: none; }
+    html.ui-in #menubar > :not(.brand), html.ui-in #optbar > *, html.ui-in #statusbar > *, html.ui-in .fwin { animation: none; }
+  }
+
   /* ---------- Modal ---------- */
   .modal-backdrop {
     position: fixed; inset: 0;
