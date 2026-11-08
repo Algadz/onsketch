@@ -23,6 +23,7 @@ export class PanelsMixin {
     this._refreshColorsPanel();
     this._refreshSketchWindow();
     this._refreshOptionsBar();
+    this._refreshFab();
     document.getElementById('project-name').value = this.project.name;
   }
 

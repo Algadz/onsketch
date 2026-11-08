@@ -155,6 +155,18 @@ export class DimLinksMixin {
       label: allCons ? `Set as normal geometry${n}` : `Set as construction${n}`,
       run: () => this.setConstruction(targets, !allCons),
     });
+    if (this.touchUI) {
+      const sel = this._selectionCount ? this._selectionCount() : 0;
+      out.push({
+        id: 'delete',
+        label: item.selected && sel > 1 ? `Delete (${sel})` : 'Delete',
+        run: () => {
+          if (!item.selected) { this.clearSelection(); this.setSelected(item, true); }
+          this.deleteSelection();
+          this.refreshUI();
+        },
+      });
+    }
     const lines = targets.filter(e => e instanceof Line);
     if (lines.length) {
       out.push({

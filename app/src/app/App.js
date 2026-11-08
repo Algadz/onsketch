@@ -80,6 +80,7 @@ export class App {
     this._setupReport();
     this._loadStylusPref();
     this._setupCompact();
+    this._setupFab();
     this._setupResize();
     const restored = this.loadLocalIfAny();
     this._setupAutosave();
@@ -490,7 +491,7 @@ export class App {
         row.type = 'button';
         row.className = 'context-menu-item action';
         row.dataset.action = a.id;
-        row.innerHTML = `<span class="glyph">${a.id === 'midpoint' ? '⌐' : '┄'}</span><span>${a.label}</span>`;
+        row.innerHTML = `<span class="glyph">${a.id === 'midpoint' ? '⌐' : a.id === 'delete' ? '✕' : '┄'}</span><span>${a.label}</span>`;
         row.addEventListener('click', () => { this.hideContextMenu(); a.run(); });
         menu.appendChild(row);
       }

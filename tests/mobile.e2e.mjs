@@ -42,11 +42,11 @@ async function open(device, path = '/app/?example=desk') {
   return { ctx, page, errors, touch, drag };
 }
 const app = (page, fn, arg) => page.evaluate(fn, arg);
-const lineMidOnScreen = (page) => app(page, () => {
+const lineMidOnScreen = (page, t = 0.5) => app(page, (t) => {
   const a = window._app, l = a.activeSketch().entities.find(e => e.constructor.kind === 'line' && a.isEntityInteractive(e));
-  const s = a.view.worldToScreen({ x: (l.p1.x + l.p2.x) / 2, y: (l.p1.y + l.p2.y) / 2 }); const r = a.canvas.getBoundingClientRect();
+  const s = a.view.worldToScreen({ x: l.p1.x + (l.p2.x - l.p1.x) * t, y: l.p1.y + (l.p2.y - l.p1.y) * t }); const r = a.canvas.getBoundingClientRect();
   return { x: s.x + r.left, y: s.y + r.top, id: l.id };
-});
+}, t);
 
 /* ---------------- Phone: iPhone 13 portrait ---------------- */
 {
@@ -88,22 +88,48 @@ const lineMidOnScreen = (page) => app(page, () => {
   let lm = await lineMidOnScreen(page);
   await page.touchscreen.tap(lm.x + 2, lm.y + 5);
   check(await app(page, () => window._app.selectedEntitiesAndPoints().length) === 1, 'phone: a tap near a line selects it (finger tolerance)');
-  const hasDelete = await app(page, () => !!document.querySelector('#optbar [data-touch="delete"]') && !!document.querySelector('#optbar [data-nudge]'));
-  check(hasDelete, 'phone: selection shows Delete and nudge arrows');
+  const fab = await app(page, () => { const b = document.getElementById('fab-delete').getBoundingClientRect();
+    return { shown: !document.getElementById('fab-delete').hidden && b.width > 0, inside: b.left >= 0 && b.right <= innerWidth && b.bottom <= innerHeight, nudge: !!document.querySelector('#optbar [data-nudge]') }; });
+  check(fab.shown && fab.inside && fab.nudge, `phone: a selection shows an on-screen Delete button and nudge arrows (${JSON.stringify(fab)})`);
   const count = () => app(page, () => { const s = window._app.activeSketch(); return s.entities.length + s.constraints.length; });
   const e0 = await count();
-  await page.tap('#optbar [data-touch="delete"]');
+  await page.tap('#fab-delete');
   const e1 = await count();
   await touch('touchStart', [[120, 200], [200, 210]]); await touch('touchEnd', []);
   const e2 = await count();
   check(e1 < e0 && e2 === e0, `phone: Delete removes, two-finger tap undoes (${e0} → ${e1} → ${e2})`);
 
-  // Long press: context menu with the shape actions.
-  lm = await lineMidOnScreen(page);
+  // Long press: context menu with the shape actions, Delete included
+  // (at 75%: the rest of this edge carries dimension labels).
+  lm = await lineMidOnScreen(page, 0.75);
   await touch('touchStart', [[lm.x, lm.y]]); await page.waitForTimeout(600); await touch('touchEnd', []);
   const menu = await app(page, () => [...document.querySelectorAll('#context-menu .action')].map(e => e.dataset.action).join(','));
-  check(/construction/.test(menu) && /midpoint/.test(menu), `phone: long press opens the shape menu (${menu})`);
-  await app(page, () => window._app.hideContextMenu());
+  check(/construction/.test(menu) && /midpoint/.test(menu) && /delete/.test(menu), `phone: long press opens the shape menu (${menu})`);
+  const beforeDel = await count();
+  await page.tap('#context-menu [data-action="delete"]');
+  check(await count() < beforeDel, 'phone: Delete in the long-press menu removes the shape');
+  await touch('touchStart', [[120, 200], [200, 210]]); await touch('touchEnd', []);
+
+  // Dimensions: tap the label then Delete; long press the label for its menu.
+  await app(page, () => { window._app.clearSelection(); window._app.requestRender(); });
+  await page.waitForTimeout(100);
+  const dimAt = () => app(page, () => { const a = window._app, r = a.renderer.lastDimRects.find(x => x.constraint.name === 'D4'), c = a.canvas.getBoundingClientRect();
+    return { x: c.left + r.x + r.w / 2, y: c.top + r.y + r.h / 2 }; });
+  let da = await dimAt();
+  await touch('touchStart', [[da.x, da.y]]); await page.waitForTimeout(600); await touch('touchEnd', []);
+  const dmenu = await app(page, () => [document.querySelector('#context-menu .context-menu-title')?.textContent, [...document.querySelectorAll('#context-menu .action')].map(e => e.dataset.action).join(',')]);
+  check(/Dimension D4/.test(dmenu[0]) && dmenu[1] === 'edit,delete', `phone: long press on a dimension offers Edit value and Delete (${dmenu})`);
+  await page.tap('#context-menu [data-action="delete"]');
+  const gone = await app(page, () => !window._app.activeSketch().constraints.some(c => c.name === 'D4'));
+  check(gone, 'phone: Delete dimension removes it');
+  await touch('touchStart', [[120, 200], [200, 210]]); await touch('touchEnd', []);
+  await page.waitForTimeout(100);
+  da = await dimAt();
+  await page.touchscreen.tap(da.x, da.y);
+  const fabDim = await app(page, () => !document.getElementById('fab-delete').hidden);
+  await page.tap('#fab-delete');
+  check(fabDim && await app(page, () => !window._app.activeSketch().constraints.some(c => c.name === 'D4')), 'phone: tap a dimension, then the Delete button removes it');
+  check(await app(page, () => document.getElementById('fab-delete').hidden), 'phone: the Delete button hides when nothing is selected');
 
   // Panels as bottom sheets, one at a time.
   await page.tap('[data-slot="panels"]'); await page.tap('#mb-flyout [data-id="panel:layers"]');
@@ -195,8 +221,8 @@ const lineMidOnScreen = (page) => app(page, () => {
   await page.goto(base + '/app/'); await page.waitForFunction(() => window._app);
   await page.mouse.move(600, 400); await page.mouse.down(); await page.mouse.up();
   const m = await app(page, () => ({ cls: document.documentElement.className, bar: getComputedStyle(document.getElementById('mobilebar')).display,
-    more: getComputedStyle(document.getElementById('more-btn')).display, tol: window._app.snap.tolPx, badge: window._app.renderer.badgeSize }));
-  check(!/compact|touch-ui/.test(m.cls) && m.bar === 'none' && m.more === 'none' && m.tol === 10 && !m.badge, `desktop: no phone or touch UI (${JSON.stringify(m)})`);
+    more: getComputedStyle(document.getElementById('more-btn')).display, fab: getComputedStyle(document.getElementById('fab-delete')).display, tol: window._app.snap.tolPx, badge: window._app.renderer.badgeSize }));
+  check(!/compact|touch-ui/.test(m.cls) && m.bar === 'none' && m.more === 'none' && m.fab === 'none' && m.tol === 10 && !m.badge, `desktop: no phone or touch UI (${JSON.stringify(m)})`);
   const narrow = await browser.newContext({ viewport: { width: 600, height: 700 } });
   const p2 = await narrow.newPage(); await p2.goto(base + '/app/'); await p2.waitForFunction(() => window._app);
   check(!(await p2.evaluate(() => document.documentElement.classList.contains('compact'))), 'desktop: a narrow mouse window keeps the desktop layout');

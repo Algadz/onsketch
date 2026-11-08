@@ -22,7 +22,6 @@ export class TouchUIMixin {
     if (t.id === 'select') {
       html += sep + `<button class="tbtn toggle${this.multiSelect ? ' on' : ''}" data-touch="multi" title="Add to selection: taps add or remove instead of replacing">＋<span class="btn-label">Multi-select</span></button>`;
       if (hasSel) {
-        html += `<button class="tbtn" data-touch="delete" title="Delete the selection">✕<span class="btn-label">Delete</span></button>`;
         html += sep + `<span class="nudge" aria-label="Nudge selection by ${this._nudgeStep()} ${esc(this.project.units)}">`
           + ['←', '↑', '↓', '→'].map((g, i) => `<button class="tbtn" data-nudge="${i}" title="Nudge ${['left', 'up', 'down', 'right'][i]}">${g}</button>`).join('')
           + `<span class="opt-val">${this._nudgeStep()} ${esc(this.project.units)}</span></span>`;
@@ -49,6 +48,56 @@ export class TouchUIMixin {
       const [dx, dy] = [[-s, 0], [0, s], [0, -s], [s, 0]][+b.dataset.nudge];
       this.nudgeSelection(dx, dy);
     }));
+  }
+
+  /* ---- Floating Delete button ----
+     Shown on touch devices whenever anything is selected: shapes, points,
+     dimensions, relations or ink. Deletes the whole selection (one undo
+     step), like the Delete key. */
+  _selectionCount() {
+    const s = this.activeSketch(); if (!s) return 0;
+    return this.selectedEntitiesAndPoints().length + this.selectedStrokes().length;
+  }
+  _refreshFab() {
+    const b = document.getElementById('fab-delete');
+    if (!b) return;
+    const n = this.touchUI ? this._selectionCount() : 0;
+    b.hidden = !n;
+    if (n) b.querySelector('span').textContent = n > 1 ? `Delete (${n})` : 'Delete';
+  }
+  _setupFab() {
+    const b = document.getElementById('fab-delete');
+    if (!b) return;
+    b.addEventListener('click', () => { this.deleteSelection(); this.refreshUI(); this.requestRender(); });
+  }
+
+  /** Long press on a dimension label or a relation badge: select it and
+   *  offer Delete (and Edit value for a driving dimension). */
+  showConstraintMenu(c, clientX, clientY) {
+    this.hideContextMenu();
+    this.clearSelection();
+    this.setSelected(c, true);
+    this.refreshUI();
+    this.requestRender();
+    const menu = document.createElement('div');
+    menu.id = 'context-menu';
+    menu.addEventListener('pointerdown', e => e.stopPropagation());
+    const isDim = c.value != null && c.kind !== 'offset';
+    const title = isDim ? `Dimension ${c.name || ''}`.trim() : 'Relation';
+    const row = (action, glyph, label) => `<button type="button" class="context-menu-item action" data-action="${action}"><span class="glyph">${glyph}</span><span>${label}</span></button>`;
+    menu.innerHTML = `<div class="context-menu-title">${esc(title)}</div>`
+      + (isDim && !c.driven ? row('edit', '✎', 'Edit value') : '')
+      + row('delete', '✕', isDim ? 'Delete dimension' : 'Delete relation');
+    menu.querySelector('[data-action="delete"]').addEventListener('click', () => { this.hideContextMenu(); this.deleteSelection(); this.refreshUI(); });
+    menu.querySelector('[data-action="edit"]')?.addEventListener('click', () => { this.hideContextMenu(); this.editDimValue(c); });
+    document.body.appendChild(menu);
+    const r = menu.getBoundingClientRect(), m = 8;
+    menu.style.left = Math.max(m, Math.min(clientX, innerWidth - r.width - m)) + 'px';
+    menu.style.top = Math.max(m, Math.min(clientY, innerHeight - r.height - m)) + 'px';
+    this.contextMenuEl = menu;
+    this.contextMenuDocPointerDown = (e) => { if (this.contextMenuEl && !this.contextMenuEl.contains(e.target)) this.hideContextMenu(); };
+    setTimeout(() => document.addEventListener('pointerdown', this.contextMenuDocPointerDown), 0);
+    return true;
   }
 
   /** A round step of about 12 screen pixels: 1, 2 or 5 × 10ⁿ. */

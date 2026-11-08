@@ -992,6 +992,19 @@
   .touch-ui #optbar > *, .compact #optbar > * { flex-shrink: 0; }   /* scroll, never overlap */
   .touch-ui .context-menu-item { min-height: 40px; }
 
+  /* Floating Delete button (touch-ui.js), touch devices only */
+  #fab-delete { display: none; }
+  .touch-ui #fab-delete:not([hidden]) {
+    display: inline-flex; align-items: center; gap: 8px;
+    position: absolute; right: 12px; bottom: 12px; z-index: 20;
+    height: 46px; padding: 0 18px 0 16px; border-radius: 23px;
+    border: 0; background: var(--overc); color: #fff;
+    font: 600 15px -apple-system, "Segoe UI", system-ui, sans-serif;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25); cursor: pointer;
+  }
+  .touch-ui #fab-delete:active { filter: brightness(0.92); }
+  .context-menu-title { padding: 6px 10px 4px; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-muted); }
+
   /* Dimension keypad (touch-ui.js) */
   #dimpad {
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 1200;

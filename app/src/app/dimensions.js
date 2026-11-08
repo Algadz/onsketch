@@ -11,7 +11,7 @@ export class DimensionLabelsMixin {
     const rects = this.renderer.lastRelRects || [];
     for (let i = rects.length - 1; i >= 0; i--) {
       const r = rects[i];
-      const m = this._hitPad();
+      const m = 0;                 // badges are already enlarged for touch
       if (sx >= r.x - m && sx <= r.x + r.w + m && sy >= r.y - m && sy <= r.y + r.h + m) return r.constraint;
     }
     return null;
@@ -21,7 +21,7 @@ export class DimensionLabelsMixin {
     const rects = this.renderer.lastDimRects || [];
     for (let i = rects.length - 1; i >= 0; i--) {
       const r = rects[i];
-      const m = this._hitPad();
+      const m = this._hitPad() / 2;   // touch: a little extra around labels
       if (sx >= r.x - m && sx <= r.x + r.w + m && sy >= r.y - m && sy <= r.y + r.h + m) return r.constraint;
     }
     return null;

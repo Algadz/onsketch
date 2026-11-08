@@ -158,6 +158,8 @@ export class TouchMixin {
     pend.longPressed = true;
     const { screen, world } = this._canvasHandlers.getWorld(pend.ev);
     if (this._valueInput) return;                 // a value box is open: nothing to show
+    const c = this.hitRelationAtScreen(screen.x, screen.y) || this.hitDimAtScreen(screen.x, screen.y);
+    if (c && this.showConstraintMenu(c, pend.start.x, pend.start.y)) { try { navigator.vibrate?.(12); } catch { /* not supported */ } return; }
     if (this.showContextMenu(screen, world, { clientX: pend.start.x, clientY: pend.start.y })) {
       try { navigator.vibrate?.(12); } catch { /* not supported */ }
     }
