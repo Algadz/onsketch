@@ -28,6 +28,7 @@ export class SolveMixin {
     if (this.undoStack.length > 100) this.undoStack.shift();
     this.redoStack.length = 0;
     if (this._refreshLayerPanel) this._refreshLayerPanel();   // entity counts
+    this.scheduleAutosave();
   }
 
 

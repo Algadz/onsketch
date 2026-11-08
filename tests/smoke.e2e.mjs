@@ -814,6 +814,16 @@ await page.evaluate(() => { const a = window._app; a.project.layer('ly1').visibl
 
 }
 
+// The project survives a reload (autosaved to the browser, restored on open).
+{
+  const sig = () => page.evaluate(() => { const s = window._app.activeSketch(); return JSON.stringify({ e: s.entities.length, c: s.constraints.length, l: window._app.project.layers.length }); });
+  const before = await sig();
+  await page.reload();
+  await page.waitForFunction(() => window._app);
+  const after = await sig();
+  check(before === after && JSON.parse(after).e > 0, `project restored after reload (${before} → ${after})`);
+}
+
 await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
 if (shot) await page.screenshot({ path: shot });
 check(errors.length === 0, `no page errors${errors.length ? ': ' + errors.join(' / ') : ''}`);

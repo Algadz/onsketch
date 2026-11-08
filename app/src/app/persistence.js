@@ -1,20 +1,47 @@
 import { Project } from '../core/model.js';
 
+const STORE_KEY = 'sketchcad:last';
+
 export class PersistenceMixin {
 
-  /* ---- Storage ---- */
+  /* ---- Storage ----
+     The project is kept in the browser under STORE_KEY: written shortly
+     after every change (autosave), when the page is hidden or closed,
+     and by the Save button; read back when the editor opens. */
   saveLocal() {
-    localStorage.setItem('sketchcad:last', JSON.stringify(this.project.toJSON()));
+    if (!this._writeLocal()) return;
     const pill = document.getElementById('status-solve');
     const old = pill.textContent;
     pill.textContent = 'saved to browser';
     setTimeout(() => pill.textContent = old, 1500);
   }
+  _writeLocal() {
+    clearTimeout(this._autosaveTimer);
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(this.project.toJSON())); return true; }
+    catch (e) { console.warn('save failed', e); return false; }
+  }
+  /** Saves a moment after the last change, so a burst of edits is one write. */
+  scheduleAutosave() {
+    clearTimeout(this._autosaveTimer);
+    this._autosaveTimer = setTimeout(() => this._writeLocal(), 400);
+  }
+  /** Restores the last saved project. Bad or missing data leaves the new
+   *  empty project in place. */
   loadLocalIfAny() {
-    const raw = localStorage.getItem('sketchcad:last');
+    let raw = null;
+    try { raw = localStorage.getItem(STORE_KEY); } catch { return false; }
     if (!raw) return false;
-    try { this.project = Project.fromJSON(JSON.parse(raw)); return true; }
-    catch (e) { console.warn('load failed', e); return false; }
+    try {
+      const p = Project.fromJSON(JSON.parse(raw));
+      if (!p.active()) return false;
+      this.project = p;
+      return true;
+    } catch (e) { console.warn('load failed', e); return false; }
+  }
+  _setupAutosave() {
+    const flush = () => this._writeLocal();
+    window.addEventListener('pagehide', flush);
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flush(); });
   }
   newProject() {
     if (!confirm('Discard current project and start a new one?')) return;
@@ -22,6 +49,7 @@ export class PersistenceMixin {
     this.undoStack.length = 0; this.redoStack.length = 0;
     this.selectionOrder = [];
     this.refreshUI(); this.solveAndRender();
+    this._writeLocal();
   }
   exportJSON() { this._modal('Export JSON', JSON.stringify(this.project.toJSON(), null, 2), false); }
   importJSON() {
@@ -84,6 +112,7 @@ export class PersistenceMixin {
     this.refreshUI();
     this.solveAndRender();
     this._primeFillRegions();
+    this.scheduleAutosave();
   }
 
   _setupResize() {

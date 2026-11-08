@@ -42,6 +42,12 @@ cached modules after a deploy. `npm test` fails if the stamp is out of date.
   else); other layers are ignored. Its cursor is a paint drop in the fill
   colour, pointing at the click spot.
 
+## Saving
+
+The project autosaves to the browser (`localStorage`) shortly after every
+change and when the page is hidden or closed; the editor reopens it on load.
+Save forces a write. Export / Import JSON moves a project between browsers.
+
 ## Dimensions, units and equations
 
 - Typed dimension values take units: `4in`, `1.5"`, `2ft`, `35cm`, `25mm`,

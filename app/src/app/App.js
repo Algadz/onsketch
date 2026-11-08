@@ -71,8 +71,11 @@ export class App {
     this.renderer.labelFor = (c, text) => this.dimensionLabel(c, text);
     this._setupModal();
     this._setupResize();
+    const restored = this.loadLocalIfAny();
+    this._setupAutosave();
     this.refreshUI();
     this.solveAndRender();
+    if (restored) { this._primeFillRegions(); this.zoomFit(); }
     this._loop();
   }
 
