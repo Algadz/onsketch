@@ -32,7 +32,8 @@ function installFake() {
   const DB = 'fake-sb:rows', SES = 'fake-sb:session';
   const listeners = new Set();
   const session = () => JSON.parse(localStorage.getItem(SES) || 'null');
-  const setSession = (s) => { if (s) localStorage.setItem(SES, JSON.stringify(s)); else localStorage.removeItem(SES); listeners.forEach(cb => cb(s ? 'SIGNED_IN' : 'SIGNED_OUT', s)); };
+  const SB_KEY = 'sb-rwmzpzaqijgdfsjmpqbd-auth-token';   // where the real supabase-js keeps the session
+  const setSession = (s) => { if (s) { localStorage.setItem(SES, JSON.stringify(s)); localStorage.setItem(SB_KEY, JSON.stringify(s)); } else { localStorage.removeItem(SES); localStorage.removeItem(SB_KEY); } listeners.forEach(cb => cb(s ? 'SIGNED_IN' : 'SIGNED_OUT', s)); };
   window.__fakeSent = [];
   window.__onsketchCreateClient = () => ({
     auth: {
@@ -432,7 +433,8 @@ await page.fill('#profile-username', 'ALBAN.M');
 await page.waitForFunction(() => /taken/.test(document.querySelector('.username-hint').textContent));
 check(true, "someone else's username is taken, ignoring case");
 await page.click('#profile-modal [data-a="cancel"]');
-check(await app(() => !document.getElementById('profile-modal')), '"Later" skips it');
+await page.waitForURL(/\/library\//);
+check(true, '"Later" skips it, and sign-in from the library returns to the library');
 await page.goto(base.replace('/app/', '/library/'));
 const shelf = () => page.locator('.lib-card').filter({ has: page.locator('.card-title', { hasText: /^Shelf v2$/ }) });
 await shelf().locator('.like-btn:not([disabled])').waitFor();
@@ -455,6 +457,29 @@ await page.waitForFunction(() => JSON.parse(localStorage.getItem('fake-sb:t:proj
 check((await page.textContent('#lib-detail .like-count')) === '0', 'clicking again takes the thumbs-up back');
 await page.keyboard.press('Escape');
 
+// Landing page: account menu when signed in, Sign in (and back) when signed out.
+const home = base.replace('/app/', '/');
+await page.goto(home);
+await page.waitForSelector('#site-account .site-acc-btn');
+await page.click('#site-account .site-acc-btn');
+check(await app(() => { const m = document.querySelector('#site-account .site-acc-menu'); return !m.hidden && m.textContent.includes('other@example.com')
+  && ['My sketches', 'Library', 'Open the editor', 'Sign out'].every(t => [...m.querySelectorAll('a, button')].some(i => i.textContent.trim() === t)); }),
+  'landing page: avatar menu with My sketches, Library, Open the editor, Sign out');
+await page.click('#site-account [data-a="signout"]');
+await page.waitForSelector('#site-account .site-acc-signin');
+check(await app(() => !localStorage.getItem('fake-sb:session')), 'landing page: Sign out signs out');
+check(/back=%2F$/.test(await page.getAttribute('#site-account .site-acc-signin', 'href')), 'landing page: Sign in link comes back here');
+await page.click('#site-account .site-acc-signin');
+await page.waitForSelector('#account-modal.show input[type=email]');
+await page.fill('#account-modal input[type=email]', 'me@example.com');
+await page.click('#account-modal button[type=submit]');
+await page.fill('#account-modal input[name=code]', '123456');
+await page.click('#account-modal button[type=submit]');
+await page.waitForURL(home);
+await page.waitForFunction(() => /@alban\.m/.test(document.querySelector('#site-account .site-acc-head')?.textContent || ''));
+check(true, 'signing in from the landing page returns to it, showing @username');
+if (process.env.SHOT_DIR) { await page.click('#site-account .site-acc-btn'); await page.screenshot({ path: process.env.SHOT_DIR + '/landing-menu.png', clip: { x: 700, y: 0, width: 700, height: 340 } }); }
+
 check(errors.length === 0, 'no page errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
 await ctx.close();
 
@@ -469,6 +494,10 @@ await ctx.close();
   await p2.waitForFunction(() => window._app);
   await p2.waitForTimeout(300);
   check(fetched.length === 0, 'first visit loads nothing from Supabase');
+  await p2.setViewportSize({ width: 390, height: 800 });
+  await p2.goto(base.replace('/app/', '/'));
+  await p2.waitForSelector('#site-account .site-acc-signin');
+  check(fetched.length === 0 && await p2.evaluate(() => document.documentElement.scrollWidth <= 390), 'landing page signed out: Sign in, nothing loaded from Supabase, fits a phone');
   await c2.close();
 }
 

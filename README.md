@@ -260,6 +260,12 @@ Optional sign-in (Google, or an emailed link / code) on Supabase. The
 the sign-in dialog; signed in, it shows the avatar, which opens the
 account menu: @username and email, plan, **My sketches**, **Library**,
 **Public profile…**, **Sketch details…** (for the open sketch), **Sign out**.
+The landing page and the library show the same account state through
+`app/src/site/account.js`: *Sign in* when signed out (it comes back to
+the page afterwards, `/app/?signin&back=<path>`), the avatar with a menu
+(@username, My sketches, Library, Open the editor, Sign out) when signed
+in. Signed-out visitors load nothing from Supabase: the widget looks for
+the stored session first.
 
 - **Save to my account** asks for a **title** (3–80 characters) and a
   **description** (10–500), with a preview; from then on every change is

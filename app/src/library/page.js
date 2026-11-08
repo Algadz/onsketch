@@ -1,4 +1,5 @@
 import { openCloud, isConfigured } from '../cloud/cloud.js';
+import { mountAccount } from '../site/account.js';
 
 /* =============== PUBLIC LIBRARY (/library/) =====================
    Every public sketch that has a description, newest first, with
@@ -24,10 +25,7 @@ class Library {
     try { this.cloud = await openCloud({ createClient: window.__onsketchCreateClient || null }); }
     catch { return this.message("Couldn't reach the server. Check your connection and reload."); }
     this.user = await this.cloud.user().catch(() => null);
-    if (this.user) {
-      const a = $('lib-account');
-      a.textContent = 'My sketches'; a.href = '/app/projects/';
-    }
+    mountAccount($('lib-account'));
 
     const form = $('lib-search');
     let timer;
@@ -112,7 +110,7 @@ class Library {
       <span class="like-count">${r.likes || 0}</span></button>`;
   }
   async toggleLike(id) {
-    if (!this.user) { location.href = '/app/?signin'; return; }
+    if (!this.user) { location.href = `/app/?signin&back=${encodeURIComponent(location.pathname + location.search)}`; return; }
     const row = this.rows.find(r => r.id === id) || this._detailRow;
     if (!row || row.owner_id === this.user.id || this._liking) return;
     const was = this.liked.has(id);

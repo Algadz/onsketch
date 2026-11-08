@@ -22,7 +22,8 @@ import { renderThumbnail, thumbnailBlob } from '../render/thumbnail.js';
 const LINK_KEY = 'onsketch:cloud';
 const PUSH_DELAY = 2500;
 const THUMB_EVERY = 30000;        // at most one thumbnail upload per 30 s
-const PAGE_PARAMS = ['project', 'view', 'new', 'signin'];
+const PAGE_PARAMS = ['project', 'view', 'new', 'signin', 'back'];
+const BACK_KEY = 'onsketch:back-after-sign-in';   // sessionStorage: page to return to
 const PROFILE_ASKED = 'onsketch:profile-asked';   // sessionStorage: "Later" was clicked this session
 const PENDING_SAVE = 'onsketch:after-sign-in';   // sessionStorage: 'save' | 'open', survives the sign-in redirect
 const AUTH_PARAMS = ['code', 'error', 'error_code', 'error_description'];
@@ -59,6 +60,8 @@ export class CloudMixin {
     const params = new URLSearchParams(location.search);
     const returning = AUTH_PARAMS.some(k => params.has(k));
     this._urlRequest = PAGE_PARAMS.find(k => params.has(k)) ? { what: PAGE_PARAMS.find(k => params.has(k)), id: params.get('project') || params.get('view') } : null;
+    const back = params.get('back');
+    if (back && /^\/(?!\/)[\w\-./?=&%]*$/.test(back)) { try { sessionStorage.setItem(BACK_KEY, back); } catch { /* storage unavailable */ } }
     if (this._urlRequest) {
       PAGE_PARAMS.forEach(k => params.delete(k));
       history.replaceState(null, '', location.pathname + (params.toString() ? '?' + params : '') + location.hash);
@@ -79,6 +82,7 @@ export class CloudMixin {
   async _handleURLRequest() {
     const req = this._urlRequest; this._urlRequest = null;
     if (!req) return;
+    if (req.what === 'back') return;
     if (req.what === 'view') { if (this.cloud) await this.openPublicCopy(req.id); else this._hint("Couldn't reach the library. Check your connection."); return; }
     if (!this.cloud || !this.cloudUser) { this.openAccount(); return; }
     if (req.what === 'signin') { this.openAccount(); return; }
@@ -152,6 +156,9 @@ export class CloudMixin {
       try { sessionStorage.setItem(PROFILE_ASKED, '1'); } catch { /* storage unavailable */ }
       await this.editProfile({ firstTime: true });
     }
+    let back = null;
+    try { back = sessionStorage.getItem(BACK_KEY); sessionStorage.removeItem(BACK_KEY); } catch { /* storage unavailable */ }
+    if (back && !this._pending()) { location.href = back; return; }
     this._resumePendingSave();
   }
 
@@ -388,7 +395,7 @@ export class CloudMixin {
     this._renderAccount();
   }
   closeAccount() {
-    if (this._accountOpen && !this.cloudUser) { try { sessionStorage.removeItem(PENDING_SAVE); } catch { /* storage unavailable */ } }
+    if (this._accountOpen && !this.cloudUser) { try { sessionStorage.removeItem(PENDING_SAVE); sessionStorage.removeItem(BACK_KEY); } catch { /* storage unavailable */ } }
     this._accountOpen = false;
     this._openList = false;
     this._conflictRow = null;

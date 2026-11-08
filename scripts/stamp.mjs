@@ -28,6 +28,7 @@ export const PAGES = [
   { file: 'index.html', base: '' },
   { file: 'projects/index.html', base: '../' },
   { file: '../library/index.html', base: '../app/' },
+  { file: '../index.html', base: 'app/' },
 ];
 
 export function stampedHtml(html, base = '') {
