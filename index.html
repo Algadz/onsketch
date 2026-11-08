@@ -3,11 +3,92 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>OnSketch - Paint, but to scale</title>
-<meta name="description" content="OnSketch turns ideas into concept visuals with real dimensions. Sketch to scale, colour it in, and present an idea that already fits. Free, in your browser, no install." />
+<title>OnSketch - Paint, but to scale. Free 2D sketching with real dimensions</title>
+<meta name="description" content="Sketch ideas to scale, colour them in and present concepts that already fit: floor plans, PCB layouts, engineering parts, DIY and laser-cut projects, garden plans, packaging dielines. Free, in your browser, no install." />
+<link rel="canonical" href="https://onsketch.io/" />
+<meta name="robots" content="index, follow" />
+<meta name="theme-color" content="#f7f5f0" />
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="OnSketch" />
+<meta property="og:url" content="https://onsketch.io/" />
 <meta property="og:title" content="OnSketch - Paint, but to scale" />
 <meta property="og:description" content="Concept visuals with real dimensions. Sketch to scale, colour it in, present an idea that already fits." />
 <meta property="og:image" content="https://onsketch.io/assets/app-preview.png" />
+<meta property="og:image:alt" content="A studio floor plan drawn to scale in the OnSketch editor" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="OnSketch - Paint, but to scale" />
+<meta name="twitter:description" content="Concept visuals with real dimensions, in your browser." />
+<meta name="twitter:image" content="https://onsketch.io/assets/app-preview.png" />
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "OnSketch",
+  "url": "https://onsketch.io/",
+  "applicationCategory": "DesignApplication",
+  "operatingSystem": "Web browser",
+  "description": "Free browser-based 2D sketching with real dimensions: draw to scale, colour areas, and present concept visuals such as floor plans, PCB layouts, engineering parts, DIY plans, laser-cut parts, garden plans, packaging dielines and booth layouts.",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+  },
+  "featureList": [
+    "Real dimensions with mixed units (mm, cm, m, in, ft)",
+    "Geometric constraints",
+    "Named dimensions and equations",
+    "Fill tool and layers",
+    "Runs in the browser, no install or signup"
+  ],
+  "screenshot": [
+    {
+      "@type": "ImageObject",
+      "url": "https://onsketch.io/assets/app-preview.png",
+      "caption": "The OnSketch editor with a studio floor plan"
+    },
+    {
+      "@type": "ImageObject",
+      "url": "https://onsketch.io/assets/examples/floor-plan.jpg",
+      "caption": "Floor plan and room layout"
+    },
+    {
+      "@type": "ImageObject",
+      "url": "https://onsketch.io/assets/examples/pcb.jpg",
+      "caption": "PCB layout concept"
+    },
+    {
+      "@type": "ImageObject",
+      "url": "https://onsketch.io/assets/examples/engineering.jpg",
+      "caption": "Engineering part sketch"
+    },
+    {
+      "@type": "ImageObject",
+      "url": "https://onsketch.io/assets/examples/diy.jpg",
+      "caption": "DIY furniture plan"
+    },
+    {
+      "@type": "ImageObject",
+      "url": "https://onsketch.io/assets/examples/laser-cut.jpg",
+      "caption": "Laser-cut box with finger joints"
+    },
+    {
+      "@type": "ImageObject",
+      "url": "https://onsketch.io/assets/examples/garden.jpg",
+      "caption": "Garden and landscape plan"
+    },
+    {
+      "@type": "ImageObject",
+      "url": "https://onsketch.io/assets/examples/packaging.jpg",
+      "caption": "Packaging dieline"
+    },
+    {
+      "@type": "ImageObject",
+      "url": "https://onsketch.io/assets/examples/booth.jpg",
+      "caption": "Trade-show booth layout"
+    }
+  ]
+}
+</script>
 <link rel="preload" as="image" href="assets/app-preview.png" />
 <style>
   :root {
@@ -190,14 +271,54 @@
   .step strong { display: block; font-size: 18px; }
   .step p { margin: 6px 0 0; color: var(--ink-soft); }
 
-  .uses { display: flex; flex-wrap: wrap; gap: 10px; }
-  .uses span {
-    padding: 10px 16px;
+  .carousel-tabs { position: relative; display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 16px; scrollbar-width: none; }
+  .carousel-tabs::-webkit-scrollbar { display: none; }
+  .carousel-tabs a {
+    flex: 0 0 auto;
+    padding: 8px 14px;
     border: 1px solid var(--line);
     border-radius: 999px;
     background: var(--panel);
-    font-weight: 650;
+    font-weight: 650; font-size: 14px;
+    color: var(--ink-soft);
   }
+  .carousel-tabs a:hover { color: var(--ink); }
+  .carousel-tabs a[aria-current="true"] { background: var(--ink); border-color: var(--ink); color: #fff; }
+
+  .track {
+    position: relative;
+    display: flex;
+    margin: 0; padding: 0; list-style: none;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scroll-behavior: smooth;
+    scrollbar-width: none;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--panel);
+    box-shadow: 0 14px 38px rgba(20, 25, 34, 0.08);
+  }
+  .track::-webkit-scrollbar { display: none; }
+  .track:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
+  .slide { flex: 0 0 100%; scroll-snap-align: start; scroll-snap-stop: always; }
+  .slide figure { margin: 0; display: grid; grid-template-columns: minmax(0, 2.1fr) minmax(240px, 1fr); align-items: center; }
+  .slide img { display: block; width: 100%; height: auto; border-right: 1px solid var(--line); background: #eef1f5; }
+  .slide figcaption { padding: clamp(20px, 3vw, 36px); }
+  .slide h3 { margin: 0 0 10px; font-size: clamp(20px, 2.2vw, 26px); line-height: 1.15; }
+  .slide p { margin: 0; color: var(--ink-soft); }
+
+  .carousel-controls { display: flex; align-items: center; justify-content: center; gap: 16px; margin-top: 16px; }
+  .nav-btn {
+    width: 44px; height: 44px;
+    border: 1px solid var(--ink); border-radius: 50%;
+    background: var(--panel); color: var(--ink);
+    font-size: 18px; cursor: pointer;
+  }
+  .nav-btn:hover { background: #ece8df; }
+  .nav-btn:disabled { opacity: 0.35; cursor: default; }
+  .counter { min-width: 52px; text-align: center; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+
+  @media (prefers-reduced-motion: reduce) { .track, html { scroll-behavior: auto; } }
 
   .details { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
   .details .card p + p { margin-top: 8px; }
@@ -218,6 +339,8 @@
 
   @media (max-width: 900px) {
     .compare, .pillars, .details { grid-template-columns: 1fr; }
+    .slide figure { grid-template-columns: 1fr; }
+    .slide img { border-right: 0; border-bottom: 1px solid var(--line); }
     .steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
 
@@ -238,6 +361,7 @@
     <nav class="nav-links" aria-label="Primary navigation">
       <a href="#why">Why</a>
       <a href="#how">How it works</a>
+      <a href="#examples">Examples</a>
       <a href="#details">Details</a>
       <a class="launch" href="/app/">Start drawing</a>
     </nav>
@@ -338,21 +462,102 @@
       </div>
     </section>
 
-    <section class="section">
+    <section class="section" id="examples" aria-labelledby="examples-title">
       <div class="inner">
         <div class="heading">
-          <h2>Made for ideas that have to fit.</h2>
-          <p>Whenever you need to show an idea to someone, and the proportions matter.</p>
+          <h2 id="examples-title">Made for ideas that have to fit.</h2>
+          <p>Floor plans, PCBs, workshop projects, packaging and more. Each example below was drawn in OnSketch with real dimensions.</p>
         </div>
-        <div class="uses">
-          <span>Room and furniture layouts</span>
-          <span>Shop and booth plans</span>
-          <span>Product concepts</span>
-          <span>Packaging and labels</span>
-          <span>Garden and terrace plans</span>
-          <span>Workshop projects</span>
-          <span>Explaining a mechanism</span>
-          <span>Signage and displays</span>
+        <div class="carousel" aria-roledescription="carousel" aria-label="OnSketch examples">
+          <nav class="carousel-tabs" aria-label="Choose an example">
+            <a href="#ex-floor-plan" data-slide="0" aria-current="true">Floor plan</a>
+            <a href="#ex-pcb" data-slide="1">PCB</a>
+            <a href="#ex-engineering" data-slide="2">Engineering</a>
+            <a href="#ex-diy" data-slide="3">DIY</a>
+            <a href="#ex-laser-cut" data-slide="4">Laser cut</a>
+            <a href="#ex-garden" data-slide="5">Garden</a>
+            <a href="#ex-packaging" data-slide="6">Packaging</a>
+            <a href="#ex-booth" data-slide="7">Booth</a>
+          </nav>
+          <ul class="track" tabindex="0" aria-live="polite">
+            <li class="slide" id="ex-floor-plan" aria-roledescription="slide" aria-label="1 of 8: Floor plan and room layout">
+              <figure>
+                <img src="assets/examples/floor-plan.jpg" width="2560" height="1492" alt="Floor plan of a 6 by 4 metre studio drawn to scale in OnSketch, with coloured furniture and dimensions in millimetres" decoding="async" />
+                <figcaption>
+                  <h3>Floor plan and room layout</h3>
+                  <p>A 6 × 4 m studio with bed, sofa, kitchen and dining table, every piece at its real size. Check that the furniture fits and the walkways stay clear before you buy or move anything.</p>
+                </figcaption>
+              </figure>
+            </li>
+            <li class="slide" id="ex-pcb" aria-roledescription="slide" aria-label="2 of 8: PCB layout concept">
+              <figure>
+                <img src="assets/examples/pcb.jpg" width="2560" height="1492" alt="Printed circuit board concept drawn to scale in OnSketch: green 100 by 64 mm board with copper pads, traces, a chip, a header and mounting holes" decoding="async" loading="lazy" />
+                <figcaption>
+                  <h3>PCB layout concept</h3>
+                  <p>Plan a 100 × 64 mm board: mounting holes, chip, connector at 2.54 mm pitch and traces. A quick way to agree on board size and part placement before opening an EDA tool.</p>
+                </figcaption>
+              </figure>
+            </li>
+            <li class="slide" id="ex-engineering" aria-roledescription="slide" aria-label="3 of 8: Engineering part sketch">
+              <figure>
+                <img src="assets/examples/engineering.jpg" width="2560" height="1492" alt="Mechanical engineering sketch in OnSketch: a flange with six bolt holes on a pitch circle and a keyway, and a link arm with two bosses, fully dimensioned" decoding="async" loading="lazy" />
+                <figcaption>
+                  <h3>Engineering part sketch</h3>
+                  <p>A flange with a bolt circle and keyway, and a link arm with tangent bosses. Diameters, pitch circle and centre distance are real dimensions you can change.</p>
+                </figcaption>
+              </figure>
+            </li>
+            <li class="slide" id="ex-diy" aria-roledescription="slide" aria-label="4 of 8: DIY furniture plan">
+              <figure>
+                <img src="assets/examples/diy.jpg" width="2560" height="1492" alt="DIY bookshelf plan drawn in OnSketch: front view of a 900 by 1800 millimetre shelf with 18 millimetre boards, shelves and coloured books" decoding="async" loading="lazy" />
+                <figcaption>
+                  <h3>DIY furniture plan</h3>
+                  <p>A 900 × 1800 mm bookshelf in 18 mm board, with shelf spacing dimensioned. Try different heights and see how the books fit before you cut any wood.</p>
+                </figcaption>
+              </figure>
+            </li>
+            <li class="slide" id="ex-laser-cut" aria-roledescription="slide" aria-label="5 of 8: Laser-cut box with finger joints">
+              <figure>
+                <img src="assets/examples/laser-cut.jpg" width="2560" height="1492" alt="Laser cutting layout in OnSketch: three plywood box panels with 3 millimetre finger joints, a finger hole and engraved star, diamond and label shapes" decoding="async" loading="lazy" />
+                <figcaption>
+                  <h3>Laser-cut box with finger joints</h3>
+                  <p>Box panels with 3 mm finger joints, a lid hole and engraving areas, laid out side by side as they would go on the sheet.</p>
+                </figcaption>
+              </figure>
+            </li>
+            <li class="slide" id="ex-garden" aria-roledescription="slide" aria-label="6 of 8: Garden and landscape plan">
+              <figure>
+                <img src="assets/examples/garden.jpg" width="2560" height="1492" alt="Garden plan drawn to scale in OnSketch: lawn, patio, stepping stones, round pond, three raised beds, shed and trees on a 12 by 8 metre plot" decoding="async" loading="lazy" />
+                <figcaption>
+                  <h3>Garden and landscape plan</h3>
+                  <p>A 12 × 8 m garden with a patio, stepping stones, a pond, raised beds, a shed and trees. Sizes are in millimetres, so you can work out materials straight from the plan.</p>
+                </figcaption>
+              </figure>
+            </li>
+            <li class="slide" id="ex-packaging" aria-roledescription="slide" aria-label="7 of 8: Packaging dieline">
+              <figure>
+                <img src="assets/examples/packaging.jpg" width="2560" height="1492" alt="Packaging dieline in OnSketch: unfolded tuck-end box with front, back and side panels, dust flaps, glue tab, dashed fold lines and front label artwork" decoding="async" loading="lazy" />
+                <figcaption>
+                  <h3>Packaging dieline</h3>
+                  <p>A 60 × 30 × 100 mm tuck box, unfolded: panels, dust flaps, tuck flap and glue tab, with fold lines dashed and artwork on the front.</p>
+                </figcaption>
+              </figure>
+            </li>
+            <li class="slide" id="ex-booth" aria-roledescription="slide" aria-label="8 of 8: Trade-show booth layout">
+              <figure>
+                <img src="assets/examples/booth.jpg" width="2560" height="1492" alt="Trade-show booth floor plan in OnSketch: 6 by 3 metre stand with a curved counter, back wall screen, shelving, meeting table with chairs and plants" decoding="async" loading="lazy" />
+                <figcaption>
+                  <h3>Trade-show booth layout</h3>
+                  <p>A 6 × 3 m stand with a curved reception counter, a screen wall, shelving and a meeting corner, planned before you book the furniture.</p>
+                </figcaption>
+              </figure>
+            </li>
+          </ul>
+          <div class="carousel-controls">
+            <button type="button" class="nav-btn" data-dir="-1" aria-label="Previous example">&larr;</button>
+            <span class="counter" aria-hidden="true">1 / 8</span>
+            <button type="button" class="nav-btn" data-dir="1" aria-label="Next example">&rarr;</button>
+          </div>
         </div>
       </div>
     </section>
@@ -401,5 +606,40 @@
     <span>OnSketch · Paint, but to scale.</span>
     <a href="/app/">Open the editor</a>
   </footer>
+  <script>
+    (() => {
+      const track = document.querySelector('.track');
+      if (!track) return;
+      const slides = [...track.children];
+      const tabs = [...document.querySelectorAll('.carousel-tabs a')];
+      const [prev, next] = document.querySelectorAll('.nav-btn');
+      const counter = document.querySelector('.counter');
+      let index = 0;
+      const go = (i) => { track.scrollTo({ left: slides[Math.max(0, Math.min(slides.length - 1, i))].offsetLeft }); };
+      const show = (i) => {
+        index = i;
+        tabs.forEach((t, j) => t.setAttribute('aria-current', j === i ? 'true' : 'false'));
+        const strip = tabs[i].parentElement;
+        strip.scrollTo({ left: tabs[i].offsetLeft - (strip.clientWidth - tabs[i].offsetWidth) / 2 });
+        counter.textContent = (i + 1) + ' / ' + slides.length;
+        prev.disabled = i === 0;
+        next.disabled = i === slides.length - 1;
+      };
+      const io = new IntersectionObserver((entries) => {
+        for (const e of entries) if (e.isIntersecting) show(slides.indexOf(e.target));
+      }, { root: track, threshold: 0.6 });
+      slides.forEach(s => io.observe(s));
+      prev.addEventListener('click', () => go(index - 1));
+      next.addEventListener('click', () => go(index + 1));
+      tabs.forEach((t, i) => t.addEventListener('click', (ev) => { ev.preventDefault(); go(i); history.replaceState(null, '', t.getAttribute('href')); }));
+      track.addEventListener('keydown', (ev) => {
+        if (ev.key === 'ArrowRight') { ev.preventDefault(); go(index + 1); }
+        if (ev.key === 'ArrowLeft') { ev.preventDefault(); go(index - 1); }
+      });
+      const fromHash = slides.findIndex(s => '#' + s.id === location.hash);
+      if (fromHash > 0) requestAnimationFrame(() => { track.style.scrollBehavior = 'auto'; go(fromHash); track.style.scrollBehavior = ''; });
+      show(0);
+    })();
+  </script>
 </body>
 </html>
