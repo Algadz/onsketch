@@ -1,4 +1,4 @@
-// Fill colours while geometry is dragged (Live Paint behaviour).
+// Fill colours while geometry is dragged (paint stays on its area).
 // Drag-like edge cases for fill colours. Each case: build shapes, paint,
 // then move geometry in small steps (like drag frames) and check colours
 // at probe points every frame against the reference (drag start).

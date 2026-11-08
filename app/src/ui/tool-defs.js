@@ -7,7 +7,7 @@ import { icon } from './icons.js';
 const pick = (names) => Object.fromEntries(names.map(n => [n, icon(n)]));
 
 export const TOOL_ICONS = pick(['select', 'line', 'centerLine', 'rectangle', 'centerRectangle', 'circle',
-  'threePointCircle', 'hexagon', 'arc', 'point', 'smartdim', 'fill']);
+  'threePointCircle', 'hexagon', 'arc', 'point', 'dimension', 'fill']);
 
 export const ACTION_ICONS = pick(['new', 'import', 'save', 'export', 'undo', 'redo', 'solve', 'grid', 'snap',
   'dimensions', 'zoom-fit', 'zoom-reset', 'mirror', 'offset', 'construction', 'reset-layout',
@@ -27,7 +27,7 @@ export const TOOLS = [
   { id: 'arc',              label: 'Centerpoint arc', key: 'A',       group: 'sketch' },
   { id: 'hexagon',          label: 'Polygon',         key: 'H',       group: 'sketch' },
   { id: 'point',            label: 'Point',           key: 'P',       group: 'sketch' },
-  { id: 'smartdim',         label: 'Smart Dimension', key: 'D',       group: 'dimension' },
+  { id: 'dimension',        label: 'Dimension',       key: 'D',       group: 'dimension' },
   { id: 'fill',             label: 'Fill',            key: 'B',       group: 'paint' },
 ];
 

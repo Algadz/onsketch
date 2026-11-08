@@ -1,7 +1,7 @@
 import { Arc, Circle, Line, Point } from '../core/entities.js';
 import { CONSTRAINT_GLYPHS } from '../core/constraints.js';
 
-/* =============== 9. AVAILABLE-RELATIONS ENGINE ================ */
+/* =============== 9. AVAILABLE-CONSTRAINTS ENGINE ================ */
 export function classifySelection(sel) {
   const points  = sel.filter(e => e instanceof Point);
   const lines   = sel.filter(e => e instanceof Line);

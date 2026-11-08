@@ -37,7 +37,7 @@ export const ICONS = {
   arc: '<path d="M19.5 18A13.5 13.5 0 0 0 6 4.5"/>' + `<path d="M6 18h13.5M6 18V4.5" ${dash} opacity="0.55"/>` + dot(19.5, 18) + dot(6, 4.5) + dot(6, 18, 1.5),
   hexagon: '<path d="M12 3.5l7.4 4.25v8.5L12 20.5l-7.4-4.25v-8.5z"/>' + centre(12, 12),
   point: dot(12, 12, 2.8) + '<path d="M12 3.5v3.5M12 17v3.5M3.5 12H7M17 12h3.5"/>',
-  smartdim: dimArrows,
+  dimension: dimArrows,
   fill: '<path d="M11 3.5l7.5 7.5-6.5 6.5a2 2 0 0 1-2.8 0L4.5 12.8a2 2 0 0 1 0-2.8z"/><path d="M5 11h13"/><path d="M20 14.5s1.8 2.2 1.8 3.5a1.8 1.8 0 0 1-3.6 0c0-1.3 1.8-3.5 1.8-3.5z" fill="currentColor"/>',
   erase: '<path d="M8.5 19.5l-4-4a1.8 1.8 0 0 1 0-2.6l8.4-8.4a1.8 1.8 0 0 1 2.6 0l4.5 4.5a1.8 1.8 0 0 1 0 2.6l-8.4 8.4"/><path d="M8.5 19.5H20"/><path d="M8.6 8.8l6.6 6.6"/>',
 
@@ -89,7 +89,7 @@ export const ICONS = {
   none: '<circle cx="12" cy="12" r="8"/><path d="M6.5 17.5l11-11"/>',
   tag: '<path d="M3.5 12V4.5a1 1 0 0 1 1-1H12l8.5 8.5-8.5 8.5z"/>' + dot(8, 8, 1.4),
 
-  /* ---- Relations (Properties window) ---- */
+  /* ---- Constraints (Properties window) ---- */
   'rel-horizontal': '<path d="M4 12h16"/>' + dot(4, 12) + dot(20, 12),
   'rel-vertical': '<path d="M12 4v16"/>' + dot(12, 4) + dot(12, 20),
   'rel-fix': '<path d="M12 4v10"/><path d="M5 14h14M8 17.5h8M10.5 21h3"/>' + dot(12, 4, 2.2),
@@ -113,7 +113,7 @@ export const ICONS = {
   'dim-pointLine': '<path d="M3.5 19.5h17"/>' + dot(12, 5) + '<path d="M12 8v8.5M9.5 14l2.5 2.5 2.5-2.5"/>',
 };
 
-/** Relation / dimension kind → icon name used in the Properties window. */
+/** Constraint / dimension kind → icon name used in the Properties window. */
 const KIND_ICONS = {
   horizontal: 'rel-horizontal', pointRefHorizontal: 'rel-horizontal',
   vertical: 'rel-vertical', pointRefVertical: 'rel-vertical',

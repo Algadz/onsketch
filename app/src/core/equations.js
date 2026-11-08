@@ -1,5 +1,5 @@
 /* =============== EQUATIONS =====================================
-   SolidWorks-style equations. Every driving dimension gets a name
+   Dimension equations. Every driving dimension gets a name
    (D1, D2, …). A dimension may carry an expression (`c.expr`) that
    refers to other dimensions and to global variables
    (`project.variables`: { name, expr }). Before each solve the

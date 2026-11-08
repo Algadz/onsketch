@@ -64,7 +64,7 @@ let info = await page.evaluate(() => {
 check(info.ents >= 6, `drew entities (${info.ents}: ${info.kinds.join(',')})`);
 check(info.cons >= 4, `rectangle added constraints (${info.cons})`);
 
-// Select the free line and make it horizontal through the relations API.
+// Select the free line and make it horizontal through the constraints API.
 const horiz = await page.evaluate(() => {
   const a = window._app, s = a.activeSketch();
   const line = s.entities.filter(e => e.constructor.kind === 'line').pop();
@@ -296,7 +296,7 @@ await page.mouse.click(cx - 120, cy - 20);
 await page.keyboard.press('s');
 void holePx;
 
-// Dimensions can be hidden and shown; Smart Dimension brings them back.
+// Dimensions can be hidden and shown; the Dimension tool brings them back.
 await page.click('#menubar [data-action="dimensions"]');
 const dimsHidden = await page.evaluate(() => ({ show: window._app.showDimensions, rects: window._app.renderer.lastDimRects.length }));
 await page.keyboard.press('d');

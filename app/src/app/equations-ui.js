@@ -12,8 +12,7 @@ const fmt = (v, angular) => (v == null || !Number.isFinite(v)) ? '—' : (angula
 /* =============== EQUATIONS UI ==================================
    Typed dimension values accept units (4in, 25mm, 30deg) and
    equations (=D1*2, width/2 + 5mm). The Equations window lists global
-   variables and every dimension with its name, equation and value,
-   like SolidWorks' Equations manager.
+   variables and every dimension with its name, equation and value.
    ============================================================ */
 export class EquationsMixin {
   /** Evaluate variables + dimension equations into dimension values.
@@ -76,8 +75,8 @@ export class EquationsMixin {
     return d ? userValue(d) : undefined;
   }
 
-  /** Text shown when a dimension is edited: its equation if it has one
-   *  (as SolidWorks does), otherwise its value. */
+  /** Text shown when a dimension is edited: its equation if it has one,
+   *  otherwise its value. */
   dimensionEditText(c) {
     if (c.expr) return '=' + c.expr;
     const v = userValue(c);

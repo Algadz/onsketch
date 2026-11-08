@@ -61,7 +61,7 @@ export class SolveMixin {
     if (r.state === 'over') {
       const statePill = document.getElementById('status-state');
       statePill.classList.remove('ok','warn','error');
-      statePill.textContent = 'Over-defined';
+      statePill.textContent = 'Over-constrained';
       statePill.classList.add('error');
     } else if (scheduleDiagnostics) {
       const statePill = document.getElementById('status-state');
@@ -119,9 +119,9 @@ export class SolveMixin {
 
     const statePill = document.getElementById('status-state');
     statePill.classList.remove('ok','warn','error');
-    if (r.state === 'fully')   { statePill.textContent = 'Fully defined'; statePill.classList.add('ok'); }
-    else if (r.state === 'over'){ statePill.textContent = `Over-defined (${r.redundant} redundant)`; statePill.classList.add('error'); }
-    else                        { statePill.textContent = 'Under-defined'; statePill.classList.add('warn'); }
+    if (r.state === 'fully')   { statePill.textContent = 'Fully constrained'; statePill.classList.add('ok'); }
+    else if (r.state === 'over'){ statePill.textContent = `Over-constrained (${r.redundant} redundant)`; statePill.classList.add('error'); }
+    else                        { statePill.textContent = 'Under-constrained'; statePill.classList.add('warn'); }
 
     document.getElementById('status-dof').textContent = 'DOF: ' + r.dof;
     this.requestRender();
@@ -166,7 +166,7 @@ export class SolveMixin {
   /** Colour every entity by how defined it is on its own layer. The
    *  active layer uses `result`; every other layer with geometry is
    *  checked as if it were the active one (its geometry editable, the
-   *  rest held), so a fully defined layer stays black while you work on
+   *  rest held), so a fully constrained layer stays black while you work on
    *  another. Geometry is put back exactly after each check. */
   _updateConstraintStatus(result) {
     const sketch = this.activeSketch(); if (!sketch) return;

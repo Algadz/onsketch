@@ -212,7 +212,7 @@
   .icon-btn.danger:hover { color: var(--overc); border-color: color-mix(in srgb, var(--overc) 35%, transparent); background: color-mix(in srgb, var(--overc) 8%, transparent); }
   .icon-btn .ic { width: 16px; height: 16px; }
 
-  /* Selection / relations panel body */
+  /* Selection / constraints panel body */
   .sb-body {
     flex: 1 1 auto;
     overflow-y: auto;
@@ -275,7 +275,7 @@
     flex: 0 0 auto;
   }
 
-  /* Relation buttons grid */
+  /* Constraint buttons grid */
   .rel-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -854,7 +854,7 @@
   .tool-dim { border-color: var(--accent-border); background: var(--accent-softer); color: var(--accent); height: 36px; justify-content: center; }
   .tool-dim:hover { border-color: var(--accent); background: var(--accent-soft); }
 
-  /* Colors window: primary / secondary chips like Paint.NET */
+  /* Colors window: colour chips */
   .pc-wrap { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
   .pc { position: relative; width: 64px; height: 56px; flex: 0 0 auto; }
   .pc-sw {

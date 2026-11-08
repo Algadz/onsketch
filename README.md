@@ -1,7 +1,7 @@
 # OnSketch
 
-Browser-based parametric 2D sketcher: SolidWorks-style geometric constraints
-and dimensions, with Paint.NET-style layers and a fill tool.
+Browser-based parametric 2D sketcher: geometric constraints and driving
+dimensions, with layers and a fill tool.
 
 - `index.html` is the landing page; `app/` is the editor.
 - No build step. `app/index.html` loads `app/src/main.js` as native ES modules,
@@ -26,15 +26,16 @@ cached modules after a deploy. `npm test` fails if the stamp is out of date.
 
 - **Menu bar**: file and edit actions, project name, view toggles (grid, snap,
   dimensions `M`, zoom, theme) and toggles for each window.
-- **Options bar** (second row): settings for the active tool, as in Paint.NET.
+- **Options bar** (second row): settings for the active tool.
   Line weight, line type and construction while drawing; Mirror, Offset,
   *Apply line style* and *Pick line style* with Select; step-by-step help for
-  Smart Dimension; Fill / Erase for the Fill tool.
+  the Dimension tool; Fill / Erase for the Fill tool.
 - **Floating windows** over the canvas, dragged by their title bar and
   remembered per browser: Tools, Colors, Layers, Properties (selection,
-  relations, dimensions), Equations. *Reset window layout* puts them back.
-- **Line colour always shows state**, as in SolidWorks: blue under-defined,
-  black fully defined, red over-defined, pink construction, orange selected.
+  constraints, dimensions), Equations. *Reset window layout* puts them back.
+- **Line colour always shows constraint state**: blue under-constrained,
+  black fully constrained, red over-constrained, pink construction, orange
+  selected.
 - **Colors** window: the Fill tool's colour and opacity. Shapes are never
   filled when drawn; the Fill tool (B) fills the area you click, using only
   the active layer's shapes (a region they close, or the background anywhere
@@ -52,7 +53,7 @@ cached modules after a deploy. `npm test` fails if the stamp is out of date.
 - Typed dimension values take units: `4in`, `1.5"`, `2ft`, `35cm`, `25mm`,
   `30deg`, `0.5rad` (stored in mm and degrees). Arithmetic works: `1in + 4mm`.
 - Every dimension is named (D1, D2, …). Start with `=` (or refer to a name) to
-  keep an equation, as in SolidWorks: `=D1/2 + 5mm`, `=width*2`,
+  keep an equation: `=D1/2 + 5mm`, `=width*2`,
   `=sqrt(D3^2 + D4^2)`. Equations are re-evaluated before every solve, in
   dependency order; cycles and unknown names are flagged, not applied.
   Equations are global: when they change a value, every layer is solved, not
@@ -64,7 +65,7 @@ cached modules after a deploy. `npm test` fails if the stamp is out of date.
 ## Solving and conflicts
 
 - A solve that can't satisfy every constraint leaves the geometry as it was
-  (per independent group) and reports the sketch as over-defined; it never
+  (per independent group) and reports the sketch as over-constrained; it never
   applies a least-squares compromise that bends shapes or moves fixed points.
 - Constraints created by snapping (while drawing, or when a dragged point is
   dropped on a target) are test-solved first. Ones that would conflict, that
@@ -88,7 +89,7 @@ edit them. Layers have a name, visibility, opacity and order.
 Constraints and dimensions belong to the layer they were created on: a hidden
 layer hides its dimensions, an inactive layer's dimensions are drawn grey and
 can't be picked, and deleting a layer deletes them. Status colours are per
-layer: each layer is checked as if it were the active one, so a fully defined
+layer: each layer is checked as if it were the active one, so a fully constrained
 layer stays black while you work on another (for example after a global
 variable changed it).
 
@@ -98,8 +99,8 @@ variable changed it).
 |---|---|
 | `app/src/core/` | DOM-free model: math, entities, constraints, solver, sketch/project, layers and styles, regions (planar arrangement for fills) |
 | `app/src/render/` | view transform, canvas renderer, themes |
-| `app/src/editor/` | snap engine, selection-aware relation/dimension lists |
-| `app/src/tools/` | select, draw tools, smart dimension |
+| `app/src/editor/` | snap engine, selection-aware constraint/dimension lists |
+| `app/src/tools/` | select, draw tools, dimension, fill |
 | `app/src/app/` | `App` shell plus mixins grouped by concern (drag, solve, operations, chrome, panels, layers, fills, …) |
 | `app/src/ui/` | icons, tool definitions, floating window manager |
 | `app/styles.css` | UI styles; light and dark tokens on `:root` / `:root[data-theme="dark"]` |
@@ -123,7 +124,7 @@ versions drop stroke colours, and shapes they filled through their style
 become Fill-tool fills. Regions are
 found on a planar arrangement of the geometry (segments split where they touch
 or cross, overlaps merged), so shapes sharing or crossing edges fill correctly.
-Fill-tool fills are paint on areas (like Live Paint): a colour plus a point
+Fill-tool fills are paint on areas, not on shapes: a colour plus a point
 inside the area, on one layer. When that layer's shapes change, each current
 area finds its colour by comparing with every area at the reference moment
 (drag start / last commit), painted or not:

@@ -3,7 +3,7 @@ import { Arc, Circle, Line, Point } from '../core/entities.js';
 import { AngleConstraint, CurveDistanceConstraint, DistanceConstraint, PointLineDistanceConstraint, RadiusConstraint } from '../core/constraints.js';
 import { Tool } from './tool.js';
 
-export class SmartDimensionTool extends Tool {
+export class DimensionTool extends Tool {
   constructor(app) {
     super(app);
     this.picks = [];
@@ -413,8 +413,7 @@ export class SmartDimensionTool extends Tool {
       sketch.constraints.push(made);
       // Run a probe solve. If adding this dimension would over-define the
       // sketch, demote it to a "driven" dimension — informational only,
-      // doesn't enforce. SolidWorks asks the user; we just do it silently
-      // and render in grey.
+      // doesn't enforce. No prompt: it is demoted silently and drawn in grey.
       const affectedIds = made.refs();
       const probe = this.app.solver.solve(sketch, this.app.project.sketches, [], {
         diagnostics:true,

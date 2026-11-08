@@ -5,7 +5,7 @@
    ============================================================ */
 
 /** Palette "ink" colour. Drawn as the theme's foreground, so black
- *  geometry stays visible on a dark canvas (AutoCAD's colour 7 rule). */
+ *  geometry stays visible on a dark canvas (the usual CAD "ink" convention). */
 export const INK = '#111418';
 
 export const THEMES = {

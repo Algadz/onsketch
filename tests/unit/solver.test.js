@@ -1,5 +1,5 @@
 // Degree-of-freedom bookkeeping: the solver's colour coding
-// (under / fully / over defined) depends on it.
+// (under / fully / over constrained) depends on it.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as C from '../../app/src/core/constraints.js';
@@ -12,7 +12,7 @@ test('a line with only a length dimension has 3 DOF', () => {
   assert.equal(r.dof, 3); assert.equal(r.state, 'under');
 });
 
-test('fixed, horizontal, dimensioned line is fully defined', () => {
+test('fixed, horizontal, dimensioned line is fully constrained', () => {
   const s = sketch(); const l = line(s, 0, 0, 10, 3);
   s.constraints.push(new C.FixConstraint(l.p1.id, 0, 0));
   s.constraints.push(new C.HorizontalConstraint(l.id, l.p1.id, l.p2.id));
@@ -22,7 +22,7 @@ test('fixed, horizontal, dimensioned line is fully defined', () => {
   assert.equal(r.entityStatus.get(l.id), 'fully');
 });
 
-test('conflicting dimensions are reported as over-defined', () => {
+test('conflicting dimensions are reported as over-constrained', () => {
   const s = sketch(); const l = line(s, 0, 0, 10, 0);
   s.constraints.push(new C.DistanceConstraint(l.p1.id, l.p2.id, 20));
   s.constraints.push(new C.DistanceConstraint(l.p1.id, l.p2.id, 30));

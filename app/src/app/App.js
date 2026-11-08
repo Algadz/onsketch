@@ -337,7 +337,7 @@ export class App {
       if (!quiet && conflict) {
         const label = CONSTRAINT_LABELS[c.kind] || c.kind;
         document.getElementById('status-hint').textContent =
-          `${label} not added: it conflicts with the existing constraints (the sketch would be over-defined).`;
+          `${label} not added: it conflicts with the existing constraints (the sketch would be over-constrained).`;
       }
       return false;
     }
@@ -397,7 +397,7 @@ export class App {
   }
 
   hitTestForDimension(world) {
-    // Smart Dimension picks any visible entity. Whether the constraint
+    // The Dimension tool picks any visible entity. Whether the constraint
     // can actually be added is checked downstream.
     return this.hitTestAcrossLayers(world);
   }
@@ -486,7 +486,7 @@ export class App {
 
   /** Snap is only meaningful while you're actively placing or moving
    *  geometry. In plain Select mode (no drag in progress) and while using
-   *  Smart Dim (which hit-tests entities, not snap points), we suppress
+   *  the Dimension tool (which hit-tests entities, not snap points), we suppress
    *  snap detection so no markers or "endpoint / on-line / on-circle"
    *  hints flash at the cursor. */
   _snapForCurrentTool(world) {

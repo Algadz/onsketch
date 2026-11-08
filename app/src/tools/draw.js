@@ -674,7 +674,7 @@ export class PointTool extends Tool {
   onKey(ev) { if (ev.key === 'Escape') this.app.setTool('select'); }
 }
 
-/** Smart Dimension — three-phase state machine, no browser prompts.
+/** Dimension tool — three-phase state machine, no browser prompts.
  *
  *  PICKING  : user picks entities one at a time. As soon as the pick set
  *             forms a valid dimension combination (one line, one circle,

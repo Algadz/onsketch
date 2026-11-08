@@ -74,7 +74,7 @@ export class PersistenceMixin {
   }
   /** After replacing this.project with a freshly revived version, the
    *  current tool may be holding references to entities that no longer
-   *  exist (e.g. LineTool.startPt, SmartDim.picks). Re-activating the
+   *  exist (e.g. LineTool.startPt, DimensionTool.picks). Re-activating the
    *  tool resets that state without changing tool selection. */
   _afterStateSwap() {
     if (this.tool && this.tool.activate) this.tool.activate();

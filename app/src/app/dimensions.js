@@ -165,13 +165,13 @@ export class DimensionLabelsMixin {
   }
 
   /** Open an inline input over a dimension's label so the user can edit
-   *  the value (or Esc to leave it untouched). Reuses the SmartDim input
+   *  the value (or Esc to leave it untouched). Reuses the Dimension tool input
    *  styling. */
   editDimValue(c) {
     if (!c || c.driven) return;
     const rect = (this.renderer.lastDimRects || []).find(r => r.constraint === c);
     if (!rect) return;
-    // Shows the equation when there is one (like SolidWorks), else the value.
+    // Shows the equation when there is one, else the value.
     this.openValueInput({ x: rect.x + rect.w / 2, y: rect.y + rect.h / 2 }, this.dimensionEditText(c),
       (text) => this.setDimensionFromText(c, text));
   }

@@ -1,5 +1,5 @@
 /* =============== FLOATING WINDOWS ==============================
-   Paint.NET-style tool windows floating over the canvas. Drag by the
+   Tool windows floating over the canvas. Drag by the
    title bar, close with ×, reopen from the menu bar. Position and
    open state are remembered per browser.
    ============================================================ */

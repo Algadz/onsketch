@@ -73,8 +73,8 @@ export class Renderer {
     ctx.stroke();
   }
 
-  /** Stroke style for one entity. Colour always shows state, as in
-   *  SolidWorks: blue under-defined, black fully defined, red over-defined,
+  /** Stroke style for one entity. Colour always shows state: blue
+   *  under-constrained, black fully constrained, red over-constrained,
    *  pink construction, orange hover / selection, grey on other sketches
    *  and for vertices on layers other than the active one (not editable). Weight and line type come from
    *  the entity's own style. */
@@ -318,7 +318,7 @@ export class Renderer {
     this._recordRects = true;
   }
 
-  /** Draw a SmartDim preview that follows the cursor — synthesises a
+  /** Draw a Dimension-tool preview that follows the cursor — synthesises a
    *  fake constraint + entity map and reuses the committed-dimension
    *  drawing routines so the preview looks identical to what gets
    *  saved. */

@@ -12,7 +12,7 @@ const DEFAULT_PEN = { lineWidth: 1.4, lineStyle: 'solid', fillColor: '#1f7ad6', 
 
 /* =============== LAYERS + STYLE PANELS =========================
    Right-hand sidebar. "Layers" lists project layers top-most first
-   (as in Paint.NET): visibility, lock, opacity, order. Layers carry no
+   (as in most image editors): visibility, lock, opacity, order. Layers carry no
    colours of their own.
 
    Also owns per-browser preferences: theme, dimension visibility, the

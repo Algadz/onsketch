@@ -180,7 +180,7 @@ export class ConstraintActionsMixin {
         activeIds:affectedIds
       });
       if (solver.state === 'over' && solver.residual > 1e-2) {
-        const msg = `This relation makes the sketch over-defined (residual ${solver.residual.toExponential(2)}). Keep it anyway?`;
+        const msg = `This constraint makes the sketch over-constrained (residual ${solver.residual.toExponential(2)}). Keep it anyway?`;
         if (!confirm(msg)) {
           // revert
           this.project = Project.fromJSON(JSON.parse(beforeJSON));
@@ -193,7 +193,7 @@ export class ConstraintActionsMixin {
   }
 
   applyDimension(kind) {
-    // Route sidebar dimension buttons through the SmartDim tool: copy the
+    // Route sidebar dimension buttons through the Dimension tool: copy the
     // current selection in as picks, infer the preview, override the kind
     // when the button is more specific than the default inference (e.g.
     // "Radius" on a Circle that would default to Diameter), then enter
@@ -201,7 +201,7 @@ export class ConstraintActionsMixin {
     const sketch = this.activeSketch();
     const sel = this.selectedEntitiesAndPoints();
     if (!sketch || !sel.length) return;
-    this.setTool('smartdim');
+    this.setTool('dimension');
     this.tool.picks = sel.slice();
     if (!this.tool._inferPreview()) return;
     const p = this.tool.preview;

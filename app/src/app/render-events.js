@@ -4,7 +4,7 @@ import { Arc, Circle, Line, Point } from '../core/entities.js';
 import { SelectTool } from '../tools/select.js';
 import { ArcTool, CenterLineTool, CenterRectangleTool, CircleTool, HexagonTool, LineTool, PointTool, RectangleTool, ThreePointCircleTool } from '../tools/draw.js';
 import { FillTool } from '../tools/fill.js';
-import { SmartDimensionTool } from '../tools/smartdim.js';
+import { DimensionTool } from '../tools/dimension.js';
 
 export class RenderEventsMixin {
 
@@ -65,7 +65,7 @@ export class RenderEventsMixin {
    *    Alt held over the canvas (Alt-drag pans): open hand;
    *  - Select: arrow; its badge shows what a click would pick (line,
    *    circle, dimension…) or the running operation (Mirror, Offset);
-   *  - drawing tools and Smart Dimension: crosshair with the tool's icon,
+   *  - drawing tools and Dimension: crosshair with the tool's icon,
    *    a red "no" badge when the next click would be refused;
    *  - Fill: paint drop in the fill colour (eraser badge in erase mode);
    *  - any editing tool while the active layer is hidden: not-allowed. */
@@ -80,7 +80,7 @@ export class RenderEventsMixin {
       if (op === 'offset' && this.offsetPhase === 'placing' && !t.box) return crossCursor('offset');
       if (op === 'mirror' || op === 'offset') return arrowCursor(op);
       if (t.box) return arrowCursor(null);
-      if (t.hoverDim) return arrowCursor('smartdim');
+      if (t.hoverDim) return arrowCursor('dimension');
       const kind = t.hoverHit?.constructor?.kind;
       return arrowCursor(kind || null);
     }
@@ -111,13 +111,13 @@ export class RenderEventsMixin {
       case 'hexagon':   this.tool = new HexagonTool(this); break;
       case 'arc':       this.tool = new ArcTool(this); break;
       case 'point':     this.tool = new PointTool(this); break;
-      case 'smartdim':  this.tool = new SmartDimensionTool(this); break;
+      case 'dimension': this.tool = new DimensionTool(this); break;
       case 'fill':      this.tool = new FillTool(this); break;
     }
     if (this.tool.activate) this.tool.activate();
     document.querySelectorAll('[data-tool]').forEach(b => b.classList.toggle('active', b.dataset.tool === name));
     document.getElementById('status-tool').textContent = 'Tool: ' + toolDef(name).label;
-    if (name === 'smartdim' && !this.showDimensions) this.setDimensionsVisible(true);
+    if (name === 'dimension' && !this.showDimensions) this.setDimensionsVisible(true);
     this._refreshOptionsBar();
     document.getElementById('status-hint').textContent = (this.tool.hint && this.tool.hint()) || '';
     this._updateCanvasCursor();
@@ -252,7 +252,7 @@ export class RenderEventsMixin {
       else if (k === 'h') this.setTool('hexagon');
       else if (k === 'a') this.setTool('arc');
       else if (k === 'p') this.setTool('point');
-      else if (k === 'd') this.setTool('smartdim');
+      else if (k === 'd') this.setTool('dimension');
       else if (k === 'b') this.setTool('fill');
       else if (k === 'm') this.setDimensionsVisible(!this.showDimensions);
       else if (k === 'f') this.zoomFit();

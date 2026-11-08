@@ -115,7 +115,7 @@ test('interiorPoint lands inside the region and outside its holes', () => {
   assert.ok(regionContains(f, p));
 });
 
-/* ---- Fill colours follow the areas (Live Paint style) ---- */
+/* ---- Fill colours follow the areas (paint stays on its area) ---- */
 let nid = 0;
 const mk = () => 'n' + (nid++);
 const paint = (ents, pt, color, id) => ({ id, layerId: 'L', color, opacity: 1, seed: pt, region: findFaceAt(ents, pt) });

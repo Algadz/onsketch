@@ -9,7 +9,7 @@
                    min max round floor ceil;  constant pi
      + - * / ^ ( )
 
-   Trigonometric functions work in degrees, as in SolidWorks.
+   Trigonometric functions work in degrees, as is usual in CAD.
    ============================================================ */
 
 export const LENGTH_UNITS = { mm: 1, cm: 10, m: 1000, in: 25.4, inch: 25.4, inches: 25.4, '"': 25.4, ft: 304.8, "'": 304.8 };

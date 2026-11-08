@@ -9,7 +9,7 @@ import { icon } from '../ui/icons.js';
    windows (Layers and Properties content live in layers-panel.js
    and panels.js).
 
-   Line colours always show state (as in SolidWorks); the only colour
+   Line colours always show constraint state; the only colour
    picked here is the Fill tool's. New geometry takes the current line
    weight and line type; existing geometry changes only through an
    explicit "Apply line style" on the selection.
@@ -87,14 +87,14 @@ export class ChromeMixin {
     const body = document.getElementById('tools-body');
     const btn = (t) => `<button class="tool-btn" data-tool="${t.id}" title="${t.label} (${t.key})" aria-label="${t.label}">${TOOL_ICONS[t.id]}</button>`;
     const group = (g) => TOOLS.filter(t => t.group === g).map(btn).join('');
-    const dim = toolDef('smartdim');
+    const dim = toolDef('dimension');
     body.innerHTML = `
       <div class="tool-grid">${group('pick')}${group('paint')}</div>
       <div class="tool-sep"></div>
       <div class="tool-grid">${group('sketch')}</div>
       <div class="tool-sep"></div>
-      <button class="tool-btn tool-wide tool-dim" data-tool="smartdim" title="${dim.label} (${dim.key}): click one or two entities, then click to place" aria-label="${dim.label}">
-        ${TOOL_ICONS.smartdim}<span>Dimension</span></button>
+      <button class="tool-btn tool-wide tool-dim" data-tool="dimension" title="${dim.label} (${dim.key}): click one or two entities, then click to place" aria-label="${dim.label}">
+        ${TOOL_ICONS.dimension}<span>Dimension</span></button>
       <div class="tool-sep"></div>
       <div class="tool-grid">
         <button class="tool-btn" data-action="mirror" title="Mirror selection about a line" aria-label="Mirror">${ACTION_ICONS.mirror}</button>
@@ -170,7 +170,7 @@ export class ChromeMixin {
       html += sep + `<button class="tbtn" data-opt="apply-style" title="Give the selected entities the current line weight and line type">${ACTION_ICONS['apply-style']}<span class="btn-label">Apply line style</span></button>`;
       html += `<button class="tbtn" data-opt="pick-style" title="Copy the selected entity's line weight and line type">${ACTION_ICONS['pick-style']}<span class="btn-label">Pick line style</span></button>`;
       html += sep + '<span class="opt-hint">Click to select, Ctrl-click to add, drag a box to select many, drag geometry to move it.</span>';
-    } else if (t.id === 'smartdim') {
+    } else if (t.id === 'dimension') {
       html += sep + '<span class="opt-hint"><b>1.</b> Click one or two entities &nbsp; <b>2.</b> Click to place the dimension &nbsp; <b>3.</b> Type a value, Enter. Click an existing dimension to edit it.</span>';
     } else if (t.id === 'fill') {
       html += sep + `<span class="seg" role="group" aria-label="Fill mode"><button class="${this.fillErase ? '' : 'on'}" data-opt="fill-mode" aria-pressed="${!this.fillErase}">${icon('fill')}Fill</button><button class="${this.fillErase ? 'on' : ''}" data-opt="erase-mode" aria-pressed="${this.fillErase}">${icon('erase')}Erase fill</button></span>`;

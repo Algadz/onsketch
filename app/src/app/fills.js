@@ -2,7 +2,7 @@ import { newId } from '../core/entities.js';
 import { findFaceAt, geometryKey, reconcileRegions, referenceRegions, regionContains } from '../core/regions.js';
 
 /* =============== FILL TOOL =====================================
-   Fills are paint on areas, like Live Paint. A fill is a colour and a
+   Fills are paint on areas, not on shapes. A fill is a colour and a
    point inside its area; the area is the closed region that its layer's
    shapes (that layer only) form around that point.
 

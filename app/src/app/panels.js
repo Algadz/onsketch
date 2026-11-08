@@ -70,11 +70,11 @@ export class PanelsMixin {
                </div>`;
     }
 
-    // ---- Add Relations ----
+    // ---- Add constraints ----
     const rels = hasConstraintSelection ? [] : availableRelations(sel);
-    html += '<div class="sb-subhead">Add Relation</div>';
+    html += '<div class="sb-subhead">Add Constraint</div>';
     if (rels.length === 0) {
-      html += '<div class="empty">No relations apply to this selection.</div>';
+      html += '<div class="empty">No constraints apply to this selection.</div>';
     } else {
       html += '<div class="rel-grid">';
       for (const r of rels) {
@@ -87,7 +87,7 @@ export class PanelsMixin {
     const dims = hasConstraintSelection ? [] : availableDimensions(sel);
     html += '<div class="sb-subhead">Add Dimension</div>';
     if (dims.length === 0) {
-      html += '<div class="empty">No dimension applies. Use Smart Dim (D) or pick a different combo.</div>';
+      html += '<div class="empty">No dimension applies. Use the Dimension tool (D) or pick a different combination.</div>';
     } else {
       html += '<div class="rel-grid">';
       for (const d of dims) {
@@ -96,9 +96,9 @@ export class PanelsMixin {
       html += '</div>';
     }
 
-    // ---- Existing Relations on selection ----
+    // ---- Constraints on the selection ----
     const related = (sketch?.constraints || []).filter(c => constraintAppliesToSelection(c, sel));
-    html += '<div class="sb-subhead">Existing Relations</div>';
+    html += '<div class="sb-subhead">Constraints</div>';
     if (related.length === 0) {
       html += '<div class="empty">None on selection.</div>';
     } else {
@@ -106,7 +106,7 @@ export class PanelsMixin {
       for (const c of related) {
         const label = CONSTRAINT_LABELS[c.kind] || c.kind;
         const valStr = (c.value !== null && c.value !== undefined) ? ` = ${Number(c.value).toFixed(3)}` : '';
-        html += `<span class="constraint-pill" data-cid="${c.id}">${kindIcon(c.kind)}<span>${label}${valStr}</span><button class="x" data-cid="${c.id}" title="Delete relation" aria-label="Delete ${label}">${icon('x')}</button></span>`;
+        html += `<span class="constraint-pill" data-cid="${c.id}">${kindIcon(c.kind)}<span>${label}${valStr}</span><button class="x" data-cid="${c.id}" title="Delete constraint" aria-label="Delete ${label}">${icon('x')}</button></span>`;
       }
       html += '</div>';
     }

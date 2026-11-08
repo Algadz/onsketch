@@ -2,7 +2,7 @@
    Display attributes, kept separate from geometry and constraints.
 
    Stroke colour always shows an entity's state (constraint status,
-   construction, selection), as in SolidWorks. An entity's own style is
+   construction, selection). An entity's own style is
    only its line weight and line type, taken from the drawing style when
    it was drawn. Colour is added by the Fill tool. Layers are display
    groups only: visibility, lock, opacity, order.
