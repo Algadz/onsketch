@@ -4,6 +4,8 @@
    the browser / screen / app version, the last few script errors, and,
    only when the box is ticked, the current project as JSON.
    ============================================================ */
+import { track, trackOnce } from './analytics.js';
+
 const ENDPOINT = 'https://formspree.io/f/mrppvjjp';
 const MAX_PROJECT_CHARS = 200000;
 
@@ -14,7 +16,11 @@ export class ReportMixin {
       this._recentErrors.push(`${new Date().toISOString()} ${msg}`);
       if (this._recentErrors.length > 5) this._recentErrors.shift();
     };
-    window.addEventListener('error', (e) => note(`${e.message} @ ${e.filename?.split('/').pop()}:${e.lineno}`));
+    window.addEventListener('error', (e) => {
+      const where = `${e.filename?.split('/').pop()?.split('?')[0]}:${e.lineno}`;
+      note(`${e.message} @ ${where}`);
+      trackOnce('js-error', { message: String(e.message).slice(0, 120), where });
+    });
     window.addEventListener('unhandledrejection', (e) => note(`unhandled: ${e.reason?.message || e.reason}`));
 
     const back = document.getElementById('report-modal');
@@ -28,7 +34,7 @@ export class ReportMixin {
       form.elements.message.focus();
     };
     const close = () => back.classList.remove('show');
-    document.getElementById('report-open').addEventListener('click', open);
+    document.getElementById('report-open').addEventListener('click', () => { track('report-open'); open(); });
     document.getElementById('report-cancel').addEventListener('click', close);
     back.addEventListener('pointerdown', (e) => { if (e.target === back) close(); });
     back.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.stopPropagation(); close(); } });
@@ -56,6 +62,7 @@ export class ReportMixin {
         if (!res.ok) throw new Error('HTTP ' + res.status);
         status.className = 'report-status ok';
         status.textContent = 'Sent. Thank you!';
+        track('report-sent', { project: !!form.elements.attach.checked });
         form.reset();
         setTimeout(close, 1400);
       } catch {

@@ -27,6 +27,7 @@ import { InkSelectMixin } from './ink-select.js';
 import { TouchMixin } from './touch.js';
 import { TouchUIMixin } from './touch-ui.js';
 import { CompactMixin } from './compact.js';
+import { track } from './analytics.js';
 
 /* =============== 10. APP ====================================== */
 export class App {
@@ -87,6 +88,12 @@ export class App {
     this.refreshUI();
     this.solveAndRender();
     if (restored) { this._primeFillRegions(); this.zoomFit(); }
+    track('editor-open', {
+      layout: this.compact ? 'phone' : 'desktop',
+      touch: matchMedia('(pointer: coarse)').matches,
+      restored: !!restored,
+      theme: this.themeName,
+    });
     this._loop();
   }
 

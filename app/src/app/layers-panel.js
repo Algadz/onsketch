@@ -1,6 +1,7 @@
 import { cleanStyle } from '../core/style.js';
 import { getTheme } from '../render/theme.js';
 import { uiIcon } from '../ui/icons.js';
+import { track } from './analytics.js';
 import { INK_DEFAULTS } from './sketch-window.js';
 
 const PREFS_KEY = 'onsketch:prefs';
@@ -28,6 +29,7 @@ export class LayersPanelMixin {
     };
     btn('layer-add', 'plus', () => {
       this.project.addLayer();
+      track('layer-add', { layers: this.project.layers.length });
       this.clearSelection();
       this._layerChanged();
     });
@@ -40,6 +42,7 @@ export class LayersPanelMixin {
         + this.project.sketches.reduce((k, s) => k + s.strokes.filter(st => st.layerId === layer.id).length, 0);
       if (!confirm(n ? `Delete layer "${layer.name}" and its ${n} item${n === 1 ? '' : 's'}?` : `Delete layer "${layer.name}"?`)) return;
       this.project.removeLayer(layer.id);
+      track('layer-delete');
       this.clearSelection();
       this._layerChanged();
     });

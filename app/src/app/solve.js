@@ -1,4 +1,5 @@
 import { Arc } from '../core/entities.js';
+import { trackOnce } from './analytics.js';
 
 export class SolveMixin {
 
@@ -29,6 +30,8 @@ export class SolveMixin {
     this.redoStack.length = 0;
     if (this._refreshLayerPanel) this._refreshLayerPanel();   // entity counts
     this.scheduleAutosave();
+    // First edit made with each tool this session (a shape drawn, a dimension placed...).
+    if (this.toolName !== 'select') trackOnce('tool-used', { tool: this.toolName });
   }
 
 

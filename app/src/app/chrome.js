@@ -2,6 +2,7 @@ import { LINE_STYLES, LINE_WEIGHTS } from '../core/style.js';
 import { clamp } from '../core/math.js';
 import { ACTION_ICONS, DRAW_TOOLS, TOOLS, TOOL_ICONS, WINDOW_ICONS, toolDef } from '../ui/tool-defs.js';
 import { WindowManager } from '../ui/windows.js';
+import { track, trackOnce } from './analytics.js';
 
 /* =============== APP CHROME ====================================
    Menu bar, tool options bar, and the floating Tools and Colors
@@ -26,7 +27,10 @@ export class ChromeMixin {
     document.querySelectorAll('#menubar [data-window]').forEach(b => {
       b.innerHTML = WINDOW_ICONS[b.dataset.window];
       b.setAttribute('aria-label', b.title);
-      b.addEventListener('click', () => this.windows.toggle(b.dataset.window));
+      b.addEventListener('click', () => {
+        this.windows.toggle(b.dataset.window);
+        if (this.windows.isOpen(b.dataset.window)) track('window-open', { window: b.dataset.window });
+      });
     });
 
     this._buildToolsWindow();
@@ -48,6 +52,7 @@ export class ChromeMixin {
   }
 
   _runAction(a, b) {
+    track('menu', { action: a });
     switch (a) {
       case 'new':          this.newProject(); break;
       case 'save':         this.saveLocal(); break;

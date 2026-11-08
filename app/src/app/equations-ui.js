@@ -3,6 +3,7 @@ import {
   allDimensions, ensureDimensionNames, internalValue, isAngular, renameReferences,
   solveEquations, userValue, validateName,
 } from '../core/equations.js';
+import { trackOnce } from './analytics.js';
 import { constraintLabel } from '../core/constraints.js';
 
 const esc = (t) => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -211,6 +212,7 @@ export class EquationsMixin {
         this._refreshEquationsPanel();
         return;
       }
+      trackOnce('equations', { action: b.dataset.eq });
       this.commit();
       this._refreshEquationsPanel();
     });
@@ -324,6 +326,7 @@ export class EquationsMixin {
         if (err) { showErr(err); return; }
       }
     }
+    trackOnce('equations', { action: kind });
     this.commit();
     this._refreshEquationsPanel(true);
   }

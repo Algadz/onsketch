@@ -1,6 +1,7 @@
 import { evaluate } from '../core/expr.js';
 import { EPS, TAU, angleOnDirectedArc, directedArcSpan, dist, lineIntersection, mirrorPointAcrossLine, offsetArc, offsetCircle, offsetLine } from '../core/math.js';
 import { uiIcon } from '../ui/icons.js';
+import { track } from './analytics.js';
 import { Arc, Circle, Line, Point, newId } from '../core/entities.js';
 import { AngleConstraint, ArcEndpointArcEndpointCoincidentConstraint, ArcEndpointCoincidentConstraint, ArcEndpointMidpointConstraint, ArcEndpointOnCircleConstraint, ArcEndpointOnLineConstraint, CoincidentConstraint, CollinearConstraint, ConcentricConstraint, Constraint, DirectedAngleConstraint, EqualLengthConstraint, EqualRadiusConstraint, HorizontalConstraint, MidpointConstraint, OffsetConstraint, OffsetDistanceConstraint, ParallelConstraint, ParamFixConstraint, PerpendicularConstraint, PointOnCircleConstraint, PointOnLineConstraint, PointRefHorizontalConstraint, PointRefVerticalConstraint, SymmetricConstraint, TangentCircleCircleConstraint, TangentLineCircleConstraint, VerticalConstraint } from '../core/constraints.js';
 import { SelectTool } from '../tools/select.js';
@@ -1168,6 +1169,7 @@ export class OperationsMixin {
     this.mirrorEntityIds = [];
     this.mirrorAxisId = null;
     document.getElementById('status-hint').textContent = (this.tool.hint && this.tool.hint()) || '';
+    track('mirror', { shapes: newEntities.length });
     this.commit();
     this.refreshUI();
   }
@@ -1461,6 +1463,7 @@ export class OperationsMixin {
     for (const entity of made) this.setSelected(entity, true);
     this._clearOperationState();
     document.getElementById('status-hint').textContent = (this.tool.hint && this.tool.hint()) || '';
+    track('offset', { shapes: made.length });
     this.commit();
     this.refreshUI();
   }

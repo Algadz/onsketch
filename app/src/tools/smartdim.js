@@ -1,6 +1,7 @@
 import { EPS, angleArcFromPoints, angleSectorForCursor, dist, lineIntersection, normalizeAngleValue } from '../core/math.js';
 import { Arc, Circle, Line, Point } from '../core/entities.js';
 import { AngleConstraint, CurveDistanceConstraint, DistanceConstraint, PointLineDistanceConstraint, RadiusConstraint, distanceFrame } from '../core/constraints.js';
+import { trackOnce } from '../app/analytics.js';
 import { Tool } from './tool.js';
 
 export class SmartDimensionTool extends Tool {
@@ -441,6 +442,7 @@ export class SmartDimensionTool extends Tool {
         made.driven = true;
         made.expr = null;
       }
+      trackOnce('dimension', { kind: made.kind });
       this.app.commit({ activeIds: affectedIds });
       this.app.refreshUI();
     }

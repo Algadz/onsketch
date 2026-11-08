@@ -1,4 +1,5 @@
 import { newId } from '../core/entities.js';
+import { trackOnce } from './analytics.js';
 import { findFaceAt, geometryKey, reconcileRegions, referenceRegions, regionContains } from '../core/regions.js';
 
 /* =============== FILL TOOL =====================================
@@ -127,6 +128,7 @@ export class FillsMixin {
       }
     }
     this._fillDisplayCache = null;
+    trackOnce('fill', { target: region ? 'region' : 'background' });
     this.commit();
     this.refreshUI();
   }

@@ -1,3 +1,4 @@
+import { track } from './analytics.js';
 import { ACTION_ICONS, DRAW_TOOLS, TOOLS, TOOL_ICONS, WINDOW_ICONS, toolDef } from '../ui/tool-defs.js';
 
 /* =============== PHONE LAYOUT ("compact") ======================
@@ -135,7 +136,7 @@ export class CompactMixin {
   }
   _runMore(a) {
     this._toggleMoreMenu(false);
-    if (a === 'stylus') { this.setStylusMode(!this.stylusMode); return; }
+    if (a === 'stylus') { this.setStylusMode(!this.stylusMode); track('menu', { action: 'stylus', on: this.stylusMode }); return; }
     if (a === 'report') { document.getElementById('report-open')?.click(); return; }
     const btn = document.querySelector(`#menubar [data-action="${a}"]`);
     this._runAction(a, btn);

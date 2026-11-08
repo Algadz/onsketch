@@ -1,4 +1,5 @@
 import { Project } from '../core/model.js';
+import { track, trackOnce } from './analytics.js';
 
 const STORE_KEY = 'sketchcad:last';
 
@@ -60,6 +61,7 @@ export class PersistenceMixin {
       this.commit({ diagnostics: 'sync' });
       this.refreshUI();
       this.zoomFit();
+      track('example-open', { example: slug });
       if (hint) hint.textContent = `Example "${project.name}" opened. Ctrl+Z goes back to your previous drawing.`;
       return true;
     } catch (e) {
@@ -81,8 +83,9 @@ export class PersistenceMixin {
     this.selectionOrder = [];
     this.refreshUI(); this.solveAndRender();
     this._writeLocal();
+    track('project-new');
   }
-  exportJSON() { this._modal('Export JSON', JSON.stringify(this.project.toJSON(), null, 2), false); }
+  exportJSON() { track('project-export'); this._modal('Export JSON', JSON.stringify(this.project.toJSON(), null, 2), false); }
   importJSON() {
     this._modal('Import JSON', '', true).then(text => {
       if (!text) return;
@@ -91,7 +94,8 @@ export class PersistenceMixin {
         this.selectionOrder = [];
         this.commit({ diagnostics:'sync' });
         this.refreshUI();
-      } catch (e) { alert('Failed to parse: ' + e.message); }
+        track('project-import');
+      } catch (e) { track('project-import-failed'); alert('Failed to parse: ' + e.message); }
     });
   }
 
@@ -123,6 +127,7 @@ export class PersistenceMixin {
     const prev = this.undoStack[this.undoStack.length - 1];
     this.project = Project.fromJSON(JSON.parse(prev));
     this._afterStateSwap();
+    trackOnce('undo');
   }
   redo() {
     if (!this.redoStack.length) return;
@@ -130,6 +135,7 @@ export class PersistenceMixin {
     this.undoStack.push(next);
     this.project = Project.fromJSON(JSON.parse(next));
     this._afterStateSwap();
+    trackOnce('redo');
   }
   /** After replacing this.project with a freshly revived version, the
    *  current tool may be holding references to entities that no longer

@@ -2,6 +2,7 @@ import { Arc, Circle, Line } from '../core/entities.js';
 import { CollinearConstraint, ConcentricConstraint, EqualLengthConstraint, EqualRadiusConstraint, FixConstraint, HorizontalConstraint, ParallelConstraint, PerpendicularConstraint, TangentCircleCircleConstraint, TangentLineCircleConstraint, VerticalConstraint } from '../core/constraints.js';
 import { Project } from '../core/model.js';
 import { classifySelection } from '../editor/relations.js';
+import { trackOnce } from './analytics.js';
 
 export class ConstraintActionsMixin {
 
@@ -173,6 +174,7 @@ export class ConstraintActionsMixin {
         affectedIds.add(item.id);
         if (item.children) for (const child of item.children()) affectedIds.add(child.id);
       }
+      trackOnce('relation', { kind });
       this.commit({ activeIds: affectedIds });
       // If the new constraint(s) made things impossible to solve, warn.
       const solver = this.solver.solve(sketch, this.project.sketches, [], {

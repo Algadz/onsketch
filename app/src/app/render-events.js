@@ -5,6 +5,7 @@ import { SelectTool } from '../tools/select.js';
 import { ArcTool, CenterLineTool, CenterRectangleTool, CircleTool, HexagonTool, LineTool, PointTool, RectangleTool, ThreePointCircleTool } from '../tools/draw.js';
 import { FillTool } from '../tools/fill.js';
 import { EraserTool, InkTool } from '../tools/freehand.js';
+import { track } from './analytics.js';
 import { SmartDimensionTool } from '../tools/smartdim.js';
 
 export class RenderEventsMixin {
@@ -81,6 +82,7 @@ export class RenderEventsMixin {
     this.hideContextMenu();
     this._clearOperationState();
     if (this.tool && this.tool.deactivate) this.tool.deactivate();
+    if (name !== this.toolName && name !== 'select') track('tool', { tool: name });
     this.toolName = name;
     switch (name) {
       case 'select':    this.tool = new SelectTool(this); break;

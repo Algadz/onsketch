@@ -171,6 +171,32 @@ layer: each layer is checked as if it were the active one, so a fully defined
 layer stays black while you work on another (for example after a global
 variable changed it).
 
+## Usage analytics
+
+The editor loads Umami (`app/index.html`) and sends custom events through
+`app/src/app/analytics.js`. No drawing contents, names, values or typed text
+are sent. Events marked *once* are sent at most once per page load for the
+same data, so repeated work doesn't flood the quota.
+
+| Event | Data | When |
+| --- | --- | --- |
+| `editor-open` | layout, touch, restored, theme | editor loaded |
+| `tool` | tool | switched to a tool (not Select) |
+| `tool-used` *once* | tool | first edit made with a tool (shape drawn, fill, dimension...) |
+| `menu` | action | menu bar, Tools window or phone ⋯ menu button |
+| `window-open` | window | a floating window opened from the menu bar |
+| `relation` *once* | kind | relation added from Properties |
+| `dimension` *once* | kind | dimension placed |
+| `fill` *once* | target (region / background) | bucket fill |
+| `equations` *once* | action | variable or equation edited |
+| `mirror`, `offset` | shapes | operation applied |
+| `layer-add`, `layer-delete` | layers | layers panel |
+| `project-new`, `project-export`, `project-import`, `project-import-failed` | | file actions |
+| `example-open` | example | `/app/?example=<slug>` |
+| `undo`, `redo` *once* | | |
+| `report-open`, `report-sent` | project attached | Report a problem |
+| `js-error` *once* | message, file:line | uncaught script error |
+
 ## Source layout
 
 | Path | Contents |
