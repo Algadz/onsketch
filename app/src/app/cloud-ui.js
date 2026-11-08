@@ -23,7 +23,7 @@ const LINK_KEY = 'onsketch:cloud';
 const PUSH_DELAY = 2500;
 const THUMB_EVERY = 30000;        // at most one thumbnail upload per 30 s
 const PAGE_PARAMS = ['project', 'view', 'new', 'signin'];
-const PENDING_SAVE = 'onsketch:save-after-sign-in';   // sessionStorage: survives the sign-in redirect
+const PENDING_SAVE = 'onsketch:after-sign-in';   // sessionStorage: 'save' | 'open', survives the sign-in redirect
 const AUTH_PARAMS = ['code', 'error', 'error_code', 'error_description'];
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -49,6 +49,8 @@ export class CloudMixin {
 
     const btn = document.getElementById('account-btn');
     btn.hidden = false;
+    const open = document.querySelector('#menubar [data-action="open"]');
+    if (open) open.hidden = false;
     btn.addEventListener('click', () => this.openAccount());
     this._renderAccountButton();
     window.addEventListener('online', () => { if (this.cloudLink?.dirty) this._cloudPushSoon(0); });
@@ -161,7 +163,7 @@ export class CloudMixin {
 
   /** Called on every change (from scheduleAutosave). */
   _cloudChanged() {
-    if (!this.cloudLink) return;
+    if (!this.cloudLink) { this._renderSaveState(); return; }
     if (!this.cloudLink.dirty) { this.cloudLink.dirty = true; this._storeLink(); }
     this._cloudPushSoon(PUSH_DELAY);
   }
@@ -243,21 +245,35 @@ export class CloudMixin {
     const btn = document.getElementById('account-btn');
     if (!btn || !this.cloudEnabled) return;
     const u = this.cloudUser;
-    const STATUS = { saving: 'Saving…', saved: 'Saved', offline: 'Not synced', conflict: 'Conflict' };
-    const status = this.cloudLink ? (STATUS[this._cloudStatus] || '') : '';
-    btn.dataset.status = this.cloudLink ? this._cloudStatus : '';
     if (u) {
       const initial = (u.user_metadata?.full_name || u.email || '?').trim()[0].toUpperCase();
       const pic = u.user_metadata?.avatar_url;
-      btn.innerHTML = (status ? `<span class="cloud-status">${status}</span>` : '')
-        + (pic ? `<img class="avatar" src="${esc(pic)}" alt="" referrerpolicy="no-referrer">` : `<span class="avatar">${esc(initial)}</span>`);
-      btn.title = `${u.email || 'Account'}: my projects`;
+      btn.innerHTML = pic ? `<img class="avatar" src="${esc(pic)}" alt="" referrerpolicy="no-referrer">` : `<span class="avatar">${esc(initial)}</span>`;
+      btn.title = `${u.email || 'Account'}: your account`;
     } else {
-      btn.innerHTML = (status ? `<span class="cloud-status">${status}</span>` : '') + '<span class="btn-label">Sign in</span>';
-      btn.title = 'Sign in to keep your projects in the cloud';
+      btn.innerHTML = '<span class="btn-label">Sign in</span>';
+      btn.title = 'Sign in to save your sketches';
     }
     btn.setAttribute('aria-label', btn.title);
+    this._renderSaveState();
   }
+  /** The status next to Save: Saved / Saving… / Not synced / Conflict for
+   *  a sketch in the account; "Not saved" for a drawing only in this browser. */
+  _renderSaveState() {
+    const el = document.getElementById('save-state');
+    if (!el || !this.cloudEnabled) return;
+    const STATUS = { saving: 'Saving…', saved: 'Saved', offline: 'Not synced', conflict: 'Conflict' };
+    const s = this.activeSketch?.();
+    const empty = !s || (!s.entities.length && !s.strokes.length && !s.fills.length);
+    let text = '', state = '';
+    if (this.cloudLink) { state = this._cloudStatus || 'saved'; text = STATUS[state] || ''; }
+    else if (!empty) { state = 'unsaved'; text = 'Not saved'; }
+    el.textContent = text;
+    el.dataset.state = state;
+    el.title = { saved: 'Saved in your account', saving: 'Saving to your account…', offline: "Couldn't reach the server; changes are kept in this browser and sent later",
+      conflict: 'Changed somewhere else', unsaved: 'Only in this browser: Save keeps it in your account' }[state] || '';
+  }
+
 
   /* ---- Account / projects dialog ---- */
   _accountModal() {
@@ -274,6 +290,7 @@ export class CloudMixin {
   }
   async openAccount() {
     this._accountOpen = true;
+    this._openList = false;
     this._signInStep = null;
     this._accountModal().classList.add('show');
     this._renderAccount('Loading…');
@@ -285,6 +302,7 @@ export class CloudMixin {
   closeAccount() {
     if (this._accountOpen && !this.cloudUser) { try { sessionStorage.removeItem(PENDING_SAVE); } catch { /* storage unavailable */ } }
     this._accountOpen = false;
+    this._openList = false;
     this._conflictRow = null;
     document.getElementById('account-modal')?.classList.remove('show');
   }
@@ -298,16 +316,18 @@ export class CloudMixin {
       return;
     }
     if (this._conflictRow) this._renderConflict(box);
+    else if (this.cloudUser && this._openList) this._renderOpen(box);
     else if (this.cloudUser) this._renderProjects(box);
     else this._renderSignIn(box);
   }
 
   _renderSignIn(box) {
     const step = this._signInStep;
-    const forSave = this._pendingSave();
-    box.innerHTML = `<h3>${forSave ? 'Sign in to save your sketch' : 'Sign in to OnSketch'}</h3>
+    const pending = this._pending();
+    const forSave = pending === 'save';
+    box.innerHTML = `<h3>${forSave ? 'Sign in to save your sketch' : pending === 'open' ? 'Sign in to open your sketches' : 'Sign in to OnSketch'}</h3>
       <form class="body" novalidate>
-        <p class="muted">${forSave
+        <p class="muted">${forSave || pending === 'open'
           ? 'Saving keeps your sketch in your account, so you can open it on any device. It\'s free.'
           : 'Keep your projects in your account and open them on any device.'}</p>
         ${step ? `
@@ -409,7 +429,7 @@ export class CloudMixin {
     const cloud = await this._ensureCloud();
     if (!cloud) { this._hint("Couldn't reach the server to save. Check your connection and try again."); return; }
     if (!this.cloudUser) {
-      try { sessionStorage.setItem(PENDING_SAVE, '1'); } catch { /* storage unavailable */ }
+      this._setPending('save');
       this.openAccount();
       return;
     }
@@ -420,15 +440,70 @@ export class CloudMixin {
     }
     await this.saveToAccount();
   }
-  _pendingSave() { try { return sessionStorage.getItem(PENDING_SAVE) === '1'; } catch { return false; } }
-  /** After signing in from Save (also after a Google / email-link redirect). */
+  _setPending(what) { try { sessionStorage.setItem(PENDING_SAVE, what); } catch { /* storage unavailable */ } }
+  /** 'save' | 'open' | null: what to do once signed in. */
+  _pending() { try { return sessionStorage.getItem(PENDING_SAVE); } catch { return null; } }
+  /** After signing in from Save or Open (also after a Google / email-link redirect). */
   _resumePendingSave() {
-    if (!this._pendingSave()) return;
+    const what = this._pending();
+    if (!what) return;
     try { sessionStorage.removeItem(PENDING_SAVE); } catch { /* storage unavailable */ }
-    if (this.cloudLink) return;
     this.closeAccount();
-    this.saveToAccount();
+    if (what === 'open') this.openSketch();
+    else if (!this.cloudLink) this.saveToAccount();
   }
+
+  /* ---- Open (button, ⋯ menu, Ctrl+O) ---- */
+  async openSketch() {
+    const cloud = await this._ensureCloud();
+    if (!cloud) { this._hint("Couldn't reach the server. Check your connection and try again."); return; }
+    if (!this.cloudUser) { this._setPending('open'); this.openAccount(); return; }
+    this._accountOpen = true;
+    this._openList = true;
+    this._accountModal().classList.add('show');
+    this._renderAccount();
+  }
+  async _renderOpen(box) {
+    const linked = this.cloudLink;
+    box.innerHTML = `<h3>Open a sketch</h3>
+      <div class="body">
+        <ul class="open-list"><li class="muted">Loading…</li></ul>
+        <p class="account-msg" role="status"></p>
+      </div>
+      <div class="footer">
+        <a class="link" href="projects/">Manage in My sketches</a>
+        <a class="link" href="/library/">Browse the library</a>
+        <span class="spacer"></span>
+        <button type="button" class="btn" data-a="close">Cancel</button>
+      </div>`;
+    box.querySelector('[data-a="close"]').addEventListener('click', () => this.closeAccount());
+    const list = box.querySelector('.open-list');
+    let rows, thumbs;
+    try {
+      rows = await this.cloud.list();
+      thumbs = await this.cloud.thumbnailURLs(rows).catch(() => new Map());
+    } catch (e) { list.innerHTML = `<li class="error">${esc(e.message || "Couldn't load your sketches.")}</li>`; return; }
+    if (!box.contains(list)) return;
+    if (!rows.length) {
+      list.innerHTML = '<li class="open-empty muted">No saved sketches yet. Draw something and click <b>Save</b>: it will be listed here.</li>';
+      return;
+    }
+    list.innerHTML = rows.map(r => {
+      const current = linked && linked.id === r.id;
+      const t = thumbs.get(r.id);
+      return `<li><button type="button" class="open-item${current ? ' current' : ''}" data-id="${esc(r.id)}"${current ? ' aria-current="true"' : ''}>
+        <span class="open-thumb">${t ? `<img src="${esc(t)}" alt="" loading="lazy">` : ''}</span>
+        <span class="open-text"><b>${esc(r.name)}</b><span class="muted">${esc(r.description || '')}</span></span>
+        <span class="open-when muted">${current ? 'open now' : esc(when(r.updated_at))}</span>
+      </button></li>`;
+    }).join('');
+    list.querySelectorAll('.open-item').forEach(b => b.addEventListener('click', () => {
+      if (linked && linked.id === b.dataset.id) { this.closeAccount(); return; }
+      this.openCloudProject(b.dataset.id);
+    }));
+    list.querySelector('.open-item')?.focus();
+  }
+
   _flashStatus(text) {
     const pill = document.getElementById('status-solve');
     if (!pill) return;

@@ -85,51 +85,22 @@ export class PersistenceMixin {
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flush(); });
   }
   newProject() {
+    // A drawing saved in the account is safe: no question. Otherwise ask.
     const s = this.activeSketch();
     const empty = !s || (!s.entities.length && !s.strokes.length && !s.fills.length);
-    if (!empty && !this._skipConfirm && !confirm('Discard current project and start a new one?')) return;
+    const saved = this.cloudLink && !this.cloudLink.dirty;
+    const question = this.cloudLink
+      ? 'Some changes to this sketch are not saved in your account yet. Start a new sketch anyway?'
+      : (this.cloudEnabled ? 'This drawing is not saved. Start a new sketch and lose it?' : 'Discard current project and start a new one?');
+    if (!empty && !saved && !this._skipConfirm && !confirm(question)) return;
     if (this._cloudUnlink) this._cloudUnlink();
     this.project = new Project(); this.project.addSketch('Sketch 1');
     this.undoStack.length = 0; this.redoStack.length = 0;
     this.selectionOrder = [];
     this.refreshUI(); this.solveAndRender();
     this._writeLocal();
+    this._renderSaveState?.();
   }
-  exportJSON() { this._modal('Export JSON', JSON.stringify(this.project.toJSON(), null, 2), false); }
-  importJSON() {
-    this._modal('Import JSON', '', true).then(text => {
-      if (!text) return;
-      try {
-        const project = Project.fromJSON(JSON.parse(text));
-        if (this._cloudUnlink) this._cloudUnlink();
-        this.project = project;
-        this.selectionOrder = [];
-        this.commit({ diagnostics:'sync' });
-        this.refreshUI();
-      } catch (e) { alert('Failed to parse: ' + e.message); }
-    });
-  }
-
-  _setupModal() {
-    const m = document.getElementById('json-modal');
-    document.getElementById('json-modal-cancel').addEventListener('click', () => {
-      m.classList.remove('show');
-      this._modalResolve && this._modalResolve(null);
-    });
-    document.getElementById('json-modal-ok').addEventListener('click', () => {
-      m.classList.remove('show');
-      this._modalResolve && this._modalResolve(document.getElementById('json-modal-text').value);
-    });
-  }
-  _modal(title, text, editable) {
-    const m = document.getElementById('json-modal');
-    document.getElementById('json-modal-title').textContent = title;
-    const ta = document.getElementById('json-modal-text');
-    ta.value = text; ta.readOnly = !editable;
-    m.classList.add('show');
-    return new Promise((res) => { this._modalResolve = res; });
-  }
-
   /* ---- Undo / redo ---- */
   undo() {
     if (this.undoStack.length < 2) return;

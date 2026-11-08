@@ -154,12 +154,16 @@ const app = (fn, arg) => page.evaluate(fn, arg);
 const rowsOnServer = () => app(() => JSON.parse(localStorage.getItem('fake-sb:rows') || '[]'));
 
 check(await page.isVisible('#account-btn') && (await page.textContent('#account-btn')).includes('Sign in'), 'account button says Sign in');
+check(await app(() => ['New', 'Open', 'Save'].every(t => [...document.querySelectorAll('#menubar .file-btn')].some(b => !b.hidden && b.textContent.trim() === t))), 'File: New, Open and Save buttons with their text');
+check(await app(() => !document.querySelector('[data-action="import"], [data-action="export"], #json-modal')), 'no Import / Export JSON any more');
 
 // Draw a rectangle, then sign in with the emailed code.
 await page.keyboard.press('r');
 await page.mouse.click(cx - 100, cy - 60); await page.mouse.click(cx + 80, cy + 50);
 await page.keyboard.press('Escape');
 await page.fill('#project-name', 'Shelf');
+await page.waitForFunction(() => document.getElementById('save-state').textContent === 'Not saved');
+check(true, 'a drawing only in this browser shows "Not saved"');
 
 // Signed out: no browser-save message, but a reload keeps the drawing.
 await page.waitForTimeout(600);                                   // autosave
@@ -209,7 +213,8 @@ await page.keyboard.press('Escape');
 await page.waitForFunction(() => window._app.cloudLink && !window._app.cloudLink.dirty && window._app.cloudLink.revision > 1, null, { timeout: 8000 });
 rows = await rowsOnServer();
 check(rows[0].data.sketches[0].entities.some(e => e.type === 'circle'), `change pushed automatically (revision ${rows[0].revision})`);
-check((await page.textContent('#account-btn')).includes('Saved'), 'account button says Saved');
+check((await page.textContent('#save-state')) === 'Saved', 'Saved shown next to the Save button');
+if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + '/menubar.png', clip: { x: 0, y: 0, width: 1400, height: 48 } });
 await page.keyboard.press('Control+s');
 await page.waitForFunction(() => document.getElementById('status-solve').textContent === 'Saved');
 check(!(await page.isVisible('#account-modal.show')) && !(await page.isVisible('#details-modal')), 'Save signed in saves at once, no dialog');
@@ -223,6 +228,17 @@ await page.click('#account-modal [data-a="mine"]');
 await page.waitForFunction(() => !window._app.cloudLink.dirty);
 rows = await rowsOnServer();
 check(rows.length === 1 && rows[0].name === 'Shelf v2', 'Keep mine overwrites the other version');
+
+// Open (Ctrl+O): the account's sketches with previews; opening one links it.
+await app(() => window._app.newProject());
+check(await app(() => window._app.cloudLink === null) && (await page.textContent('#save-state')) === '', 'New: a fresh sketch without a confirmation (the previous one is saved)');
+await page.keyboard.press('Control+o');
+await page.waitForSelector('#account-modal.show .open-item');
+check((await page.textContent('#account-modal h3')) === 'Open a sketch' && await page.locator('#account-modal .open-item').count() === 1, 'Open lists the saved sketches');
+if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + '/open-dialog.png' });
+await page.click('#account-modal .open-item');
+await page.waitForFunction(() => window._app.cloudLink && window._app.project.name === 'Shelf v2');
+check(!(await page.isVisible('#account-modal.show')), 'clicking a sketch opens it and closes the dialog');
 
 // My sketches page: cards with preview, title, description, usage.
 await page.goto(base + 'projects/');
@@ -324,6 +340,22 @@ await page.click('#account-modal [data-a="signout"]');
 await page.waitForFunction(() => !window._app.cloudUser);
 check(await app(() => window._app.cloudLink === null && window._app.project.name === 'Shelf v2'), 'sign out: drawing stays, unlinked');
 check((await page.textContent('#account-btn')).includes('Sign in'), 'account button says Sign in again');
+
+// Open while signed out: sign in first, then the list.
+await page.click('#menubar [data-action="open"]');
+await page.waitForSelector('#account-modal.show input[type=email]');
+check((await page.textContent('#account-modal h3')) === 'Sign in to open your sketches', 'Open signed out asks to sign in');
+await page.fill('#account-modal input[type=email]', 'me@example.com');
+await page.click('#account-modal button[type=submit]');
+await page.fill('#account-modal input[name=code]', '123456');
+await page.click('#account-modal button[type=submit]');
+await page.waitForSelector('#account-modal.show .open-item');
+check((await page.textContent('#account-modal h3')) === 'Open a sketch', 'after signing in, the Open list appears');
+await page.click('#account-modal [data-a="close"]');
+await page.click('#account-btn');
+await page.waitForSelector('#account-modal [data-a="signout"]');
+await page.click('#account-modal [data-a="signout"]');
+await page.waitForFunction(() => !window._app.cloudUser);
 // Public library, signed out: the account's two sketches are listed.
 await page.goto(base.replace('/app/', '/library/'));
 await page.waitForSelector('.lib-card');

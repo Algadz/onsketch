@@ -110,7 +110,7 @@ export class CompactMixin {
   _moreItems() {
     const check = (on) => `<span class="chk">${on ? '✓' : ''}</span>`;
     return [
-      ['new', 'New project'], ['import', 'Open (import JSON)'], ['save', 'Save'], ['export', 'Export JSON'], ['solve', 'Re-solve'],
+      ['new', 'New sketch'], ...(this.cloudEnabled ? [['open', 'Open…']] : []), ['save', 'Save'], ['solve', 'Re-solve'],
       '-',
       ['grid', 'Grid', this.gridOn], ['snap', 'Snap', this.snapOn], ['dimensions', 'Dimensions', this.showDimensions],
       ['relations', 'Relations', this.showRelations], ['zoom-fit', 'Zoom to fit'], ['theme', 'Dark theme', this.themeName === 'dark'],

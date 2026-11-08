@@ -77,7 +77,6 @@ export class App {
     this._setupLayersPanel();
     this._setupEquationsPanel();
     this.renderer.labelFor = (c, text) => this.dimensionLabel(c, text);
-    this._setupModal();
     this._setupReport();
     this._loadStylusPref();
     this._setupCompact();

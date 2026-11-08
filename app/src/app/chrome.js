@@ -16,7 +16,7 @@ import { WindowManager } from '../ui/windows.js';
 export class ChromeMixin {
   _setupChrome() {
     // Menu bar icons + labels.
-    const labels = { grid: 'Grid', snap: 'Snap', dimensions: 'Dimensions', relations: 'Relations' };
+    const labels = { new: 'New', open: 'Open', save: 'Save', grid: 'Grid', snap: 'Snap', dimensions: 'Dimensions', relations: 'Relations' };
     document.querySelectorAll('#menubar [data-action]').forEach(b => {
       const a = b.dataset.action;
       b.innerHTML = (ACTION_ICONS[a] || '') + (labels[a] ? `<span class="btn-label">${labels[a]}</span>` : '');
@@ -51,8 +51,7 @@ export class ChromeMixin {
     switch (a) {
       case 'new':          this.newProject(); break;
       case 'save':         this.save(); break;
-      case 'export':       this.exportJSON(); break;
-      case 'import':       this.importJSON(); break;
+      case 'open':         this.openSketch?.(); break;
       case 'undo':         this.undo(); break;
       case 'redo':         this.redo(); break;
       case 'solve':        this.solveAndRender(); break;

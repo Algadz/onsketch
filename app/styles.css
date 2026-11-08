@@ -608,6 +608,32 @@
   #account-btn[data-status="offline"] .cloud-status,
   #account-btn[data-status="conflict"] .cloud-status { color: var(--overc); }
   .compact #account-btn { display: none; }
+  /* File group: New / Open / Save with their text, and the save status */
+  #menubar .file-btn { gap: 6px; padding: 0 10px; }
+  #menubar .file-btn[hidden] { display: none; }
+  #menubar .file-btn .btn-label { display: inline !important; font-size: 12.5px; }
+  .save-state { font-size: 11.5px; color: var(--text-muted); white-space: nowrap; min-width: 0; padding: 0 2px 0 4px; }
+  .save-state:empty { display: none; }
+  .save-state[data-state="saved"]::before { content: "✓ "; color: #2c8a3a; }
+  .save-state[data-state="unsaved"] { color: var(--text-soft); }
+  .save-state[data-state="offline"], .save-state[data-state="conflict"] { color: var(--overc); }
+  @media (max-width: 900px) { #menubar .file-btn .btn-label { display: none !important; } }
+  .modal.account .footer .spacer { flex: 1; }
+  .modal.account .footer .link { align-self: center; margin-right: 10px; font-size: 12.5px; }
+  .open-list { list-style: none; margin: 0; padding: 0; max-height: min(60vh, 440px); overflow: auto; display: grid; gap: 4px; }
+  .open-item {
+    width: 100%; display: flex; align-items: center; gap: 10px; padding: 6px; text-align: left; cursor: pointer;
+    border: 1px solid transparent; border-radius: 8px; background: none; color: inherit; font: inherit;
+  }
+  .open-item:hover, .open-item:focus-visible { background: var(--hover); border-color: var(--border-soft); outline: none; }
+  .open-item.current { background: var(--accent-softer); border-color: var(--accent-border); }
+  .open-thumb { flex: 0 0 auto; width: 88px; height: 55px; border-radius: 6px; border: 1px solid var(--border-soft); background: #fff; overflow: hidden; }
+  .open-thumb img { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .open-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .open-text b { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .open-text .muted { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .open-when { flex: 0 0 auto; font-size: 11px; }
+  .open-empty { padding: 18px 8px; text-align: center; }
   .modal.account .body { display: grid; gap: 8px; }
   .modal.account p { margin: 0; }
   .modal.account label { font-weight: 600; font-size: 12px; }
