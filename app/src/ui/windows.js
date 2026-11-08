@@ -36,6 +36,14 @@ export class WindowManager {
     el.querySelector('.fwin-x')?.addEventListener('click', () => this.toggle(id, false));
     el.addEventListener('pointerdown', () => { el.style.zIndex = ++this.z; });
     const head = el.querySelector('.fwin-head');
+    // A finger on the title bar is our drag / swipe, never a browser gesture.
+    // touch-action: none stops the scroll, but a quick flick still starts an
+    // (invisible) fling in Chromium, and the next tap anywhere — e.g. ⋯
+    // right after swiping a sheet closed — only stops that fling and never
+    // clicks. Cancelling touchstart keeps the browser out of it entirely.
+    head.addEventListener('touchstart', (ev) => {
+      if (!ev.target.closest('button, input, select')) ev.preventDefault();
+    }, { passive: false });
     head.addEventListener('pointerdown', (ev) => {
       if (ev.button !== 0 || ev.target.closest('button, input, select')) return;
       ev.preventDefault();
