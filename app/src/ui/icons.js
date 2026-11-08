@@ -8,6 +8,16 @@
    - Sketch vocabulary shared with the canvas: a filled dot is a sketch
      point / click point, a small "+" is a centre, a dashed line is
      construction or a reference axis.
+
+   The undo / redo arrows follow the shapes of the Lucide icon set
+   (https://lucide.dev), used under its ISC licence:
+     Copyright (c) for portions of Lucide are held by Cole Bemis 2013-2022
+     as part of Feather (MIT). All other copyright (c) for Lucide are held
+     by Lucide Contributors 2022. Permission to use, copy, modify, and/or
+     distribute this software for any purpose with or without fee is hereby
+     granted, provided that the above copyright notice and this permission
+     notice appear in all copies.
+   All other icons are original to OnSketch.
    ============================================================ */
 
 const dot = (x, y, r = 1.9) => `<circle cx="${x}" cy="${y}" r="${r}" fill="currentColor" stroke="none"/>`;
