@@ -69,7 +69,7 @@ Policies: owners read / insert / update / delete their rows; anyone reads
 - First sign-in with a drawing open: offer to upload it.
 - Sign out: the local copy stays; cloud ids are forgotten.
 
-### Phase 4: sharing and polish
+### Phase 4: sharing and polish (superseded by `docs/projects-page-plan.md`)
 - Visibility toggle; public link `/app/?p=<id>` opens a read-only copy
   (Save makes it yours: *Duplicate to my projects*).
 - Thumbnails in the projects list (canvas → PNG → Storage).
