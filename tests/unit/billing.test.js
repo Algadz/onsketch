@@ -129,3 +129,13 @@ test('webhook: once live only, test-mode events are logged but change no plan', 
   await handleWebhook(await send(event('subscription_created', {}, { test: false })), { secret: SECRET, admin, liveOnly: true });
   assert.equal(admin.tables.account_plans[0].plan, 'premium');
 });
+
+test('billing: says why a plan is unavailable (bad key, or an id the key cannot see)', async () => {
+  const unknown = deps({ variants: {}, products: {} });
+  const res = await handleBilling(call({ action: 'checkout', interval: 'month' }), unknown.d);
+  assert.equal(res.status, 502);
+  assert.match((await res.json()).error, /no product or variant 1511119.*test-mode/);
+  const badKey = deps();
+  badKey.d.fetch = async () => new Response(JSON.stringify({ errors: [{ status: '401' }] }), { status: 401 });
+  assert.match((await (await handleBilling(call({ action: 'checkout', interval: 'year' }), badKey.d)).json()).error, /refused the API key/);
+});

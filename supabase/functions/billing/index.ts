@@ -41,14 +41,17 @@ async function ls(deps: Deps, path: string, init: RequestInit = {}) {
   return { ok: res.ok, status: res.status, body };
 }
 
-/** A variant id from a variant or product id. */
-export async function resolveVariant(deps: Deps, id: string): Promise<string | null> {
+/** A variant id from a variant or product id, or an error saying why not
+ *  (bad API key, or an id this key can't see: test vs live mode). */
+export async function resolveVariant(deps: Deps, id: string): Promise<{ id: string } | { error: string }> {
   const v = await ls(deps, `/variants/${encodeURIComponent(id)}`);
-  if (v.ok && v.body?.data?.id) return String(v.body.data.id);
+  if (v.status === 401 || v.status === 403) return { error: 'Lemon Squeezy refused the API key (LEMONSQUEEZY_API_KEY).' };
+  if (v.ok && v.body?.data?.id) return { id: String(v.body.data.id) };
   const list = await ls(deps, `/variants?filter[product_id]=${encodeURIComponent(id)}`);
   const variants = (list.body?.data || []) as any[];
   const pick = variants.find(x => x.attributes?.status === 'published') || variants.find(x => x.attributes?.status !== 'pending') || variants[0];
-  return pick ? String(pick.id) : null;
+  if (pick) return { id: String(pick.id) };
+  return { error: `Lemon Squeezy has no product or variant ${id} for this API key (a test-mode key only sees test-mode products, a live key only live ones).` };
 }
 
 export async function handleBilling(req: Request, deps: Deps): Promise<Response> {
@@ -73,8 +76,12 @@ export async function handleBilling(req: Request, deps: Deps): Promise<Response>
     if (!deps.env.apiKey || !deps.env.storeId) return json(500, { error: 'Billing is not configured.' });
     const row = await deps.getPlanRow(user.id);
     if (row?.plan === 'premium' && ['active', 'on_trial', 'past_due'].includes(row.status)) return json(409, { error: 'You already have OnSketch Pro.' });
-    const variant = await resolveVariant(deps, deps.env.ids[interval]);
-    if (!variant) return json(502, { error: 'This plan is not available right now.' });
+    const resolved = await resolveVariant(deps, deps.env.ids[interval]);
+    if ('error' in resolved) {
+      console.error('billing: checkout', interval, resolved.error);
+      return json(502, { error: `This plan is not available right now. (${resolved.error})` });
+    }
+    const variant = resolved.id;
     const res = await ls(deps, '/checkouts', {
       method: 'POST',
       body: JSON.stringify({
@@ -93,7 +100,10 @@ export async function handleBilling(req: Request, deps: Deps): Promise<Response>
       }),
     });
     const url = res.body?.data?.attributes?.url;
-    if (!res.ok || !url) return json(502, { error: res.body?.errors?.[0]?.detail || "Couldn't start the checkout." });
+    if (!res.ok || !url) {
+      console.error('billing: create checkout', res.status, JSON.stringify(res.body?.errors || res.body));
+      return json(502, { error: `Couldn't start the checkout. (${res.body?.errors?.[0]?.detail || 'Lemon Squeezy error ' + res.status})` });
+    }
     return json(200, { url });
   }
 
