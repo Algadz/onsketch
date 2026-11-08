@@ -260,8 +260,8 @@ check(after2.p[0] === lockDrag.p[0] && after2.p[1] === lockDrag.p[1], `inactive 
 // Fill tool is blind to other layers: with Layer 2 active, clicking inside
 // Layer 1's rectangle finds no region there, so it fills the background.
 await page.evaluate(() => window._app._setPen('lineStyle', 'solid', true));
-await page.click('#colors-body .palette .sw[data-c="#8a4fd1"]', { button: 'right' });
 await page.keyboard.press('b');
+await page.click('#colors-body .palette .sw[data-c="#8a4fd1"]');
 await page.mouse.click(cx - 120, cy - 20);
 const blind = await page.evaluate(() => ({ fills: window._app.activeSketch().fills.length, bg: window._app.project.background }));
 check(blind.fills === 0 && blind.bg === '#8a4fd1', `fill ignores other layers' shapes (${JSON.stringify(blind)})`);
@@ -320,10 +320,10 @@ await page.mouse.move(cx - 250, cy + 150, { steps: 3 });
 await page.mouse.click(cx - 250, cy + 150);
 await page.mouse.click(cx - 170, cy + 230);
 await page.keyboard.press('Escape');
-await page.click('#colors-body .palette .sw[data-c="#14946b"]', { button: 'right' });
 await page.keyboard.press('b');
+await page.click('#colors-body .palette .sw[data-c="#14946b"]');
 await page.mouse.click(cx - 290, cy + 190);
-await page.click('#colors-body .palette .sw[data-c="#c2307a"]', { button: 'right' });
+await page.click('#colors-body .palette .sw[data-c="#c2307a"]');
 await page.mouse.click(cx - 210, cy + 190);
 await page.keyboard.press('s');
 const shared = await page.evaluate(() => {
@@ -824,6 +824,19 @@ await page.evaluate(() => { const a = window._app; a.project.layer('ly1').visibl
     await page.mouse.up();
   };
   check(await page.isVisible('.fwin[data-win="sketch"]'), 'Sketch window is open');
+  check(await page.isVisible('#sketch-body [data-tool="fill"]') && !(await page.isVisible('#tools-body [data-tool="fill"]')), 'Fill is in the Sketch window, not in Tools');
+  await page.evaluate(() => window._app.windows.toggle('colors', true));
+  const chip = () => page.evaluate(() => document.querySelector('#colors-body .pc-sw.active')?.dataset.chip);
+  await page.keyboard.press('b');
+  check(await chip() === 'fill', 'Fill tool highlights the fill colour');
+  await page.keyboard.press('n');
+  check(await chip() === 'ink', 'Pen highlights the ink colour');
+  const before = await page.evaluate(() => window._app.pen.fillColor);
+  await page.click('#colors-body .palette .sw[data-c="#14946b"]');
+  await page.click('#colors-body .palette .sw[data-c="#c9a400"]', { button: 'right' });
+  const pen = await page.evaluate(() => ({ ink: window._app.pen.inkColor, fill: window._app.pen.fillColor }));
+  check(pen.ink === '#14946b' && pen.fill === '#c9a400' && before !== pen.fill, `left click sets ink, right click sets fill (${JSON.stringify(pen)})`);
+  await page.click('#colors-body .palette .sw[data-c="#111418"]');
   await page.click('.fwin[data-win="sketch"] [data-tool="pen"]');
   await drag(cx - 250, cy + 150, cx + 250, cy + 150);
   await page.keyboard.press('g');

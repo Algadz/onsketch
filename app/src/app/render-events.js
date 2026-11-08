@@ -102,6 +102,7 @@ export class RenderEventsMixin {
     document.getElementById('status-tool').textContent = 'Tool: ' + toolDef(name).label;
     if (name === 'smartdim' && !this.showDimensions) this.setDimensionsVisible(true);
     if (this._refreshSketchWindow) this._refreshSketchWindow();
+    if (this._syncColorTarget) this._syncColorTarget();
     this._refreshOptionsBar();
     document.getElementById('status-hint').textContent = (this.tool.hint && this.tool.hint()) || '';
     this._updateCanvasCursor();

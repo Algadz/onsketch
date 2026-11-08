@@ -36,12 +36,17 @@ cached modules after a deploy. `npm test` fails if the stamp is out of date.
   relations, dimensions), Equations. *Reset window layout* puts them back.
 - **Line colour always shows state**, as in SolidWorks: blue under-defined,
   black fully defined, red over-defined, pink construction, orange selected.
-- **Sketch** window: freehand ink. Pen (N), Marker (G) and Eraser (E), an
-  ink colour, size and opacity. Strokes are vector, in world units, on the
-  active layer and drawn on top of its shapes; the solver, dimensions,
-  snapping and the Fill tool ignore them. The eraser removes whole strokes
-  on the active layer. Roadmap: `docs/sketch-tools-plan.md`.
-- **Colors** window: the Fill tool's colour and opacity. Shapes are never
+- **Sketch** window: Fill (B), Pen (N), Marker (G) and Eraser (E), with the
+  size of the current tool (or Fill / Erase for the bucket). Strokes are
+  vector, in world units, on the active layer and drawn on top of its
+  shapes; the solver, dimensions, snapping and the Fill tool ignore them.
+  The eraser removes whole strokes on the active layer. Roadmap:
+  `docs/sketch-tools-plan.md`.
+- **Colors** window: one place for both colours, Paint.NET style. Two
+  chips, Ink (Pen, Marker) and Fill (the bucket); the highlighted one follows
+  the tool and is what a left click on the palette sets (right click sets the
+  other). Click the highlighted chip for any colour, ⇄ swaps them; the
+  opacity slider is the highlighted colour's. Shapes are never
   filled when drawn; the Fill tool (B) fills the area you click, using only
   the active layer's shapes (a region they close, or the background anywhere
   else); other layers are ignored. Its cursor is a paint drop in the fill

@@ -1,4 +1,4 @@
-import { LINE_STYLES, LINE_WEIGHTS, PALETTE } from '../core/style.js';
+import { LINE_STYLES, LINE_WEIGHTS } from '../core/style.js';
 import { clamp } from '../core/math.js';
 import { ACTION_ICONS, DRAW_TOOLS, TOOLS, TOOL_ICONS, WINDOW_ICONS, toolDef } from '../ui/tool-defs.js';
 import { WindowManager } from '../ui/windows.js';
@@ -102,7 +102,7 @@ export class ChromeMixin {
     const group = (g) => TOOLS.filter(t => t.group === g).map(btn).join('');
     const dim = toolDef('smartdim');
     body.innerHTML = `
-      <div class="tool-grid">${group('pick')}${group('paint')}</div>
+      <div class="tool-grid">${group('pick')}</div>
       <div class="tool-sep"></div>
       <div class="tool-grid">${group('sketch')}</div>
       <div class="tool-sep"></div>
@@ -116,39 +116,6 @@ export class ChromeMixin {
     body.querySelectorAll('[data-tool]').forEach(b => b.addEventListener('click', () => this.setTool(b.dataset.tool)));
     body.querySelectorAll('[data-action]').forEach(b => b.addEventListener('click', () => this._runAction(b.dataset.action, b)));
   }
-
-  /** Colors window: the fill colour the Fill tool paints with. Stroke
-   *  colour isn't chosen; lines always show their state. */
-  _refreshColorsPanel() {
-    const body = document.getElementById('colors-body');
-    if (!body) return;
-    const p = this.pen;
-    body.innerHTML = `
-      <div class="pc-wrap">
-        <label class="pc-sw pc-fill" style="--sw:${p.fillColor}" title="Fill colour: click to choose any colour">
-          <input type="color" value="${p.fillColor}" data-pen="fillColor"></label>
-        <div class="pc-legend"><b>Fill colour</b><span>${p.fillColor.toUpperCase()}</span></div>
-      </div>
-      <div class="palette">
-        ${PALETTE.map(c => `<button class="sw${c === p.fillColor ? ' on' : ''}" data-c="${c}" style="--sw:${c}" title="${c}"></button>`).join('')}
-      </div>
-      <div class="prop-row"><label>opacity</label>
-        <div class="range-row"><input type="range" min="0.05" max="1" step="0.05" value="${p.fillOpacity}" data-pen="fillOpacity"><span>${Math.round(p.fillOpacity * 100)}%</span></div></div>
-      <div class="hint">Used by the Fill tool (B). Line colours show constraint status.</div>`;
-    const inp = body.querySelector('input[type=color]');
-    inp.addEventListener('input', () => this._setPen('fillColor', inp.value, false));
-    inp.addEventListener('change', () => this._setPen('fillColor', inp.value, true));
-    body.querySelectorAll('.palette .sw').forEach(b => {
-      b.addEventListener('click', () => this._setPen('fillColor', b.dataset.c, true));
-      b.addEventListener('contextmenu', (e) => { e.preventDefault(); this._setPen('fillColor', b.dataset.c, true); });
-    });
-    const r = body.querySelector('input[type=range]');
-    const read = () => { r.nextElementSibling.textContent = Math.round(r.value * 100) + '%'; return parseFloat(r.value); };
-    r.addEventListener('input', () => this._setPen('fillOpacity', read(), false));
-    r.addEventListener('change', () => this._setPen('fillOpacity', read(), true));
-  }
-
-
 
   _setPen(key, value, final) {
     this.pen[key] = value;
@@ -213,12 +180,8 @@ export class ChromeMixin {
       }
       el.addEventListener('click', () => {
         if (k === 'construction') this._runAction('construction');
-        else if (k === 'fill-mode' || k === 'erase-mode') {
-          this.fillErase = k === 'erase-mode';
-          this._refreshOptionsBar();
-          this._updateCanvasCursor();
-          document.getElementById('status-hint').textContent = (this.tool.hint && this.tool.hint()) || '';
-        } else this._runAction(k);
+        else if (k === 'fill-mode' || k === 'erase-mode') this.setFillErase(k === 'erase-mode');
+        else this._runAction(k);
       });
     });
   }
