@@ -21,6 +21,7 @@ import { LayersPanelMixin } from './layers-panel.js';
 import { FillsMixin } from './fills.js';
 import { PersistenceMixin } from './persistence.js';
 import { SketchWindowMixin } from './sketch-window.js';
+import { ReportMixin } from './report.js';
 
 /* =============== 10. APP ====================================== */
 export class App {
@@ -71,6 +72,7 @@ export class App {
     this._setupEquationsPanel();
     this.renderer.labelFor = (c, text) => this.dimensionLabel(c, text);
     this._setupModal();
+    this._setupReport();
     this._setupResize();
     const restored = this.loadLocalIfAny();
     this._setupAutosave();
@@ -624,7 +626,7 @@ export class App {
 }
 
 /* Methods are grouped into mixins by concern; see src/app/*.js. */
-for (const Mixin of [ChromeMixin, EquationsMixin, LayersPanelMixin, FillsMixin, DimensionLabelsMixin, SelectionMixin, DragMixin, SolveMixin, OperationsMixin, ConstraintActionsMixin, RenderEventsMixin, PanelsMixin, PersistenceMixin, SketchWindowMixin]) {
+for (const Mixin of [ChromeMixin, EquationsMixin, LayersPanelMixin, FillsMixin, DimensionLabelsMixin, SelectionMixin, DragMixin, SolveMixin, OperationsMixin, ConstraintActionsMixin, RenderEventsMixin, PanelsMixin, PersistenceMixin, SketchWindowMixin, ReportMixin]) {
   for (const key of Object.getOwnPropertyNames(Mixin.prototype)) {
     if (key === 'constructor') continue;
     Object.defineProperty(App.prototype, key, Object.getOwnPropertyDescriptor(Mixin.prototype, key));

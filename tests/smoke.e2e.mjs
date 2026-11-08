@@ -846,6 +846,23 @@ await page.evaluate(() => { const a = window._app; a.project.layer('ly1').visibl
   await page.keyboard.press('s');
 }
 
+// Report a problem: subtle link, form posts to Formspree (intercepted here).
+{
+  let posted = null;
+  await page.route('https://formspree.io/**', async (route) => { posted = route.request().postData() || ''; await route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' }); });
+  check(await page.isVisible('#report-open'), 'report link in the status bar');
+  await page.click('#report-open');
+  await page.click('#report-send');                              // empty: not sent
+  check(posted === null && await page.isVisible('#report-modal'), 'empty report is not sent');
+  await page.fill('#report-message', 'Test report from the smoke test');
+  await page.check('#report-form input[name=attach]');
+  await page.click('#report-send');
+  await page.waitForFunction(() => document.getElementById('report-status').textContent.startsWith('Sent'));
+  check(/Test report/.test(posted) && /name="context"/.test(posted) && /name="project"/.test(posted), 'report posts message, context and the attached drawing');
+  await page.waitForFunction(() => !document.getElementById('report-modal').classList.contains('show'));
+  await page.unroute('https://formspree.io/**');
+}
+
 // The project survives a reload (autosaved to the browser, restored on open).
 {
   const sig = () => page.evaluate(() => { const s = window._app.activeSketch(); return JSON.stringify({ e: s.entities.length, c: s.constraints.length, l: window._app.project.layers.length }); });
