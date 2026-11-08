@@ -254,6 +254,11 @@ sign out.
 - **Plans**: free = 3 sketches, public (they will feed a public library);
   Premium (not on sale yet) = unlimited, may be private. Enforced in the
   database; the plan is in `account_plans`, written only by the service role.
+- **Library** (`/library/`): every public sketch with a description,
+  newest first, with search (title / description), sort, *Show more*, a
+  detail view with a shareable link (`/library/?s=<id>`), *Copy link*,
+  *Report* (Formspree) and *Open a copy in the editor* (`/app/?view=<id>`:
+  a browser-only copy, the previous drawing one Undo away). Works signed out.
 - Saves carry the revision they started from, so a save from a stale tab
   or device asks which version to keep instead of overwriting. Only the
   drawing moves the revision; title and description edits never conflict.
@@ -263,7 +268,8 @@ sign out.
 supabase-js is loaded from jsDelivr only once someone signs in. Schema,
 rules and policies: `supabase/migrations/` (run in order); data layer and
 details dialog: `app/src/cloud/`; editor UI: `app/src/app/cloud-ui.js`;
-page: `app/projects/` + `app/src/projects/page.js`; previews:
+pages: `app/projects/` + `app/src/projects/page.js`, `library/` +
+`app/src/library/page.js`; previews:
 `app/src/render/thumbnail.js`. Plans: `docs/cloud-plan.md`,
 `docs/projects-page-plan.md`. Emptying `app/src/cloud/config.js` turns all
 of it off. `npm run test:cloud` drives it against a fake client

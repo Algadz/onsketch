@@ -121,7 +121,7 @@ Each row keeps `thumbnail_version` to bust caches.
    `?project=` deep link, account menu entry.
 3. ✅ **Thumbnails** — renderer to WebP, Storage bucket + policies, upload
    with autosave, cards show them (placeholder until the first upload).
-4. **Public library** — `/library/` (or a tab), read-only viewer
+4. ✅ **Public library** (built at `/library/`; detail view `/library/?s=<id>`, copy via `/app/?view=<id>`, reports by Formspree; likes and moderation tools still to do) — `/library/` (or a tab), read-only viewer
    `/app/?view=<id>`, *Duplicate to my sketches*, reporting/moderation,
    sitemap entries.
 5. **Premium** — payments (Stripe Checkout + webhook → `profiles.plan`),

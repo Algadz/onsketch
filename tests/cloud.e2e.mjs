@@ -63,13 +63,13 @@ function installFake() {
       const q = { f: [], op: 'select', p: null, single: false, table };
       const run = () => {
         if (table === 'account_plans') return { data: null, error: null };
-        const all = rows(); const m = r => q.f.every(([k, v]) => r[k] === v);
+        const all = rows(); const m = r => q.f.every(([k, v]) => r[k] === v) && (q.notNull || []).every(k => r[k] != null) && (!q.text || [r.name, r.description].some(t => (t || '').toLowerCase().includes(q.text)));
         let out;
         if (q.op === 'insert' && q.table === 'projects' && all.length >= (window.__fakeLimit ?? 3)) return { data: null, error: new Error('OnSketch: free plan limit (3 projects).') };
         if (q.op === 'insert') { const r = { id: 'p' + (all.length + 1) + '-' + Date.now(), owner_id: 'u1', visibility: 'private', revision: 1, updated_at: new Date().toISOString(), ...q.p }; all.push(r); out = [r]; }
         else if (q.op === 'update') { out = all.filter(m); out.forEach(r => Object.assign(r, q.p, { revision: r.revision + ('data' in q.p ? 1 : 0), updated_at: new Date().toISOString() })); }
         else if (q.op === 'delete') { out = all.filter(m); put(all.filter(r => !m(r))); return { data: out, error: null }; }
-        else out = all.filter(m).sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+        else { out = all.filter(m).sort((a, b) => b.updated_at.localeCompare(a.updated_at)); if (q.range) out = out.slice(q.range[0], q.range[1] + 1); }
         if (q.op !== 'select') put(all);
         out = JSON.parse(JSON.stringify(out));
         if (q.single) return out.length === 1 ? { data: out[0], error: null } : { data: null, error: Object.assign(new Error('not found'), { code: 'PGRST116' }) };
@@ -79,6 +79,9 @@ function installFake() {
         select() { return b; }, order() { return b; }, single() { q.single = true; return b; }, maybeSingle() { return b; },
         insert(p) { q.op = 'insert'; q.p = p; return b; }, update(p) { q.op = 'update'; q.p = p; return b; },
         delete() { q.op = 'delete'; return b; }, eq(k, v) { q.f.push([k, v]); return b; },
+        not(k) { (q.notNull = q.notNull || []).push(k); return b; },
+        or(expr) { q.text = /ilike\.%([^%]*)%/.exec(expr)[1].toLowerCase(); return b; },
+        range(a, z) { q.range = [a, z]; return b; },
         then(res, rej) { return Promise.resolve(run()).then(res, rej); },
       };
       return b;
@@ -243,6 +246,41 @@ await page.click('#account-modal [data-a="signout"]');
 await page.waitForFunction(() => !window._app.cloudUser);
 check(await app(() => window._app.cloudLink === null && window._app.project.name === 'Shelf v2'), 'sign out: drawing stays, unlinked');
 check((await page.textContent('#account-btn')).includes('Sign in'), 'account button says Sign in again');
+// Public library, signed out: the account's two sketches are listed.
+await page.goto(base.replace('/app/', '/library/'));
+await page.waitForSelector('.lib-card');
+check((await page.locator('.lib-card').count()) === 2, 'library lists the public sketches');
+check(await page.locator('.lib-card .thumb img').count() >= 1, 'library cards show previews');
+if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + '/library.png' });
+check(await app(() => document.documentElement.scrollWidth <= innerWidth), 'library: no sideways scrolling');
+check((await page.textContent('#lib-account')) === 'Sign in', 'library: Sign in link when signed out');
+await page.fill('#lib-search input[name=q]', 'copy');
+await page.waitForFunction(() => document.querySelectorAll('.lib-card').length === 1);
+check((await page.textContent('.lib-card .card-title')).includes('(copy)'), 'search narrows to matching sketches');
+await page.fill('#lib-search input[name=q]', 'zzz-nothing');
+await page.waitForFunction(() => /No sketch matches/.test(document.getElementById('page-msg').textContent));
+check(true, 'search with no result says so');
+await page.fill('#lib-search input[name=q]', '');
+await page.waitForFunction(() => document.querySelectorAll('.lib-card').length === 2);
+await page.locator('.lib-card .card-title a', { hasText: /^Shelf v2$/ }).click();
+await page.waitForSelector('#lib-detail .lib-detail-desc');
+check(/[?]s=/.test(page.url()) && (await page.textContent('#lib-detail h3')) === 'Shelf v2', 'detail view opens with a shareable ?s= link');
+if (process.env.SHOT_DIR) {
+  await page.screenshot({ path: process.env.SHOT_DIR + '/library-detail.png' });
+  await page.setViewportSize({ width: 390, height: 820 });
+  await page.screenshot({ path: process.env.SHOT_DIR + '/library-detail-phone.png' });
+  await page.setViewportSize({ width: 1400, height: 900 });
+}
+await page.goBack();
+await page.waitForFunction(() => !document.getElementById('lib-detail'));
+check(true, 'Back closes the detail view');
+await page.goForward();
+await page.waitForSelector('#lib-detail a.btn.primary');
+await page.click('#lib-detail a.btn.primary');
+await page.waitForFunction(() => window._app?.project?.name === 'Shelf v2');
+check(await app(() => window._app.cloudLink === null && window._app.project.toJSON().sketches[0].entities.some(e => e.type === 'circle')), 'Open a copy: the sketch opens in the editor, not linked to anyone\'s account');
+check(!/view=/.test(page.url()), 'view parameter cleaned');
+
 check(errors.length === 0, 'no page errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
 await ctx.close();
 
@@ -276,6 +314,10 @@ if (live) {
   await p3.click('#account-modal [data-a="google"]');
   const req = await nav.catch(() => null);
   check(!!req && /redirect_to=http%3A%2F%2Flocalhost/.test(req.url()), 'live: Google sign-in goes to Supabase with a redirect back to the editor');
+  await p3.goto(base.replace('/app/', '/library/'));
+  await p3.waitForFunction(() => { const m = document.getElementById('page-msg'); return document.querySelector('.lib-card') || (m && !/Loading/.test(m.textContent) && m.textContent.trim()); }, null, { timeout: 20000 });
+  const libState = await p3.evaluate(() => document.querySelectorAll('.lib-card').length + ' cards; ' + document.getElementById('page-msg').textContent.trim().slice(0, 60));
+  check(!/Couldn't|error/i.test(libState), `live: library loads from the real project (${libState})`);
   check(pageErrors.length === 0, 'live: no page errors' + (pageErrors.length ? ': ' + pageErrors.join(' | ') : ''));
   await c3.close();
 }

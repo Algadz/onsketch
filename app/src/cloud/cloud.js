@@ -191,6 +191,29 @@ export class Cloud {
     }
   }
 
+  /* ---- Public library ---- */
+  /** Public sketches (with a description), newest first. `search` matches
+   *  title or description. Returns { rows, more }. */
+  async library({ search = '', offset = 0, limit = 24, sort = 'new' } = {}) {
+    let q = this.client.from('projects')
+      .select('id,owner_id,name,description,updated_at,created_at')
+      .eq('visibility', 'public').not('description', 'is', null);
+    const words = librarySearch(search);
+    if (words) q = q.or(`name.ilike.%${words}%,description.ilike.%${words}%`);
+    q = q.order(sort === 'updated' ? 'updated_at' : 'created_at', { ascending: false }).range(offset, offset + limit);
+    const { data, error } = await q;
+    if (error) throw error;
+    return { rows: data.slice(0, limit), more: data.length > limit };
+  }
+  /** One public sketch (no drawing data), or null. */
+  async libraryItem(id) {
+    const { data, error } = await this.client.from('projects')
+      .select('id,owner_id,name,description,updated_at,created_at,visibility')
+      .eq('id', id).eq('visibility', 'public').maybeSingle();
+    if (error) throw error;
+    return data;
+  }
+
   /* ---- Thumbnails (Storage: thumbnails/<owner>/<project>.webp) ---- */
   async _thumbPath(id) {
     const user = await this.user();
@@ -205,8 +228,9 @@ export class Cloud {
   }
   /** Map project id → temporary URL of its thumbnail (missing ones left out). */
   async thumbnailURLs(rows, owner = null) {
-    const user = owner ? { id: owner } : await this.user();
-    if (!user || !rows.length) return new Map();
+    if (!rows.length) return new Map();
+    const user = owner ? { id: owner } : (rows.every(r => r.owner_id) ? null : await this.user());
+    if (!user && !rows.every(r => r.owner_id)) return new Map();
     const paths = rows.map(r => `${r.owner_id || user.id}/${r.id}.webp`);
     const { data, error } = await this.client.storage.from(THUMBS).createSignedUrls(paths, 3600);
     if (error || !data) return new Map();
@@ -220,6 +244,10 @@ export class Cloud {
 export function rowFor(json) {
   if (!json || typeof json !== 'object' || !Array.isArray(json.sketches)) throw new Error('not a project');
   return { name: cleanName(json.name), data: json };
+}
+/** A search string made safe for a PostgREST or=() filter. */
+export function librarySearch(s) {
+  return cleanText(String(s ?? '').replace(/[,()%*\\:."]/g, ' ')).slice(0, 60);
 }
 export function cleanText(s) { return String(s ?? '').replace(/\s+/g, ' ').trim(); }
 export function cleanName(name) {

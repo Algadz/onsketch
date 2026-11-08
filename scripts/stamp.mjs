@@ -22,11 +22,12 @@ function walk(dir) {
   });
 }
 
-/** Pages that load the editor's modules: path under app/, and the
- *  prefix from that page back to app/ ('' or '../'). */
+/** Pages that load the editor's modules: path relative to app/, and the
+ *  prefix from that page to app/ ('', '../', '../app/'). */
 export const PAGES = [
   { file: 'index.html', base: '' },
   { file: 'projects/index.html', base: '../' },
+  { file: '../library/index.html', base: '../app/' },
 ];
 
 export function stampedHtml(html, base = '') {
@@ -56,8 +57,8 @@ if (process.argv[1] && process.argv[1].endsWith('stamp.mjs')) {
     const html = readFileSync(path, 'utf8');
     const next = stampedHtml(html, base);
     if (next === html) continue;
-    if (process.argv.includes('--check')) { console.error(`app/${file} is not stamped; run: npm run stamp`); stale = true; }
-    else { writeFileSync(path, next); console.log(`stamped app/${file}`); }
+    if (process.argv.includes('--check')) { console.error(`${join('app', file)} is not stamped; run: npm run stamp`); stale = true; }
+    else { writeFileSync(path, next); console.log(`stamped ${join('app', file)}`); }
   }
   if (stale) process.exit(1);
 }

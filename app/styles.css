@@ -724,11 +724,41 @@
   .empty-state p { margin: 0 0 14px; }
   .empty-state .btn { text-decoration: none; display: inline-block; }
   .empty-mark { width: 54px; height: 54px; margin: 0 auto 12px; color: var(--accent); }
+  /* ---------- Library page (library/) ---------- */
+  .lib-intro { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px 24px; flex-wrap: wrap; margin-bottom: 20px; }
+  .lib-intro h2 { margin: 0 0 4px; font-size: 24px; letter-spacing: -0.3px; }
+  .lib-intro p { margin: 0; max-width: 560px; color: var(--text-soft); }
+  .lib-search { display: flex; gap: 8px; flex: 0 1 420px; }
+  .lib-search input, .lib-search select {
+    padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--field); color: inherit; font: inherit;
+  }
+  .lib-search input { flex: 1; min-width: 0; }
+  .lib-search input:focus, .lib-search select:focus { outline: 2px solid var(--accent-border); border-color: var(--accent); }
+  .lib-card { cursor: pointer; }
+  .lib-card .card-title { white-space: normal; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; }
+  .lib-more { display: flex; justify-content: center; margin-top: 22px; }
+  .lib-more .btn[hidden] { display: none; }
+  .page-foot { max-width: 1120px; margin: 0 auto; padding: 8px 16px 40px; font-size: 12px; color: var(--text-muted); }
+  .page-foot a { color: inherit; }
+  .modal.lib-detail { width: 720px; max-height: calc(100vh - 32px); overflow: auto; }
+  .lib-detail-thumb { position: relative; aspect-ratio: 16 / 10; background: #fff; border-bottom: 1px solid var(--border-soft); }
+  .lib-detail-thumb img { display: block; width: 100%; height: 100%; object-fit: contain; }
+  .modal.lib-detail h3 { padding: 0; border: 0; margin: 0 0 6px; font-size: 20px; }
+  .modal.lib-detail .body { display: grid; gap: 6px; }
+  .modal.lib-detail .body p { margin: 0; }
+  .lib-detail-desc { color: var(--text-soft); white-space: pre-line; font-size: 14px; }
+  .modal.lib-detail .footer { align-items: center; flex-wrap: wrap; }
+  .modal.lib-detail .footer .btn { text-decoration: none; color: inherit; }
+  .modal.lib-detail .footer .btn.primary { color: #fff; }
+  .lib-report { margin-right: auto; font-size: 12px; color: var(--text-muted) !important; }
+  .lib-detail .account-msg { min-height: 1em; font-size: 12px; color: var(--text-soft); }
   @media (max-width: 640px) {
     .page-bar { gap: 8px; flex-wrap: wrap; }
     .page-bar h1 { display: none; }
     .page-account .who { display: none; }
     .sketches { grid-template-columns: 1fr; }
+    .lib-search { flex: 1 1 100%; }
+    .modal.lib-detail { max-width: calc(100vw - 16px); }
   }
 
   /* Cursor hint */

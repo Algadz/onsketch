@@ -22,7 +22,7 @@ import { renderThumbnail, thumbnailBlob } from '../render/thumbnail.js';
 const LINK_KEY = 'onsketch:cloud';
 const PUSH_DELAY = 2500;
 const THUMB_EVERY = 30000;        // at most one thumbnail upload per 30 s
-const PAGE_PARAMS = ['project', 'new', 'signin'];
+const PAGE_PARAMS = ['project', 'view', 'new', 'signin'];
 const AUTH_PARAMS = ['code', 'error', 'error_code', 'error_description'];
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -54,7 +54,7 @@ export class CloudMixin {
 
     const params = new URLSearchParams(location.search);
     const returning = AUTH_PARAMS.some(k => params.has(k));
-    this._urlRequest = PAGE_PARAMS.find(k => params.has(k)) ? { what: PAGE_PARAMS.find(k => params.has(k)), id: params.get('project') } : null;
+    this._urlRequest = PAGE_PARAMS.find(k => params.has(k)) ? { what: PAGE_PARAMS.find(k => params.has(k)), id: params.get('project') || params.get('view') } : null;
     if (this._urlRequest) {
       PAGE_PARAMS.forEach(k => params.delete(k));
       history.replaceState(null, '', location.pathname + (params.toString() ? '?' + params : '') + location.hash);
@@ -75,6 +75,7 @@ export class CloudMixin {
   async _handleURLRequest() {
     const req = this._urlRequest; this._urlRequest = null;
     if (!req) return;
+    if (req.what === 'view') { if (this.cloud) await this.openPublicCopy(req.id); else this._hint("Couldn't reach the library. Check your connection."); return; }
     if (!this.cloud || !this.cloudUser) { this.openAccount(); return; }
     if (req.what === 'signin') { this.openAccount(); return; }
     if (req.what === 'project' && req.id && this.cloudLink?.id !== req.id) await this.openCloudProject(req.id);
@@ -359,6 +360,7 @@ export class CloudMixin {
         <div class="account-plan muted">Loading…</div>
         <div class="account-current"><span class="muted">${linked ? 'This drawing is saved in your account; changes are saved as you work.' : 'This drawing is only in this browser.'}</span></div>
         <a class="btn primary account-page" href="projects/">My sketches →</a>
+        <a class="link" href="/library/">Browse the public library</a>
         <p class="account-msg" role="status"></p>
       </div>
       <div class="footer"><button type="button" class="btn" data-a="close">Close</button></div>`;
@@ -435,6 +437,27 @@ export class CloudMixin {
       this._openCloudRow(row);
       this.closeAccount();
     } catch (e) { alert("Couldn't open the project: " + (e.message || e)); }
+  }
+
+  /** /app/?view=<id> from the library: a public sketch opens as a copy in
+   *  this browser (not linked). The previous drawing stays one Undo away,
+   *  as with the examples. */
+  async openPublicCopy(id) {
+    let row;
+    try { row = await this.cloud.load(id); }
+    catch { this._hint("This sketch isn't public any more, or the link is wrong."); return; }
+    try {
+      const p = Project.fromJSON(row.data);
+      p.name = row.name || p.name;
+      this._cloudUnlink();
+      this.project = p;
+      this.selectionOrder = [];
+      if (this.tool && this.tool.activate) this.tool.activate();
+      this.commit({ diagnostics: 'sync' });
+      this.refreshUI();
+      this.zoomFit();
+      this._hint(`"${row.name}" from the library, as a copy in this browser. Save to my account to keep it; Ctrl+Z goes back to your previous drawing.`);
+    } catch (e) { console.warn('library copy failed', e); this._hint("Couldn't open this sketch."); }
   }
 
   /** Makes `row` the open drawing, linked to it. */
