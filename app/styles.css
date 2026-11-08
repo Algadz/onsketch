@@ -689,7 +689,7 @@
   .username-row { display: flex; align-items: center; border: 1px solid var(--border); border-radius: 6px; background: var(--field); }
   .username-row:focus-within { outline: 2px solid var(--accent-border); border-color: var(--accent); }
   .username-row .at { padding: 0 2px 0 9px; color: var(--text-muted); }
-  .modal.account .username-row input, .modal.account .username-row input:focus { border: 0; outline: none; box-shadow: none; flex: 1; min-width: 0; background: transparent; padding-left: 2px; }
+  .modal.account .username-row input[type=text], .modal.account .username-row input[type=text]:focus { border: 0; outline: none; box-shadow: none; flex: 1; min-width: 0; background: transparent; padding-left: 2px; }
   .username-hint { font-size: 12px; min-height: 1.2em; }
   .username-hint[data-state="good"] { color: #2c8a3a; }
   .username-hint[data-state="bad"] { color: var(--overc); }
@@ -872,6 +872,45 @@
   .usage-name a { color: var(--accent); }
   .card-tags { display: inline-flex; align-items: center; gap: 6px; }
   .likes-pill { font-size: 11px; font-weight: 600; color: var(--text-soft); }
+  /* Profile mode of the library (/library/?u=<username>) */
+  .lib-profile { margin-bottom: 22px; }
+  .lib-profile[hidden] { display: none; }
+  .lp-back { display: inline-block; margin-bottom: 10px; color: var(--text-soft); font-size: 13px; text-decoration: none; }
+  .lp-back:hover { color: var(--accent); }
+  .lp-card { display: flex; align-items: flex-start; gap: 18px; padding: 20px; border: 1px solid var(--border-soft); border-radius: 14px; background: var(--panel-2); }
+  .lp-avatar { width: 72px; height: 72px; flex: 0 0 auto; border-radius: 50%; object-fit: cover; background: #2563a5; color: #fff;
+    font-size: 30px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+  .lp-main { flex: 1; min-width: 0; }
+  .lp-main h2 { margin: 2px 0 6px; font-size: 22px; letter-spacing: -0.3px; overflow-wrap: anywhere; }
+  .lp-bio { margin: 0 0 8px; color: var(--text-soft); line-height: 1.5; white-space: pre-line; overflow-wrap: anywhere; }
+  .lp-facts { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0; font-size: 13px; color: var(--text-muted); }
+  .lp-facts a { color: var(--accent); overflow-wrap: anywhere; }
+  .lp-stats { display: flex; gap: 18px; flex: 0 0 auto; }
+  .lp-stats div { display: flex; flex-direction: column; align-items: center; min-width: 64px; }
+  .lp-stats b { font-size: 22px; }
+  .lp-stats span { font-size: 12px; color: var(--text-muted); }
+  .lp-mine { margin: 10px 2px 0; font-size: 13px; }
+  .lp-mine a { color: var(--accent); }
+  .lp-empty { text-align: center; padding: 40px 16px; }
+  .lp-empty h2 { margin: 0 0 6px; }
+  .lp-empty a { color: var(--accent); }
+  a.author-name { text-decoration: none; }
+  a.author-name:hover { color: var(--accent); text-decoration: underline; }
+  @media (max-width: 640px) {
+    .lp-card { flex-wrap: wrap; gap: 14px; padding: 16px; }
+    .lp-avatar { width: 56px; height: 56px; font-size: 24px; }
+    .lp-stats { width: 100%; justify-content: flex-start; border-top: 1px solid var(--border-soft); padding-top: 10px; }
+  }
+  /* Profile dialog: country + website side by side */
+  .profile-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .profile-row > div { display: grid; gap: 6px; min-width: 0; }
+  .modal.account select, .modal.account input[type=url] {
+    padding: 7px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--field); color: inherit; font: inherit; font-size: 13px; min-width: 0; width: 100%;
+  }
+  .modal.profile .counter { float: right; font-weight: 400; color: var(--text-muted); }
+  .profile-public-note { font-size: 12px; margin: 0; }
+  .modal.profile .footer .profile-view { align-self: center; font-size: 12.5px; }
+  @media (max-width: 480px) { .profile-row { grid-template-columns: 1fr; } }
   .lib-more { display: flex; justify-content: center; margin-top: 22px; }
   .lib-more .btn[hidden] { display: none; }
   .page-foot { max-width: 1120px; margin: 0 auto; padding: 8px 16px 40px; font-size: 12px; color: var(--text-muted); }

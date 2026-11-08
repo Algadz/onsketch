@@ -15,6 +15,8 @@ const LIST_COLUMNS = 'id,name,description,visibility,revision,updated_at,created
 const THUMBS = 'thumbnails';
 
 export const TITLE_MIN = 3, TITLE_MAX = 80, DESC_MIN = 10, DESC_MAX = 500;
+const PROFILE_COLUMNS = 'user_id,username,avatar_url,bio,country,website';
+export const BIO_MAX = 280, WEBSITE_MAX = 200;
 const LIBRARY_COLUMNS = 'id,owner_id,name,description,created_at,updated_at,author_name,author_avatar,likes';
 /** Projects allowed per plan (null = no limit); mirrors plan_project_limit() in SQL. */
 export const PLAN_LIMITS = { free: 3, premium: null };
@@ -213,8 +215,9 @@ export class Cloud {
   /* ---- Public library (view library_sketches, migration 0003) ---- */
   /** Public sketches with author and likes. sort: 'new' | 'updated' |
    *  'popular'. `search` matches title or description. Returns { rows, more }. */
-  async library({ search = '', offset = 0, limit = 24, sort = 'new' } = {}) {
+  async library({ search = '', offset = 0, limit = 24, sort = 'new', owner = null } = {}) {
     let q = this.client.from('library_sketches').select(LIBRARY_COLUMNS);
+    if (owner) q = q.eq('owner_id', owner);
     const words = librarySearch(search);
     if (words) q = q.or(`name.ilike.%${words}%,description.ilike.%${words}%`);
     if (sort === 'popular') q = q.order('likes', { ascending: false }).order('created_at', { ascending: false });
@@ -261,9 +264,17 @@ export class Cloud {
   async profile() {
     const user = await this.user();
     if (!user) return null;
-    const { data, error } = await this.client.from('public_profiles').select('user_id,username,avatar_url').eq('user_id', user.id).maybeSingle();
+    const { data, error } = await this.client.from('public_profiles').select(PROFILE_COLUMNS).eq('user_id', user.id).maybeSingle();
     if (error) throw error;
     return data;
+  }
+  /** Someone's public profile by username (ignoring case), with their
+   *  number of public sketches and thumbs-up received; null if unknown. */
+  async publicProfile(name) {
+    const { data, error } = await this.client.rpc('public_profile', { name: cleanText(name) });
+    if (error) throw error;
+    const p = Array.isArray(data) ? data[0] : data;
+    return p || null;
   }
   /** Exact, case-insensitive: is `name` free (or already mine)? */
   async usernameAvailable(name) {
@@ -276,15 +287,19 @@ export class Cloud {
     const meta = (await this.user())?.user_metadata || {};
     return typeof meta.avatar_url === 'string' && /^https:\/\//.test(meta.avatar_url) && meta.avatar_url.length <= 500 ? meta.avatar_url : null;
   }
-  /** Sets the username and whether the account picture is shown. */
-  async saveProfile({ username, showPicture = false }) {
+  /** Saves the public profile: username, whether the account picture is
+   *  shown, and the optional bio, country (ISO code) and website. */
+  async saveProfile({ username, showPicture = false, bio, country, website }) {
     const user = await this.user();
     if (!user) throw new Error('Not signed in.');
-    const problem = usernameProblem(username);
+    const problem = usernameProblem(username) || profileProblem({ bio, country, website });
     if (problem) throw new Error(problem);
     const avatar = showPicture ? await this.accountPicture() : null;
-    const { data, error } = await this.client.from('public_profiles')
-      .upsert({ user_id: user.id, username: cleanText(username), avatar_url: avatar }).select('user_id,username,avatar_url').single();
+    const row = { user_id: user.id, username: cleanText(username), avatar_url: avatar };
+    if (bio !== undefined) row.bio = String(bio || '').trim() || null;
+    if (country !== undefined) row.country = country || null;
+    if (website !== undefined) row.website = normaliseWebsite(website);
+    const { data, error } = await this.client.from('public_profiles').upsert(row).select(PROFILE_COLUMNS).single();
     if (error) {
       if (error.code === '23505') throw new Error('This username is taken. Try another one.');
       throw fromDb(error);
@@ -331,6 +346,21 @@ export function usernameProblem(name) {
   if (!/^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(n)) return 'Use letters, digits, _ . or -, starting with a letter or digit.';
   if (RESERVED.has(n.toLowerCase())) return 'This username is reserved.';
   return '';
+}
+/** Problems with the optional profile fields (mirrors the SQL trigger). */
+export function profileProblem({ bio, country, website } = {}) {
+  if (bio && String(bio).trim().length > BIO_MAX) return `The description can have at most ${BIO_MAX} characters.`;
+  if (country && !/^[A-Z]{2}$/.test(country)) return 'Unknown country.';
+  const w = normaliseWebsite(website);
+  if (w && (!/^https?:\/\/[^\s/$.?#][^\s]*$/.test(w) || w.length > WEBSITE_MAX)) return 'The website must be a link like https://example.com.';
+  return '';
+}
+/** "example.com" → "https://example.com"; empty → null. */
+export function normaliseWebsite(w) {
+  const t = String(w ?? '').trim();
+  if (!t) return null;
+  if (/^https?:\/\//i.test(t) || /^[a-z][a-z0-9+.-]*:(?!\d)/i.test(t)) return t;   // another scheme stays, to be refused
+  return `https://${t}`;
 }
 const RESERVED = new Set(['admin', 'administrator', 'onsketch', 'support', 'help', 'moderator', 'mod', 'staff', 'team',
   'root', 'system', 'official', 'library', 'anonymous', 'null', 'undefined', 'onsketch_user']);

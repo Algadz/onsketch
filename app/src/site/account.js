@@ -47,6 +47,7 @@ export async function mountAccount(el, { signInClass = 'btn', editorHref = '/app
       <div class="site-acc-menu" role="menu" hidden>
         <div class="site-acc-head">${avatar}<div><b>${profile?.username ? '@' + esc(profile.username) : 'Signed in'}</b><span>${esc(user.email || '')}</span></div></div>
         <a role="menuitem" href="/app/projects/">My sketches</a>
+        ${profile?.username ? `<a role="menuitem" href="/library/?u=${encodeURIComponent(profile.username)}">My public profile</a>` : ''}
         <a role="menuitem" href="/library/">Library</a>
         <a role="menuitem" href="${esc(editorHref)}">Open the editor</a>
         ${plan?.plan === 'premium'

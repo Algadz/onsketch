@@ -1,5 +1,6 @@
 import { openCloud, isConfigured } from '../cloud/cloud.js';
 import { mountAccount } from '../site/account.js';
+import { countryFlag, countryName } from '../ui/countries.js';
 import { promptDialog } from '../ui/dialogs.js';
 
 /* =============== PUBLIC LIBRARY (/library/) =====================
@@ -19,7 +20,19 @@ const day = (iso) => new Date(iso).toLocaleDateString(undefined, { day: 'numeric
 const PLACEHOLDER = `<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M7 23 C 11 9, 15 9, 16 16 S 21 24, 25 9" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><circle cx="7" cy="23" r="2.2" fill="currentColor"/><circle cx="25" cy="9" r="2.2" fill="currentColor"/></svg>`;
 
 class Library {
-  constructor() { this.rows = []; this.thumbs = new Map(); this.liked = new Set(); this.user = null; this.offset = 0; this.query = { search: '', sort: 'new' }; this.seq = 0; }
+  constructor() {
+    this.rows = []; this.thumbs = new Map(); this.liked = new Set(); this.user = null; this.offset = 0;
+    this.query = { search: '', sort: 'new' }; this.seq = 0;
+    this.username = new URLSearchParams(location.search).get('u');     // /library/?u=<username>: one person's profile
+    this.profile = null;
+  }
+  /** This page's URL with a detail id (or none), keeping ?u=. */
+  urlFor(id) {
+    const q = new URLSearchParams();
+    if (this.username) q.set('u', this.username);
+    if (id) q.set('s', id);
+    return location.pathname + (q.toString() ? '?' + q : '');
+  }
 
   async start() {
     if (!isConfigured()) return this.message('The library is not available on this site.');
@@ -30,18 +43,60 @@ class Library {
 
     const form = $('lib-search');
     let timer;
-    const apply = () => { this.query = { search: form.elements.q.value, sort: form.elements.sort.value }; this.reload(); };
+    const apply = () => { this.query = { ...this.query, search: form.elements.q.value, sort: form.elements.sort.value }; this.reload(); };
     form.addEventListener('submit', (e) => { e.preventDefault(); clearTimeout(timer); apply(); });
     form.elements.q.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(apply, 300); });
     form.elements.sort.addEventListener('change', apply);
     $('lib-more').addEventListener('click', () => this.more());
     window.addEventListener('popstate', () => this.showFromURL());
 
+    if (this.username && !(await this.loadProfile())) return;
     await this.reload();
     this.showFromURL();
   }
 
   message(html) { const m = $('page-msg'); m.hidden = !html; m.innerHTML = html || ''; }
+
+  /* ---- Profile mode (/library/?u=<username>) ---- */
+  async loadProfile() {
+    let p = null;
+    try { p = await this.cloud.publicProfile(this.username); } catch { p = null; }
+    const box = $('lib-profile');
+    box.hidden = false;
+    document.querySelector('.lib-intro h2').textContent = 'Public sketches';
+    document.querySelector('.lib-intro p').hidden = true;
+    if (!p) {
+      box.innerHTML = `<div class="lp-empty"><h2>No one here</h2><p>There is no OnSketch user called @${esc(this.username)}. <a href="/library/">Browse the whole library</a></p></div>`;
+      document.querySelector('.lib-intro').hidden = true;
+      this.message('');
+      return false;
+    }
+    this.profile = p;
+    this.query.owner = p.user_id;
+    document.title = `@${p.username} - OnSketch`;
+    const mine = this.user && this.user.id === p.user_id;
+    const site = p.website ? p.website.replace(/^https?:\/\//, '').replace(/\/$/, '') : '';
+    box.innerHTML = `
+      <a class="lp-back" href="/library/">← All sketches</a>
+      <div class="lp-card">
+        ${p.avatar_url ? `<img class="lp-avatar" src="${esc(p.avatar_url)}" alt="" referrerpolicy="no-referrer">` : `<span class="lp-avatar">${esc(p.username[0].toUpperCase())}</span>`}
+        <div class="lp-main">
+          <h2>@${esc(p.username)}</h2>
+          ${p.bio ? `<p class="lp-bio">${esc(p.bio)}</p>` : ''}
+          <p class="lp-facts">
+            ${p.country ? `<span>${countryFlag(p.country)} ${esc(countryName(p.country))}</span>` : ''}
+            ${site ? `<a href="${esc(p.website)}" rel="nofollow ugc noopener" target="_blank">${esc(site)}</a>` : ''}
+            <span>Joined ${esc(new Date(p.joined_at).toLocaleDateString(undefined, { month: 'long', year: 'numeric' }))}</span>
+          </p>
+        </div>
+        <div class="lp-stats">
+          <div><b>${p.sketches}</b><span>sketch${p.sketches === 1 ? '' : 'es'}</span></div>
+          <div><b>${p.likes}</b><span>thumbs-up</span></div>
+        </div>
+      </div>
+      ${mine ? '<p class="lp-mine muted">This is your public profile. Change it from the account menu → Edit public profile, or on <a href="/app/projects/">My sketches</a>.</p>' : ''}`;
+    return true;
+  }
 
   async reload() {
     this.rows = []; this.thumbs = new Map(); this.offset = 0;
@@ -69,6 +124,7 @@ class Library {
     btn.hidden = !res.more; btn.disabled = false;
     this.message(this.rows.length ? '' : (this.query.search
       ? `No sketch matches "${esc(this.query.search.trim())}".`
+      : this.profile ? `@${esc(this.profile.username)} has no public sketches yet.`
       : 'No public sketches yet. Draw something, sign in and <b>Save to my account</b>: free sketches appear here. <a href="/app/">Open the editor</a>'));
     $('grid').insertAdjacentHTML('beforeend', res.rows.map(r => this.card(r)).join(''));
     $('grid').querySelectorAll('.sketch-card:not([data-ready])').forEach(li => {
@@ -76,6 +132,7 @@ class Library {
       li.querySelector('.like-btn').addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); this.toggleLike(li.dataset.id); });
       li.addEventListener('click', (e) => {
         if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;   // new tab: follow the link
+        if (e.target.closest('a.author-name')) return;                        // to the author's profile
         e.preventDefault();
         this.show(li.dataset.id, true);
       });
@@ -85,11 +142,11 @@ class Library {
   card(r) {
     const thumb = this.thumbs.get(r.id);
     return `<li class="sketch-card lib-card" data-id="${esc(r.id)}">
-      <a class="thumb" href="?s=${encodeURIComponent(r.id)}" aria-label="${esc(r.name)}">
+      <a class="thumb" href="${esc(this.urlFor(r.id))}" aria-label="${esc(r.name)}">
         ${thumb ? `<img src="${esc(thumb)}" alt="" loading="lazy">` : `<span class="thumb-empty">${PLACEHOLDER}</span>`}
       </a>
       <div class="card-body">
-        <h2 class="card-title"><a href="?s=${encodeURIComponent(r.id)}">${esc(r.name)}</a></h2>
+        <h2 class="card-title"><a href="${esc(this.urlFor(r.id))}">${esc(r.name)}</a></h2>
         <p class="card-desc">${esc(r.description)}</p>
         <div class="card-meta">${this.author(r)}${this.likeButton(r)}</div>
       </div>
@@ -100,8 +157,13 @@ class Library {
     const pic = r.author_avatar
       ? `<img class="avatar" src="${esc(r.author_avatar)}" alt="" referrerpolicy="no-referrer" loading="lazy">`
       : `<span class="avatar">${esc((r.author_name || '?').trim()[0].toUpperCase())}</span>`;
-    return `<span class="author${big ? ' big' : ''}">${pic}<span class="author-name">${esc(r.author_name || 'OnSketch user')}</span>${big ? '' : ` · ${esc(day(r.created_at || r.updated_at))}`}</span>`;
+    const named = r.author_name && r.author_name !== 'OnSketch user';
+    const name = named && !this.profile
+      ? `<a class="author-name" href="/library/?u=${encodeURIComponent(r.author_name)}" title="@${esc(r.author_name)}: profile and sketches">${esc(r.author_name)}</a>`
+      : `<span class="author-name">${esc(r.author_name || 'OnSketch user')}</span>`;
+    return `<span class="author${big ? ' big' : ''}">${pic}${name}${big ? '' : ` · ${esc(day(r.created_at || r.updated_at))}`}</span>`;
   }
+
   likeButton(r) {
     const mine = this.user && r.owner_id === this.user.id;
     const on = this.liked.has(r.id);
@@ -137,7 +199,7 @@ class Library {
     if (id) this.show(id, false); else this.closeDetail(false);
   }
   async show(id, push) {
-    if (push) history.pushState({ s: id }, '', `?s=${encodeURIComponent(id)}`);
+    if (push) history.pushState({ s: id }, '', this.urlFor(id));
     let row = this.rows.find(r => r.id === id);
     const back = this.detailBox();
     back.querySelector('.modal').innerHTML = '<div class="body"><p class="muted">Loading…</p></div>';
@@ -198,8 +260,8 @@ class Library {
     if (!back) return;
     back.remove();
     document.removeEventListener('keydown', this._esc);
-    document.title = 'Sketch library - OnSketch';
-    if (push && new URLSearchParams(location.search).has('s')) history.pushState({}, '', location.pathname);
+    document.title = this.profile ? `@${this.profile.username} - OnSketch` : 'Sketch library - OnSketch';
+    if (push && new URLSearchParams(location.search).has('s')) history.pushState({}, '', this.urlFor(null));
   }
   async report(row, msg) {
     const why = await promptDialog({ title: `Report "${row.name}"`, multiline: true, maxLength: 1000,

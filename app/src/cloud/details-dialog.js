@@ -1,4 +1,5 @@
-import { TITLE_MIN, TITLE_MAX, DESC_MIN, DESC_MAX, LimitError, cleanText, usernameProblem } from './cloud.js';
+import { TITLE_MIN, TITLE_MAX, DESC_MIN, DESC_MAX, BIO_MAX, LimitError, cleanText, usernameProblem, profileProblem, normaliseWebsite } from './cloud.js';
+import { countries, countryFlag } from '../ui/countries.js';
 
 /* =============== SKETCH DETAILS DIALOG ==========================
    Title + description (+ visibility for Pro) for a cloud project.
@@ -95,7 +96,7 @@ export function openDetailsDialog({ heading = 'Sketch details', submitLabel = 'S
  *  account picture is shown. `firstTime` words it as the sign-up step.
  *  Resolves to onSubmit's result, or null when cancelled / "Later". */
 export function openProfileDialog({ username = '', picture = null, showPicture = false, firstTime = false,
-  reason = '', checkAvailable, onSubmit }) {
+  reason = '', profile = {}, checkAvailable, onSubmit }) {
   return new Promise((resolve) => {
     const back = document.createElement('div');
     back.className = 'modal-backdrop show';
@@ -111,9 +112,22 @@ export function openProfileDialog({ username = '', picture = null, showPicture =
           <p class="username-hint muted" aria-live="polite">3 to 24 letters, digits, _ . or -</p>
           ${picture ? `<label class="check picture-opt"><input type="checkbox" name="pic" ${showPicture ? 'checked' : ''} />
             <img src="${esc(picture)}" alt="" referrerpolicy="no-referrer"> Show my account picture next to my sketches</label>` : ''}
+          ${firstTime ? '' : `
+          <label for="profile-bio">About you <span class="muted">(optional)</span> <span class="counter" data-for="bio"></span></label>
+          <textarea id="profile-bio" name="bio" rows="3" maxlength="${BIO_MAX}" placeholder="What you sketch, your trade, your projects…">${esc(profile.bio || '')}</textarea>
+          <div class="profile-row">
+            <div><label for="profile-country">Country <span class="muted">(optional)</span></label>
+              <select id="profile-country" name="country"><option value="">Not shown</option>
+                ${countries().map(c => `<option value="${c.code}"${c.code === profile.country ? ' selected' : ''}>${countryFlag(c.code)} ${esc(c.name)}</option>`).join('')}
+              </select></div>
+            <div><label for="profile-website">Website <span class="muted">(optional)</span></label>
+              <input type="url" id="profile-website" name="website" maxlength="200" inputmode="url" autocomplete="url" placeholder="example.com" value="${esc(profile.website || '')}" /></div>
+          </div>
+          <p class="muted profile-public-note">Everything on this form is public, on your profile page and next to your sketches.</p>`}
           <p class="account-msg" role="status"></p>
         </div>
         <div class="footer">
+          ${!firstTime && username ? `<a class="link profile-view" href="/library/?u=${encodeURIComponent(username)}" target="_blank" rel="noopener">View my public profile</a><span class="spacer"></span>` : ''}
           <button type="button" class="btn" data-a="cancel">${firstTime ? 'Later' : 'Cancel'}</button>
           <button type="submit" class="btn primary" data-a="ok">${firstTime ? 'Continue' : 'Save'}</button>
         </div>
@@ -147,17 +161,21 @@ export function openProfileDialog({ username = '', picture = null, showPicture =
     };
     const close = (v) => { clearTimeout(timer); back.remove(); resolve(v); };
     input.addEventListener('input', () => { msg.textContent = ''; msg.classList.remove('error'); check(); });
+    const bio = form.elements.bio, bioCount = back.querySelector('.counter[data-for="bio"]');
+    const countBio = () => { if (bio) bioCount.textContent = `${bio.value.trim().length} / ${BIO_MAX}`; };
+    bio?.addEventListener('input', countBio); countBio();
     back.querySelector('[data-a="cancel"]').addEventListener('click', () => close(null));
     back.addEventListener('pointerdown', (e) => { if (e.target === back && !firstTime) close(null); });
     back.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.stopPropagation(); close(null); } });
     form.addEventListener('submit', async (ev) => {
       ev.preventDefault();
       const name = cleanText(input.value);
-      const problem = usernameProblem(name);
+      const extra = firstTime ? {} : { bio: bio.value, country: form.elements.country.value, website: form.elements.website.value };
+      const problem = usernameProblem(name) || (firstTime ? '' : profileProblem({ ...extra, website: normaliseWebsite(extra.website) }));
       if (problem || available === false) { msg.textContent = problem || 'This username is taken.'; msg.classList.add('error'); return; }
       ok.disabled = true;
       msg.classList.remove('error'); msg.textContent = 'Saving…';
-      try { close(await onSubmit({ username: name, showPicture: !!form.elements.pic?.checked })); }
+      try { close(await onSubmit({ username: name, showPicture: !!form.elements.pic?.checked, ...extra })); }
       catch (e) { ok.disabled = false; msg.classList.add('error'); msg.textContent = e.message || "Couldn't save."; }
     });
     check();

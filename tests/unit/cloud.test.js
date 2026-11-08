@@ -161,3 +161,13 @@ test('usernames: 3–24 letters, digits, _ . -, not reserved', async () => {
   assert.match(usernameProblem('tom smith'), /letters, digits/);
   assert.match(usernameProblem('Admin'), /reserved/);
 });
+
+test('profile fields: bio ≤ 280, country code, http(s) website only', async () => {
+  const { profileProblem, normaliseWebsite } = await import('../../app/src/cloud/cloud.js');
+  assert.equal(normaliseWebsite('example.com/me'), 'https://example.com/me');
+  assert.equal(normaliseWebsite('  '), null);
+  assert.equal(profileProblem({ bio: 'Maker', country: 'FR', website: 'https://example.com' }), '');
+  assert.match(profileProblem({ bio: 'x'.repeat(281) }), /280/);
+  assert.match(profileProblem({ country: 'France' }), /country/i);
+  for (const bad of ['javascript:alert(1)', 'data:text/html,x', 'ftp://x.y']) assert.match(profileProblem({ website: bad }), /website/i, bad);
+});

@@ -311,6 +311,14 @@ the stored session first.
   *Most liked*. My sketches shows the count on public cards. Tables
   `public_profiles`, `project_likes`, the view `library_sketches` and
   `username_available()` (migrations 0003–0004).
+- **Public profiles**: `/library/?u=<username>` shows a user's picture
+  (if shown), @username, About text (≤ 280), country (flag + name in the
+  visitor's language), website (`rel="nofollow ugc noopener"`, http(s)
+  only), join date, number of public sketches and thumbs-up received, and
+  their public sketches (search and sort work inside). Authors on library
+  cards link to it; the account menus have *Edit public profile…* and
+  *View my public profile*. `public_profile()` (migration 0006) returns
+  the profile with its counts; the trigger checks the new fields.
 - Saves carry the revision they started from, so a save from a stale tab
   or device asks which version to keep instead of overwriting. Only the
   drawing moves the revision; title and description edits never conflict.

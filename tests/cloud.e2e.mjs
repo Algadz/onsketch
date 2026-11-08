@@ -55,6 +55,15 @@ function installFake() {
       return { data: null, error: new Error('Unknown action') };
     } },
     rpc: async (fn, args) => {
+      if (fn === 'public_profile') {
+        const L = (k) => JSON.parse(localStorage.getItem(k) || '[]');
+        const p = L('fake-sb:t:public_profiles').find(x => x.username && x.username.toLowerCase() === args.name.toLowerCase());
+        if (!p) return { data: [], error: null };
+        const mine = L('fake-sb:rows').filter(r => r.owner_id === p.user_id && r.visibility === 'public' && r.description != null);
+        const likes = L('fake-sb:t:project_likes').filter(l => mine.some(r => r.id === l.project_id)).length;
+        return { data: [{ user_id: p.user_id, username: p.username, avatar_url: p.avatar_url || null, bio: p.bio || null, country: p.country || null,
+          website: p.website || null, joined_at: '2026-11-01T00:00:00Z', sketches: mine.length, likes }], error: null };
+      }
       if (fn !== 'username_available') return { data: null, error: new Error('no such function') };
       const me = session()?.user?.id;
       const taken = JSON.parse(localStorage.getItem('fake-sb:t:public_profiles') || '[]')
@@ -365,8 +374,8 @@ check(await app(() => window._app.cloudLink?.id) === rows[0].id, 'reload: still 
 await page.click('#account-btn');
 await page.waitForSelector('#account-menu:not([hidden])');
 check(await app(() => { const m = document.getElementById('account-menu'); return m.textContent.includes('@alban.m') && m.textContent.includes('me@example.com')
-  && ['My sketches', 'Library', 'Public profile…', 'Sketch details…', 'Sign out'].every(t => [...m.querySelectorAll('.am-item')].some(i => i.textContent.trim() === t)); }),
-  'avatar opens a menu: @username, My sketches, Library, Public profile, Sketch details, Sign out');
+  && ['My sketches', 'Library', 'Edit public profile…', 'View my public profile', 'Sketch details…', 'Sign out'].every(t => [...m.querySelectorAll('.am-item')].some(i => i.textContent.trim() === t)); }),
+  'avatar opens a menu: @username, My sketches, Library, Edit / View public profile, Sketch details, Sign out');
 if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + '/account-menu.png', clip: { x: 1000, y: 0, width: 400, height: 380 } });
 await page.keyboard.press('Escape');
 check(await page.isHidden('#account-menu'), 'Escape closes the menu');
@@ -374,7 +383,48 @@ await page.click('#account-btn');
 await page.click('#account-menu [data-a="profile"]');
 await page.waitForSelector('#profile-modal');
 check((await page.inputValue('#profile-username')) === 'alban.m', 'Public profile shows the username');
-await page.click('#profile-modal [data-a="cancel"]');
+check(await page.isVisible('#profile-bio') && await page.isVisible('#profile-country') && await page.isVisible('#profile-website'), 'profile has About you, Country and Website');
+if (process.env.SHOT_DIR) { await page.fill('#profile-bio', 'Furniture maker in Lyon.'); await page.selectOption('#profile-country', 'FR'); await page.fill('#profile-website', 'example.com/alban'); await page.screenshot({ path: process.env.SHOT_DIR + '/profile-edit.png' }); }
+await page.fill('#profile-bio', 'Furniture maker in Lyon. Desks, shelves and beds.');
+await page.selectOption('#profile-country', 'FR');
+await page.fill('#profile-website', 'javascript:alert(1)');
+await page.click('#profile-modal [data-a="ok"]');
+check(/website/i.test(await page.textContent('#profile-modal .account-msg')), 'a javascript: link is refused');
+await page.fill('#profile-website', 'example.com/alban');
+await page.click('#profile-modal [data-a="ok"]');
+await page.waitForFunction(() => !document.getElementById('profile-modal'));
+check(await app(() => { const p = JSON.parse(localStorage.getItem('fake-sb:t:public_profiles')).find(x => x.username === 'alban.m');
+  return p.country === 'FR' && p.website === 'https://example.com/alban' && /Lyon/.test(p.bio); }), 'profile saved: bio, country, website (https added)');
+await page.click('#account-btn');
+check(await page.getAttribute('#account-menu a[href^="/library/?u="]', 'href') === '/library/?u=alban.m', 'account menu: View my public profile');
+await page.keyboard.press('Escape');
+
+// The public profile page: /library/?u=<username> (any case).
+await page.goto(base.replace('/app/', '/library/?u=ALBAN.M'));
+await page.waitForSelector('.lp-card');
+const prof = await app(() => ({ name: document.querySelector('.lp-main h2').textContent, bio: document.querySelector('.lp-bio')?.textContent,
+  facts: document.querySelector('.lp-facts').textContent, rel: document.querySelector('.lp-facts a')?.rel,
+  stats: document.querySelector('.lp-stats').textContent.replace(/\s+/g, ' ').trim(), cards: document.querySelectorAll('.lib-card').length, title: document.title }));
+check(prof.name === '@alban.m' && /Lyon/.test(prof.bio) && /🇫🇷/.test(prof.facts) && /example\.com\/alban/.test(prof.facts) && /Joined/.test(prof.facts),
+  `profile page: @username, bio, flag and country, website, joined (${prof.facts.replace(/\s+/g, ' ').trim()})`);
+check(prof.rel === 'nofollow ugc noopener', 'website link is nofollow ugc noopener');
+check(prof.cards === 2 && /^2\s*sketches/.test(prof.stats) && prof.title === '@alban.m - OnSketch', `profile page: their public sketches and totals (${prof.stats})`);
+check(/This is your public profile/.test(await page.textContent('#lib-profile')), 'your own profile says so');
+if (process.env.SHOT_DIR) { await page.screenshot({ path: process.env.SHOT_DIR + '/profile-page.png', clip: { x: 0, y: 0, width: 1400, height: 760 } }); }
+await page.locator('.lib-card .card-title a').first().click();
+await page.waitForSelector('#lib-detail h3');
+check(/[?]u=ALBAN\.M&s=/.test(page.url()), 'detail view keeps the profile in the URL');
+await page.keyboard.press('Escape');
+await page.goto(base.replace('/app/', '/library/?u=nobody-here'));
+await page.waitForSelector('.lp-empty');
+check(/No one here/.test(await page.textContent('.lp-empty')), 'unknown username: "No one here"');
+await page.goto(base.replace('/app/', '/library/'));
+await page.waitForSelector('.lib-card a.author-name');
+await page.locator('.lib-card a.author-name').first().click();
+await page.waitForURL(/\/library\/\?u=alban\.m$/);
+check(true, 'the author on a library card links to their profile');
+await page.goto(base);
+await page.waitForFunction(() => window._app?.cloudUser);
 await page.goto(base.replace('/app/', '/library/'));
 await page.waitForSelector('.lib-card .author-name');
 check((await page.textContent('.lib-card .author-name')) === 'alban.m', 'library shows the chosen username');

@@ -169,7 +169,7 @@ export class CloudMixin {
     const p = this.cloudProfile;
     const saved = await openProfileDialog({
       username: p?.username || '', picture: await this.cloud.accountPicture(), showPicture: !!p?.avatar_url,
-      firstTime, reason, checkAvailable: (n) => this.cloud.usernameAvailable(n),
+      firstTime, reason, profile: p || {}, checkAvailable: (n) => this.cloud.usernameAvailable(n),
       onSubmit: (v) => this.cloud.saveProfile(v),
     });
     if (saved) {
@@ -211,7 +211,8 @@ export class CloudMixin {
       <div class="am-plan muted">${plan ? (plan.plan === 'premium' ? '<b>OnSketch Pro</b> · unlimited sketches' : `<b>Free plan</b> · up to ${plan.limit} sketches`) : ''}</div>
       <a role="menuitem" class="am-item" href="projects/">My sketches</a>
       <a role="menuitem" class="am-item" href="/library/">Library</a>
-      <button type="button" role="menuitem" class="am-item" data-a="profile">${p?.username ? 'Public profile…' : 'Choose a username…'}</button>
+      <button type="button" role="menuitem" class="am-item" data-a="profile">${p?.username ? 'Edit public profile…' : 'Choose a username…'}</button>
+      ${p?.username ? `<a role="menuitem" class="am-item" href="/library/?u=${encodeURIComponent(p.username)}">View my public profile</a>` : ''}
       ${this.cloudLink ? '<button type="button" role="menuitem" class="am-item" data-a="details">Sketch details…</button>' : ''}
       ${plan?.plan === 'premium'
         ? (plan.hasSubscription ? '<button type="button" role="menuitem" class="am-item" data-a="billing">Manage subscription</button>' : '')

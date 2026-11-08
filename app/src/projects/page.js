@@ -96,7 +96,7 @@ class Page {
         <a class="link" href="/pricing/">Upgrade to Pro →</a>`;
     }
     usage.insertAdjacentHTML('beforeend', this.profile?.username
-      ? `<span class="usage-name">Shown in the <a href="/library/">library</a> as <b>@${esc(this.profile.username)}</b> <button type="button" class="link" data-a="name">Edit profile</button></span>`
+      ? `<span class="usage-name">Shown in the <a href="/library/">library</a> as <a href="/library/?u=${encodeURIComponent(this.profile.username)}"><b>@${esc(this.profile.username)}</b></a> <button type="button" class="link" data-a="name">Edit profile</button></span>`
       : `<span class="usage-name">No public username yet <button type="button" class="link" data-a="name">Choose one</button></span>`);
     usage.querySelector('[data-a="name"]').addEventListener('click', () => this.editName());
 
@@ -173,7 +173,7 @@ class Page {
   async editName() {
     const saved = await openProfileDialog({
       username: this.profile?.username || '', picture: await this.cloud.accountPicture(), showPicture: !!this.profile?.avatar_url,
-      firstTime: !this.profile?.username, checkAvailable: (n) => this.cloud.usernameAvailable(n),
+      firstTime: !this.profile?.username, profile: this.profile || {}, checkAvailable: (n) => this.cloud.usernameAvailable(n),
       onSubmit: (v) => this.cloud.saveProfile(v),
     });
     if (saved) { this.profile = saved; this.render(); }
