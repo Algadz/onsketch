@@ -1,4 +1,5 @@
 import { Project } from '../core/model.js';
+import { choose } from '../ui/dialogs.js';
 
 const STORE_KEY = 'sketchcad:last';
 
@@ -84,15 +85,28 @@ export class PersistenceMixin {
     window.addEventListener('pagehide', flush);
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flush(); });
   }
-  newProject() {
+  async newProject() {
     // A drawing saved in the account is safe: no question. Otherwise ask.
     const s = this.activeSketch();
     const empty = !s || (!s.entities.length && !s.strokes.length && !s.fills.length);
     const saved = this.cloudLink && !this.cloudLink.dirty;
-    const question = this.cloudLink
-      ? 'Some changes to this sketch are not saved in your account yet. Start a new sketch anyway?'
-      : (this.cloudEnabled ? 'This drawing is not saved. Start a new sketch and lose it?' : 'Discard current project and start a new one?');
-    if (!empty && !saved && !this._skipConfirm && !confirm(question)) return;
+    if (!empty && !saved && !this._skipConfirm) {
+      const linked = !!this.cloudLink;
+      const answer = await choose({
+        title: 'Start a new sketch?',
+        message: linked
+          ? 'Some changes to this sketch haven\'t reached your account yet (no connection). If you start a new sketch now, they will be lost.'
+          : 'The current drawing isn\'t saved. If you start a new sketch, it will be lost.',
+        cancelValue: 'cancel',
+        choices: [
+          { label: 'Cancel', value: 'cancel' },
+          ...(this.cloudEnabled && !linked ? [{ label: 'Save it first', value: 'save' }] : []),
+          { label: 'Discard and start new', value: 'new', kind: 'danger' },
+        ],
+      });
+      if (answer === 'save') { this.save(); return; }
+      if (answer !== 'new') return;
+    }
     if (this._cloudUnlink) this._cloudUnlink();
     this.project = new Project(); this.project.addSketch('Sketch 1');
     this.undoStack.length = 0; this.redoStack.length = 0;

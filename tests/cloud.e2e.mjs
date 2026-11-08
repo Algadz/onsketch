@@ -154,7 +154,8 @@ await ctx.addInitScript(installFake);
 const page = await ctx.newPage();
 const errors = [];
 page.on('pageerror', e => errors.push(String(e)));
-page.on('dialog', d => d.accept());
+const nativeDialogs = [];
+page.on('dialog', d => { nativeDialogs.push(`${d.type()}: ${d.message()}`); d.dismiss(); });
 await page.goto(base);
 await page.waitForFunction(() => window._app);
 const box = await page.locator('#canvas').boundingBox();
@@ -173,6 +174,15 @@ await page.keyboard.press('Escape');
 await page.fill('#project-name', 'Shelf');
 await page.waitForFunction(() => document.getElementById('save-state').textContent === 'Not saved');
 check(true, 'a drawing only in this browser shows "Not saved"');
+
+// New with an unsaved drawing asks in an app dialog: Cancel / Save it first / Discard.
+await page.click('#menubar [data-action="new"]');
+await page.waitForSelector('.app-dialog');
+check(await app(() => [...document.querySelectorAll('.app-dialog .footer .btn')].map(b => b.textContent).join('|')) === 'Cancel|Save it first|Discard and start new',
+  'New on an unsaved drawing: Cancel, Save it first, Discard and start new');
+await page.keyboard.press('Escape');
+await page.waitForFunction(() => !document.querySelector('.app-dialog'));
+check(await app(() => window._app.activeSketch().entities.length > 0), 'Escape cancels: the drawing stays');
 
 // Signed out: no browser-save message, but a reload keeps the drawing.
 await page.waitForTimeout(600);                                   // autosave
@@ -304,6 +314,10 @@ await page.click('.modal-backdrop.show [data-a="ok"]');
 // Delete a copy.
 await page.locator('.sketch-card[data-id]', { hasText: '(copy)' }).first().locator('.menu-btn').click();
 await page.click('.card-menu [data-a="delete"]');
+await page.waitForSelector('.app-dialog .btn.danger');
+check(/^Delete ".*\(copy\)"\?$/.test(await page.textContent('#app-dialog-title')) && await app(() => document.activeElement?.textContent === 'Cancel'),
+  'Delete asks in an app dialog, with the focus on Cancel');
+await page.click('.app-dialog .btn.danger');
 await page.waitForFunction(() => document.querySelectorAll('.sketch-card[data-id]').length === 2);
 check((await rowsOnServer()).length === 2, 'Delete removes it from the account');
 
@@ -480,6 +494,7 @@ await page.waitForFunction(() => /@alban\.m/.test(document.querySelector('#site-
 check(true, 'signing in from the landing page returns to it, showing @username');
 if (process.env.SHOT_DIR) { await page.click('#site-account .site-acc-btn'); await page.screenshot({ path: process.env.SHOT_DIR + '/landing-menu.png', clip: { x: 700, y: 0, width: 700, height: 340 } }); }
 
+check(nativeDialogs.length === 0, 'no browser pop-ups (confirm / alert / prompt)' + (nativeDialogs.length ? ': ' + nativeDialogs.join(' | ') : ''));
 check(errors.length === 0, 'no page errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
 await ctx.close();
 

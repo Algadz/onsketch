@@ -2,6 +2,7 @@ import { Project } from '../core/model.js';
 import { isConfigured, openCloud, ConflictError, LimitError, TITLE_MIN } from '../cloud/cloud.js';
 import { openDetailsDialog, openProfileDialog } from '../cloud/details-dialog.js';
 import { renderThumbnail, thumbnailBlob } from '../render/thumbnail.js';
+import { confirmDialog, notice } from '../ui/dialogs.js';
 
 /* =============== ACCOUNT AND CLOUD PROJECTS ====================
    Optional. With app/src/cloud/config.js empty nothing here runs and
@@ -603,15 +604,17 @@ export class CloudMixin {
   async openCloudProject(id) {
     const s = this.activeSketch();
     const hasDrawing = s && (s.entities.length || s.strokes.length || s.fills.length);
-    if (!this.cloudLink && hasDrawing &&
-        !confirm('The drawing open now is only in this browser and will be replaced. Open the project anyway?')) return;
+    if (!this.cloudLink && hasDrawing && !(await confirmDialog({
+      title: 'Replace the current drawing?',
+      message: 'The drawing open now isn\'t saved in your account. Opening another sketch replaces it.',
+      confirmLabel: 'Open anyway', danger: true }))) return;
     if (this.cloudLink?.dirty) await this._cloudPush();
     if (this._cloudStatus === 'conflict') return;
     try {
       const row = await this.cloud.load(id);
       this._openCloudRow(row);
       this.closeAccount();
-    } catch (e) { alert("Couldn't open the project: " + (e.message || e)); }
+    } catch (e) { notice("Couldn't open the sketch: " + (e.message || e), { kind: 'error' }); }
   }
 
   /** /app/?view=<id> from the library: a public sketch opens as a copy in

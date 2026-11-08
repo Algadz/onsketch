@@ -1,5 +1,6 @@
 import { openCloud, isConfigured } from '../cloud/cloud.js';
 import { mountAccount } from '../site/account.js';
+import { promptDialog } from '../ui/dialogs.js';
 
 /* =============== PUBLIC LIBRARY (/library/) =====================
    Every public sketch that has a description, newest first, with
@@ -201,8 +202,10 @@ class Library {
     if (push && new URLSearchParams(location.search).has('s')) history.pushState({}, '', location.pathname);
   }
   async report(row, msg) {
-    const why = prompt(`Report "${row.name}": what's wrong with it? (spam, offensive, someone else's work…)`);
-    if (!why || !why.trim()) return;
+    const why = await promptDialog({ title: `Report "${row.name}"`, multiline: true, maxLength: 1000,
+      message: 'Tell us what is wrong with this sketch: spam, offensive content, someone else\'s work… We read every report.',
+      label: 'Reason', confirmLabel: 'Send report' });
+    if (!why) return;
     const data = new FormData();
     data.append('_subject', 'OnSketch library report');
     data.append('message', why.trim());

@@ -543,6 +543,34 @@
   .report-status.error { color: var(--overc); }
   .btn:disabled { opacity: 0.55; cursor: default; }
 
+  /* ---------- App dialogs and notices (src/ui/dialogs.js) ---------- */
+  .btn.danger { background: var(--overc); border-color: var(--overc); color: #fff; }
+  .btn.danger:hover { background: #b92f2f; border-color: #b92f2f; }
+  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .modal-backdrop.app-dialog { z-index: 1200; animation: dialog-fade .12s ease-out; }
+  .modal.app-dialog-box { width: 420px; animation: dialog-pop .14s ease-out; }
+  .modal.app-dialog-box .body p { margin: 0; line-height: 1.5; color: var(--text-soft); }
+  .modal.app-dialog-box .body { display: grid; gap: 8px; }
+  .modal.app-dialog-box textarea { min-height: 90px; font: inherit; font-size: 13px; }
+  .modal.app-dialog-box .footer { flex-wrap: wrap; }
+  @keyframes dialog-fade { from { opacity: 0; } }
+  @keyframes dialog-pop { from { opacity: 0; transform: translateY(6px) scale(.98); } }
+  #app-notice {
+    position: fixed; left: 50%; bottom: 44px; z-index: 1300; max-width: min(520px, calc(100vw - 32px));
+    padding: 9px 14px; border-radius: 8px; background: #1b2028; color: #fff; font-size: 13px; line-height: 1.4;
+    box-shadow: 0 8px 24px rgba(0,0,0,.22); pointer-events: none;
+    opacity: 0; transform: translate(-50%, 8px); transition: opacity .18s, transform .18s;
+  }
+  #app-notice.show { opacity: 1; transform: translate(-50%, 0); }
+  #app-notice[data-kind="error"] { background: #8f2424; }
+  :root[data-theme="dark"] #app-notice { background: #e3e7ec; color: #15191f; }
+  :root[data-theme="dark"] #app-notice[data-kind="error"] { background: #ff9c9c; color: #2c1717; }
+  .compact #app-notice { bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
+  @media (prefers-reduced-motion: reduce) {
+    .modal-backdrop.app-dialog, .modal.app-dialog-box { animation: none; }
+    #app-notice { transition: none; }
+  }
+
   /* ---------- Start-up (html.booting until main.js has built the UI) ---------- */
   html.booting #menubar > :not(.brand),
   html.booting #optbar > *,

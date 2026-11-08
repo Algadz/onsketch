@@ -2,6 +2,7 @@ import { Arc, Circle, Line } from '../core/entities.js';
 import { CollinearConstraint, ConcentricConstraint, EqualLengthConstraint, EqualRadiusConstraint, FixConstraint, HorizontalConstraint, ParallelConstraint, PerpendicularConstraint, TangentCircleCircleConstraint, TangentLineCircleConstraint, VerticalConstraint } from '../core/constraints.js';
 import { Project } from '../core/model.js';
 import { classifySelection } from '../editor/relations.js';
+import { confirmDialog } from '../ui/dialogs.js';
 
 export class ConstraintActionsMixin {
 
@@ -180,14 +181,17 @@ export class ConstraintActionsMixin {
         activeIds:affectedIds
       });
       if (solver.state === 'over' && solver.residual > 1e-2) {
-        const msg = `This relation makes the sketch over-defined (residual ${solver.residual.toExponential(2)}). Keep it anyway?`;
-        if (!confirm(msg)) {
-          // revert
+        confirmDialog({
+          title: 'This relation over-defines the sketch',
+          message: `The shapes can't satisfy all their relations and dimensions with it (residual ${solver.residual.toExponential(2)}). Keep it anyway? Over-defined shapes turn red.`,
+          confirmLabel: 'Keep it', cancelLabel: 'Remove it',
+        }).then(keep => {
+          if (keep) return;
           this.project = Project.fromJSON(JSON.parse(beforeJSON));
           this.selectionOrder = [];
           this.solveAndRender();
           this.refreshUI();
-        }
+        });
       }
     }
   }

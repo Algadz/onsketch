@@ -95,6 +95,16 @@ page is hidden or closed, and reopened on load, so a refresh never loses
 work, signed in or not. Nothing in the UI calls this a save. With accounts disabled
 (empty `app/src/cloud/config.js`), Save is the browser save as before.
 
+## Dialogs and notices
+
+The app never uses the browser's `confirm()`, `alert()` or `prompt()`.
+`app/src/ui/dialogs.js` provides dialogs in the app's style (`choose`,
+`confirmDialog`, `alertDialog`, `promptDialog`: Escape cancels, Enter
+takes the default, focus stays inside, a destructive button is red and
+never focused first) and `notice()`, a short message at the bottom that
+fades away, for hints like "Select a line to mirror about". The e2e
+tests fail if any browser pop-up appears.
+
 ## Touch, tablets and phones
 
 Mouse input is handled exactly as on the desktop; touch and stylus input

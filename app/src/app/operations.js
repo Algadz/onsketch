@@ -4,6 +4,7 @@ import { uiIcon } from '../ui/icons.js';
 import { Arc, Circle, Line, Point, newId } from '../core/entities.js';
 import { AngleConstraint, ArcEndpointArcEndpointCoincidentConstraint, ArcEndpointCoincidentConstraint, ArcEndpointMidpointConstraint, ArcEndpointOnCircleConstraint, ArcEndpointOnLineConstraint, CoincidentConstraint, CollinearConstraint, ConcentricConstraint, Constraint, DirectedAngleConstraint, EqualLengthConstraint, EqualRadiusConstraint, HorizontalConstraint, MidpointConstraint, OffsetConstraint, OffsetDistanceConstraint, ParallelConstraint, ParamFixConstraint, PerpendicularConstraint, PointOnCircleConstraint, PointOnLineConstraint, PointRefHorizontalConstraint, PointRefVerticalConstraint, SymmetricConstraint, TangentCircleCircleConstraint, TangentLineCircleConstraint, VerticalConstraint } from '../core/constraints.js';
 import { SelectTool } from '../tools/select.js';
+import { notice } from '../ui/dialogs.js';
 
 /** Mirrored and offset copies keep their source's layer and style. */
 function copyDisplay(src, dst) {
@@ -1107,11 +1108,11 @@ export class OperationsMixin {
     const axis = data?.axis;
     const sources = data?.sources || [];
     if (!axis) {
-      alert('Select a mirror axis.');
+      notice('Select a line to mirror about (the mirror axis).');
       return;
     }
     if (!sources.length) {
-      alert('Select at least one point, line, or circle in addition to the mirror axis.');
+      notice('Select at least one point, line or circle to mirror, as well as the axis.');
       return;
     }
 
@@ -1367,16 +1368,16 @@ export class OperationsMixin {
     const preview = this._offsetPreviewData();
     const entities = this._offsetEntities();
     if (!entities.length) {
-      alert('Select one or more lines, circles, or arcs to offset.');
+      notice('Select one or more lines, circles or arcs to offset.');
       return;
     }
     const topologyIssue = this._offsetTopologyIssue(entities);
     if (topologyIssue) {
-      alert(topologyIssue);
+      notice(topologyIssue, { kind: 'error' });
       return;
     }
     if (!preview) {
-      alert('Offset distance is invalid for one or more selected entities.');
+      notice('This offset distance doesn\'t work for one or more of the selected shapes.', { kind: 'error' });
       return;
     }
 

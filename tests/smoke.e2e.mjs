@@ -29,6 +29,8 @@ const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
 const errors = [];
 page.on('pageerror', e => errors.push(String(e)));
+const nativeDialogs = [];
+page.on('dialog', d => { nativeDialogs.push(`${d.type()}: ${d.message()}`); d.dismiss(); });
 page.on('console', m => { if (m.type() === 'error' && !/umami|Failed to load resource/.test(m.text())) errors.push(m.text()); });
 page.route(/umami/, r => r.abort());
 
@@ -1094,6 +1096,31 @@ await page.evaluate(() => { const a = window._app; a.project.layer('ly1').visibl
 
 await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
 if (shot) await page.screenshot({ path: shot });
+// App dialogs and notices instead of browser pop-ups.
+await page.evaluate(() => { const a = window._app; a.clearSelection?.(); a.selectionOrder = []; a.mirrorSelection(); });
+await page.waitForFunction(() => document.getElementById('app-notice')?.classList.contains('show'));
+check(/mirror/i.test(await page.textContent('#app-notice')), 'Mirror with nothing selected: a notice, not a pop-up');
+await page.evaluate(() => { const w = window._app.windows; if (!w.isOpen('layers')) w.toggle('layers'); });
+const dlgLayers = await page.evaluate(() => {
+  const p = window._app.project;
+  const full = p.layers.find(l => p.entitiesOnLayer(l.id).length);
+  if (full) { p.activeLayerId = full.id; window._app.refreshUI(); }
+  return { n: p.layers.length, full: !!full };
+});
+if (dlgLayers.n < 2) await page.click('#layer-add');
+if (dlgLayers.n < 2) await page.evaluate(() => { const p = window._app.project; p.activeLayerId = p.layers.find(l => p.entitiesOnLayer(l.id).length).id; window._app.refreshUI(); });
+const dlgLayersBefore = await page.evaluate(() => window._app.project.layers.length);
+await page.click('#layer-delete');
+await page.waitForSelector('.app-dialog .btn.danger');
+check(dlgLayers.full && /Delete layer/.test(await page.textContent('#app-dialog-title')), 'deleting a layer with content asks in an app dialog');
+await page.keyboard.press('Escape');
+await page.waitForFunction(() => !document.querySelector('.app-dialog'));
+check(await page.evaluate((n) => window._app.project.layers.length === n, dlgLayersBefore), 'Escape keeps the layer');
+await page.evaluate(() => { const a = window._app; const P = a.project.constructor; const p = new P(); p.addSketch('Sketch 1'); a.project = p; a.refreshUI(); });
+await page.click('#layer-delete');
+await page.waitForFunction(() => /at least one layer/.test(document.getElementById('app-notice')?.textContent || ''));
+check(true, 'deleting the last layer: a notice explains why not');
+check(nativeDialogs.length === 0, 'no browser pop-ups' + (nativeDialogs.length ? ': ' + nativeDialogs.join(' | ') : ''));
 check(errors.length === 0, `no page errors${errors.length ? ': ' + errors.join(' / ') : ''}`);
 
 await browser.close();

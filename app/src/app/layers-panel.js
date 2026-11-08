@@ -2,6 +2,7 @@ import { cleanStyle } from '../core/style.js';
 import { getTheme } from '../render/theme.js';
 import { uiIcon } from '../ui/icons.js';
 import { INK_DEFAULTS } from './sketch-window.js';
+import { confirmDialog, notice } from '../ui/dialogs.js';
 
 const PREFS_KEY = 'onsketch:prefs';
 const esc = (t) => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -33,12 +34,16 @@ export class LayersPanelMixin {
     });
     btn('layer-up', 'up', () => { if (this.project.moveLayer(this.project.activeLayerId, +1)) this._layerChanged(); });
     btn('layer-down', 'down', () => { if (this.project.moveLayer(this.project.activeLayerId, -1)) this._layerChanged(); });
-    btn('layer-delete', 'trash', () => {
+    btn('layer-delete', 'trash', async () => {
       const layer = this.project.activeLayer();
-      if (this.project.layers.length <= 1) return alert('A project needs at least one layer.');
+      if (this.project.layers.length <= 1) { notice('A sketch needs at least one layer, so the last one can\'t be deleted.'); return; }
       const n = this.project.entitiesOnLayer(layer.id).length
         + this.project.sketches.reduce((k, s) => k + s.strokes.filter(st => st.layerId === layer.id).length, 0);
-      if (!confirm(n ? `Delete layer "${layer.name}" and its ${n} item${n === 1 ? '' : 's'}?` : `Delete layer "${layer.name}"?`)) return;
+      if (n && !(await confirmDialog({
+        title: `Delete layer "${layer.name}"?`,
+        message: `Its ${n} item${n === 1 ? '' : 's'} will be deleted too. Undo (Ctrl+Z) brings them back.`,
+        confirmLabel: 'Delete layer', danger: true }))) return;
+      if (!this.project.layer(layer.id)) return;
       this.project.removeLayer(layer.id);
       this.clearSelection();
       this._layerChanged();

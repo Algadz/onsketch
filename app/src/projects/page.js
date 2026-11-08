@@ -1,5 +1,6 @@
 import { openCloud, isConfigured, LimitError } from '../cloud/cloud.js';
 import { openDetailsDialog, openProfileDialog } from '../cloud/details-dialog.js';
+import { confirmDialog, notice } from '../ui/dialogs.js';
 
 /* =============== MY SKETCHES (/app/projects/) ==================
    The signed-in user's cloud projects as cards: preview, title,
@@ -180,7 +181,7 @@ class Page {
   async duplicate(row) {
     if (this.full()) return this.upgrade();
     try { await this.cloud.duplicate(row.id); await this.load(); }
-    catch (e) { e instanceof LimitError ? this.upgrade() : alert("Couldn't duplicate: " + (e.message || e)); }
+    catch (e) { if (e instanceof LimitError) this.upgrade(); else notice("Couldn't duplicate: " + (e.message || e), { kind: 'error' }); }
   }
   async download(row) {
     try {
@@ -191,15 +192,17 @@ class Page {
       a.download = `${row.name.replace(/[^\w\- ]+/g, '').trim() || 'sketch'}.onsketch.json`;
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-    } catch (e) { alert("Couldn't download: " + (e.message || e)); }
+    } catch (e) { notice("Couldn't download: " + (e.message || e), { kind: 'error' }); }
   }
   async remove(row) {
-    if (!confirm(`Delete "${row.name}" from your account? This can't be undone.`)) return;
+    if (!(await confirmDialog({ title: `Delete "${row.name}"?`,
+      message: 'It will be removed from your account and from the library. This can\'t be undone.',
+      confirmLabel: 'Delete', danger: true }))) return;
     try {
       await this.cloud.remove(row.id);
       if (linkedId() === row.id) { try { localStorage.removeItem(LINK_KEY); } catch { /* storage unavailable */ } }
       await this.load();
-    } catch (e) { alert("Couldn't delete: " + (e.message || e)); }
+    } catch (e) { notice("Couldn't delete: " + (e.message || e), { kind: 'error' }); }
   }
   upgrade() {
     const back = document.createElement('div');
