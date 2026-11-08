@@ -30,8 +30,8 @@ cached modules after a deploy. `npm test` fails if the stamp is out of date.
 - **Menu bar**: file and edit actions, project name, view toggles (grid, snap,
   dimensions `M`, zoom, theme) and toggles for each window.
 - **Options bar** (second row): settings for the active tool, as in Paint.NET.
-  Line weight, line type and construction while drawing; Mirror, Offset,
-  *Apply line style* and *Pick line style* with Select; step-by-step help for
+  Line weight, line type and construction while drawing; a short hint with
+  Select (Mirror and Offset are in the Tools window); step-by-step help for
   Smart Dimension; Fill / Erase for the Fill tool.
 - **Floating windows** over the canvas, dragged by their title bar and
   remembered per browser: Tools, Colors, Layers, Properties (selection,

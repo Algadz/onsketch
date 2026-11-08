@@ -42,8 +42,6 @@ export const ACTION_ICONS = {
   offset: svg('<path d="M5 17c4-8 10-8 14 0"/><path d="M7 12c3-5 7-5 10 0"/><path d="M5 17h14"/>'),
   construction: svg('<path d="M4 17h16" stroke-dasharray="3 3"/><path d="M6 7h12"/>'),
   'reset-layout': svg('<rect x="3" y="4" width="7" height="7" rx="1"/><rect x="14" y="4" width="7" height="16" rx="1"/><rect x="3" y="14" width="7" height="6" rx="1"/>'),
-  'apply-style': svg('<path d="M4 20l4-1 10-10-3-3L5 16z"/><path d="M14 5l3 3"/><circle cx="19" cy="18" r="2.5" fill="currentColor"/>'),
-  'pick-style': svg('<path d="M14 4l6 6-2 2-6-6z"/><path d="M12 6l-7 7v4h4l7-7"/>'),
 };
 
 export const WINDOW_ICONS = {

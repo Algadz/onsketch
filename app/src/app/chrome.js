@@ -67,8 +67,6 @@ export class ChromeMixin {
       case 'zoom-reset':   this.view.zoom = 4; this.view.panX = 0; this.view.panY = 0; this.requestRender(); break;
       case 'theme':        this.setTheme(this.themeName === 'dark' ? 'light' : 'dark'); break;
       case 'reset-layout': this.windows.reset(); break;
-      case 'apply-style':  this.applyDrawingStyleToSelection(); break;
-      case 'pick-style':   this.pickStyleFromSelection(); break;
     }
   }
 
@@ -145,10 +143,6 @@ export class ChromeMixin {
         html += sep + `<label class="opt">Sides <input type="number" min="3" max="64" step="1" value="${this.polygonSides}" data-opt="sides"></label>`;
       }
     } else if (t.id === 'select') {
-      html += sep + `<button class="tbtn" data-opt="mirror">${ACTION_ICONS.mirror}<span class="btn-label">Mirror</span></button>`;
-      html += `<button class="tbtn" data-opt="offset">${ACTION_ICONS.offset}<span class="btn-label">Offset</span></button>`;
-      html += sep + `<button class="tbtn" data-opt="apply-style" title="Give the selected entities the current line weight and line type">${ACTION_ICONS['apply-style']}<span class="btn-label">Apply line style</span></button>`;
-      html += `<button class="tbtn" data-opt="pick-style" title="Copy the selected entity's line weight and line type">${ACTION_ICONS['pick-style']}<span class="btn-label">Pick line style</span></button>`;
       html += sep + '<span class="opt-hint">Click to select, Ctrl-click to add, drag a box to select many, drag geometry to move it.</span>';
     } else if (t.id === 'smartdim') {
       html += sep + '<span class="opt-hint"><b>1.</b> Click one or two entities &nbsp; <b>2.</b> Click to place the dimension &nbsp; <b>3.</b> Type a value, Enter. Click an existing dimension to edit it.</span>';
@@ -188,27 +182,10 @@ export class ChromeMixin {
     });
   }
 
-  /* ---- Style ↔ selection, only on request ---- */
+  /** Selected top-level shapes (lines, circles, arcs, points). */
   _selectedTopEntities() {
     const out = [];
     for (const s of this.project.sketches) for (const e of s.entities) if (e.selected) out.push(e);
     return out;
-  }
-  applyDrawingStyleToSelection() {
-    const targets = this._selectedTopEntities();
-    if (!targets.length) { document.getElementById('status-hint').textContent = 'Select entities first, then Apply line style.'; return; }
-    const st = this._penStyle();
-    for (const e of targets) e.style = st ? { ...st } : null;
-    this.commit();
-    this.refreshUI();
-  }
-  pickStyleFromSelection() {
-    const e = this._selectedTopEntities()[0];
-    if (!e || !e.style) return;
-    const s = e.style;
-    if (s.lineWidth) this.pen.lineWidth = s.lineWidth;
-    if (s.lineStyle) this.pen.lineStyle = s.lineStyle;
-    this._penChanged();
-    this._refreshPenUI();
   }
 }

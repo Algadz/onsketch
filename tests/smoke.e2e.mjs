@@ -186,18 +186,9 @@ const untouched = await page.evaluate(() => {
   return a.project.entitiesOnLayer(ly.id)[0].style;
 });
 check(untouched.lineStyle !== 'center', `pen changes leave the selection alone (${JSON.stringify(untouched)})`);
-await page.click('#optbar [data-opt="apply-style"]');
-const ov = await page.evaluate(() => {
-  const a = window._app, ly = a.project.activeLayer();
-  return a.project.entitiesOnLayer(ly.id)[0].style;
-});
-check(ov && ov.lineStyle === 'center', `apply line style (${JSON.stringify(ov)})`);
-const undoStyle = await page.evaluate(() => {
-  const a = window._app; a.undo();
-  const ly = a.project.activeLayer();
-  return a.project.entitiesOnLayer(ly.id)[0].style;
-});
-check(undoStyle && undoStyle.lineStyle !== 'center', `style change is undoable (${JSON.stringify(undoStyle)})`);
+await page.keyboard.press('s');
+const selBar = await page.evaluate(() => ({ buttons: document.querySelectorAll('#optbar button').length, hint: !!document.querySelector('#optbar .opt-hint') }));
+check(selBar.buttons === 0 && selBar.hint, `Select options bar: just the hint (${JSON.stringify(selBar)})`);
 await page.evaluate(() => window._app._setPen('lineStyle', 'solid', true));
 
 // Only the active layer is pickable.
