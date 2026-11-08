@@ -197,6 +197,19 @@ same data, so repeated work doesn't flood the quota.
 | `report-open`, `report-sent` | project attached | Report a problem |
 | `js-error` *once* | message, file:line | uncaught script error |
 
+The landing page (`index.html`) loads the same Umami site. Links carry
+`data-umami-event` attributes; the demo, carousel and section events go
+through `window.landingTrack`, once per page load each.
+
+| Event | Data | When |
+| --- | --- | --- |
+| `landing-cta` | place (nav / hero / footer) | an "Open the editor" / "Start drawing" button |
+| `landing-see-examples` | | hero "See examples" button |
+| `landing-example-open` | example | "Open this example in the editor" |
+| `landing-demo` | action (width / paint) | visitor plays with the hero demo |
+| `landing-example-view` | example | carousel slide shown by the visitor |
+| `landing-section` | section | section scrolled into view (why, how, examples, details, cta) |
+
 ## Source layout
 
 | Path | Contents |

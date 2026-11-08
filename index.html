@@ -6,6 +6,20 @@
 <title>OnSketch - Paint, but to scale. Free 2D sketching with real dimensions</title>
 <meta name="description" content="Sketch ideas to scale, colour them in and present concepts that already fit: floor plans, PCB layouts, engineering parts, DIY and laser-cut projects, garden plans, packaging dielines. Free, in your browser, no install." />
 <link rel="canonical" href="https://onsketch.io/" />
+<script defer src="https://cloud.umami.is/script.js" data-website-id="50dad292-9502-4749-a86e-68f2ed8b2e7a"></script>
+<script>
+  /* Umami custom events for the landing page (links use data-umami-event).
+     Each name + data is sent at most once per page load. */
+  window.landingTrack = (() => {
+    const sent = new Set();
+    return (name, data) => {
+      const key = name + JSON.stringify(data || {});
+      if (sent.has(key)) return;
+      sent.add(key);
+      try { if (window.umami) window.umami.track(name, data); } catch { /* blocked */ }
+    };
+  })();
+</script>
 <meta name="robots" content="index, follow" />
 <meta name="theme-color" content="#eef1f4" />
 <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
@@ -459,7 +473,7 @@
         <a href="#examples">Examples</a>
         <a href="#details">Details</a>
       </nav>
-      <a class="btn primary" href="/app/">Open the editor</a>
+      <a class="btn primary" href="/app/" data-umami-event="landing-cta" data-umami-event-place="nav">Open the editor</a>
     </div>
   </header>
 
@@ -476,8 +490,8 @@
         </svg></span></h1>
         <p class="lede">Give shapes real dimensions, tie them together with equations and constraints, then colour them in. Change one number and the whole concept follows.</p>
         <div class="actions">
-          <a class="btn primary" href="/app/">Start drawing</a>
-          <a class="btn" href="#examples">See examples</a>
+          <a class="btn primary" href="/app/" data-umami-event="landing-cta" data-umami-event-place="hero">Start drawing</a>
+          <a class="btn" href="#examples" data-umami-event="landing-see-examples">See examples</a>
         </div>
         </div>
         <figure class="demo" aria-label="Interactive example: a desk drawn to scale with dimensions, equations, constraints, fills and ink">
@@ -517,7 +531,7 @@
             </div>
             <div class="eqs-foot">
               <p class="eqs-hint">Type a width like <code>1.8m</code> or <code>60in</code>.</p>
-              <a class="open-ex" href="/app/?example=desk">Open this example in the editor &rarr;</a>
+              <a class="open-ex" href="/app/?example=desk" data-umami-event="landing-example-open" data-umami-event-example="desk">Open this example in the editor &rarr;</a>
             </div>
           </div>
         </figure>
@@ -717,7 +731,7 @@
           <p>Open the editor and draw your first concept in a couple of minutes.</p>
           <p class="note">Coming next: image export for slides and documents, text labels, share links.</p>
         </div>
-        <a class="btn primary" href="/app/">Open the editor</a>
+        <a class="btn primary" href="/app/" data-umami-event="landing-cta" data-umami-event-place="footer">Open the editor</a>
       </div>
     </section>
   </main>
@@ -845,6 +859,7 @@
       const stopAuto = () => { auto = false; clearInterval(timer); };
       input.addEventListener('focus', stopAuto);
       input.addEventListener('input', () => {
+        window.landingTrack('landing-demo', { action: 'width' });
         const mm = parse(input.value);
         input.classList.toggle('bad', mm == null);
         if (mm != null) setWidth(mm, true);
@@ -860,7 +875,7 @@
       }));
       svg.addEventListener('click', (e) => {
         const area = e.target.closest('[data-area]');
-        if (area) { stopAuto(); colors[area.dataset.area] = brush; draw(); return; }
+        if (area) { stopAuto(); colors[area.dataset.area] = brush; draw(); window.landingTrack('landing-demo', { action: 'paint' }); return; }
         if (e.target.closest('.lbl.edit')) { stopAuto(); input.focus(); input.select(); }
       });
 
@@ -888,6 +903,7 @@
       let index = 0;
       const go = (i) => { track.scrollTo({ left: slides[Math.max(0, Math.min(slides.length - 1, i))].offsetLeft }); };
       const show = (i) => {
+        if (i !== index) window.landingTrack('landing-example-view', { example: slides[i].id.replace(/^ex-/, '') });
         index = i;
         tabs.forEach((t, j) => t.setAttribute('aria-current', j === i ? 'true' : 'false'));
         const strip = tabs[i].parentElement;
@@ -910,6 +926,22 @@
       const fromHash = slides.findIndex(s => '#' + s.id === location.hash);
       if (fromHash > 0) requestAnimationFrame(() => { track.style.scrollBehavior = 'auto'; go(fromHash); track.style.scrollBehavior = ''; });
       show(0);
+    })();
+  </script>
+  <script>
+    /* How far visitors read: each section is reported once, when it reaches
+       the middle of the screen or is nearly all on screen (the last one). */
+    (() => {
+      if (!('IntersectionObserver' in window)) return;
+      const seen = (entries) => {
+        for (const e of entries) if (e.isIntersecting) window.landingTrack('landing-section', { section: e.target.dataset.section });
+      };
+      const mid = new IntersectionObserver(seen, { rootMargin: '0px 0px -50% 0px' });
+      const whole = new IntersectionObserver(seen, { threshold: 0.9 });
+      document.querySelectorAll('main section[id], main section.cta').forEach(s => {
+        s.dataset.section = s.id || 'cta';
+        mid.observe(s); whole.observe(s);
+      });
     })();
   </script>
 </body>
