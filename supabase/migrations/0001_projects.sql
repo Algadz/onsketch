@@ -44,11 +44,14 @@ create trigger projects_touch before update on public.projects
 
 -- Row-level security: you see and change your own projects; anyone
 -- (signed in or not) can read a project marked public.
--- Policies are permissive (OR-ed), so any older policy on this table still
--- applies on top of these: check with
+-- Policies are permissive (OR-ed), so any other policy on this table
+-- still applies on top of these: check with
 --   select policyname, cmd, roles, qual, with_check from pg_policies where tablename = 'projects';
 alter table public.projects enable row level security;
 
+-- Policies of the earlier OnSketch, replaced by the ones below.
+drop policy if exists "Projects are readable by owner or public" on public.projects;
+drop policy if exists "Projects are deletable by owner"          on public.projects;
 drop policy if exists "owner reads"   on public.projects;
 drop policy if exists "public reads"  on public.projects;
 drop policy if exists "owner inserts" on public.projects;
