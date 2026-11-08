@@ -399,7 +399,7 @@ export class Renderer {
     if (!sketch) return;
     const ctx = this.ctx, v = this.view, t = this.theme;
     const slots = new Map();                 // anchor key → badges placed there
-    const size = 15;
+    const size = this.badgeSize || 15;   // larger for touch (touch.js)
     ctx.save();
     ctx.font = '600 10px ui-sans-serif, system-ui, -apple-system, "Segoe UI"';
     ctx.textAlign = 'center';

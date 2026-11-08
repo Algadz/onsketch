@@ -102,6 +102,9 @@ export class EquationsMixin {
     input.type = 'text';
     input.className = 'dim-input';
     input.spellcheck = false;
+    input.setAttribute('autocapitalize', 'off');
+    input.setAttribute('autocorrect', 'off');
+    input.setAttribute('enterkeyhint', 'done');
     input.value = text;
     input.style.left = pos.x + 'px';
     input.style.top = pos.y + 'px';
@@ -110,7 +113,11 @@ export class EquationsMixin {
     document.getElementById('workspace').appendChild(input);
     setTimeout(() => { input.focus(); input.select(); }, 0);
     let done = false, hold = false;
-    const close = () => { done = true; input.remove(); if (this._valueInput === vi) this._valueInput = null; };
+    let unfit = () => {};
+    const close = () => {
+      done = true; input.remove(); unfit();
+      if (this._valueInput === vi) { this._valueInput = null; this._closeKeypad(); }
+    };
     const refocus = () => setTimeout(() => { if (!done) input.focus(); }, 0);
     const vi = {
       selfName: opts.selfName || null,
@@ -136,6 +143,10 @@ export class EquationsMixin {
       },
     };
     this._valueInput = vi;
+    if (this.touchUI) {                          // touch: keypad, and stay above the keyboard
+      unfit = this._keepAboveKeyboard(input);
+      this._openKeypad(input, vi, (key) => input.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })));
+    }
     const tryCommit = () => {
       const err = submit(input.value);
       if (!err) { close(); return true; }

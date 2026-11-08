@@ -18,6 +18,9 @@ export class WindowManager {
     this.onChange = onChange;
     this.wins = new Map();
     this.z = 10;
+    // Phone layout (compact.js): windows become bottom sheets, one open at a
+    // time, not saved, so the desktop layout is untouched.
+    this.compact = false;
     let saved = {};
     try { saved = JSON.parse(localStorage.getItem(STORE_KEY) || '{}') || {}; } catch { saved = {}; }
     this.state = saved;
@@ -36,6 +39,16 @@ export class WindowManager {
     head.addEventListener('pointerdown', (ev) => {
       if (ev.button !== 0 || ev.target.closest('button, input, select')) return;
       ev.preventDefault();
+      if (this.compact) {                          // sheet: swipe down to close
+        const y0 = ev.clientY;
+        head.setPointerCapture(ev.pointerId);
+        const up = (e) => {
+          head.removeEventListener('pointerup', up); head.removeEventListener('pointercancel', up);
+          if (e.clientY - y0 > 40) this.toggle(id, false);
+        };
+        head.addEventListener('pointerup', up); head.addEventListener('pointercancel', up);
+        return;
+      }
       const start = { x: ev.clientX, y: ev.clientY, left: el.offsetLeft, top: el.offsetTop };
       head.setPointerCapture(ev.pointerId);
       el.classList.add('dragging');
@@ -54,6 +67,7 @@ export class WindowManager {
   }
 
   _place(id, x, y) {
+    if (this.compact) return;
     const el = this.wins.get(id);
     const cw = this.container.clientWidth, ch = this.container.clientHeight;
     const w = el.offsetWidth, h = el.offsetHeight;
@@ -66,6 +80,7 @@ export class WindowManager {
 
   /** Position every open window: saved spot (clamped) or its default. */
   layout() {
+    if (this.compact) return;
     const cw = this.container.clientWidth, ch = this.container.clientHeight;
     for (const [id, el] of this.wins) {
       if (el.hidden) continue;
@@ -84,6 +99,12 @@ export class WindowManager {
   toggle(id, open = !this.isOpen(id)) {
     const el = this.wins.get(id);
     if (!el) return;
+    if (this.compact) {
+      if (open) for (const [other, w] of this.wins) if (other !== id) w.hidden = true;
+      el.hidden = !open;
+      this.onChange();
+      return;
+    }
     el.hidden = !open;
     this.state[id].open = open;
     if (open) { el.style.zIndex = ++this.z; this.layout(); }
@@ -91,7 +112,21 @@ export class WindowManager {
     this.onChange();
   }
 
+  /** Enter / leave the phone layout. Leaving restores the saved layout. */
+  setCompact(on) {
+    on = !!on;
+    if (on === this.compact) return;
+    this.compact = on;
+    for (const [id, el] of this.wins) {
+      el.hidden = on ? true : !this.state[id].open;
+      if (on) { el.style.left = ''; el.style.top = ''; }
+    }
+    if (!on) this.layout();
+    this.onChange();
+  }
+
   reset() {
+    if (this.compact) { for (const el of this.wins.values()) el.hidden = true; this.onChange(); return; }
     for (const [id, el] of this.wins) {
       this.state[id] = { open: !el.hasAttribute('data-closed') };
       el.hidden = !this.state[id].open;

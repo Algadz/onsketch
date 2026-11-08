@@ -54,6 +54,7 @@ export class RenderEventsMixin {
       if (opPrev.points)  for (const p of opPrev.points) this.renderer.drawTempPoint(p);
     }
 
+    if (this._drawLoupe) queueMicrotask(() => this._drawLoupe());
     if (this.snapOn) {
       // During a drag, lastDragSnaps holds every active snap (primary +
       // any secondary handles that incidentally landed on snap targets).
@@ -104,6 +105,7 @@ export class RenderEventsMixin {
     if (name === 'smartdim' && !this.showDimensions) this.setDimensionsVisible(true);
     if (this._refreshSketchWindow) this._refreshSketchWindow();
     if (this._syncColorTarget) this._syncColorTarget();
+    if (this.compact) this._renderMobileBar();
     this._refreshOptionsBar();
     document.getElementById('status-hint').textContent = (this.tool.hint && this.tool.hint()) || '';
     this._updateCanvasCursor();
@@ -131,7 +133,10 @@ export class RenderEventsMixin {
       }
     });
 
-    c.addEventListener('pointerdown', (ev) => {
+    // Mouse events go straight to these handlers. Touch and pen events pass
+    // through the touch layer first (touch.js): it handles pan / pinch,
+    // long press and taps, and replays the rest into the same handlers.
+    const down = (ev) => {
       const { screen, world } = getWorld(ev);
       if (ev.button === 2) {
         ev.preventDefault();
@@ -154,9 +159,9 @@ export class RenderEventsMixin {
       const snap = this._snapForCurrentTool(world);
       this.lastSnap = snap;
       this.tool.onPointerDown(world, snap, ev);
-    });
+    };
 
-    c.addEventListener('pointermove', (ev) => {
+    const move = (ev) => {
       const { screen, world } = getWorld(ev);
       this.lastWorldCursor = world;
       document.getElementById('status-coords').textContent = `x: ${world.x.toFixed(3)}  y: ${world.y.toFixed(3)}`;
@@ -178,18 +183,33 @@ export class RenderEventsMixin {
       if (snap && !snap.rejected) {
         hint.textContent = snap.kind;
         hint.style.left = screen.x + 'px';
-        hint.style.top  = screen.y + 'px';
+        // Above the finger on touch, so the finger doesn't hide it.
+        hint.style.top  = (ev.pointerType === 'touch' ? screen.y - 44 : screen.y) + 'px';
         hint.style.display = 'block';
       } else hint.style.display = 'none';
+      if (this._loupeFollow) this._loupeFollow(ev, screen);
       this.requestRender();
-    });
+    };
 
-    c.addEventListener('pointerup', (ev) => {
+    const up = (ev) => {
       if (ev.button === 2) return;
       const { world } = getWorld(ev);
       if (panning) { panning = false; this._updateCanvasCursor(); return; }
       const snap = this._snapForCurrentTool(world);
       this.tool.onPointerUp(world, snap, ev);
+    };
+
+    this._canvasHandlers = { down, move, up, getWorld };
+    const routed = (kind, fn) => (ev) => {
+      this._noteInput(ev);
+      if (ev.pointerType && ev.pointerType !== 'mouse' && this._touchFilter(kind, ev)) return;
+      fn(ev);
+    };
+    c.addEventListener('pointerdown', routed('down', down));
+    c.addEventListener('pointermove', routed('move', move));
+    c.addEventListener('pointerup', routed('up', up));
+    c.addEventListener('pointercancel', (ev) => {   // touch / pen only: the browser took the pointer
+      if (ev.pointerType && ev.pointerType !== 'mouse') this._touchFilter('cancel', ev);
     });
 
     // The brush footprint of the Sketch tools leaves with the pointer.

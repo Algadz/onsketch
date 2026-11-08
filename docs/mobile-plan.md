@@ -1,5 +1,14 @@
 # Mobile: audit and plan
 
+> **Status (8 Nov 2026):** phases 0 to 3 and the landing fixes are done
+> (`app/src/app/touch.js`, `touch-ui.js`, `compact.js`; checks in
+> `tests/mobile.e2e.mjs`, `npm run test:mobile`). Desktop is unchanged:
+> touch behaviour only reacts to touch / pen pointer events, the phone
+> layout needs a coarse pointer, and desktop screenshots at 1440, 1024 and
+> 640 px are pixel-identical to before (apart from the solver timing text).
+> Phase 4 (PWA, file open / share, performance) is next. Still to verify on
+> real devices: iOS Safari, iPad with Apple Pencil, a mid-range Android.
+
 Checked on 8 Nov 2026 with Playwright device emulation (iPhone 13, Pixel 7,
 iPad gen 7 portrait and landscape, iPhone 13 landscape) and synthetic touch
 input (taps, one-finger drags, two-finger pinch, long press).

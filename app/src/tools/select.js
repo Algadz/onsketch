@@ -17,7 +17,7 @@ export class SelectTool extends Tool {
     // Relation badges: click to select (Delete removes the relation).
     const rel = this.app.hitRelationAtScreen(sx, sy);
     if (rel) {
-      const isToggle = ev.ctrlKey || ev.metaKey;
+      const isToggle = ev.ctrlKey || ev.metaKey || this.app.multiSelect;
       if (isToggle) this.app.setSelected(rel, !rel.selected);
       else {
         if (!ev.shiftKey && !rel.selected) this.app.clearSelection();
@@ -30,7 +30,7 @@ export class SelectTool extends Tool {
     const dim = this.app.hitDimAtScreen(sx, sy);
     if (dim) {
       const wasSelected = !!dim.selected;
-      const isToggle = ev.ctrlKey || ev.metaKey;
+      const isToggle = ev.ctrlKey || ev.metaKey || this.app.multiSelect;
       const isAdd = ev.shiftKey;
       if (isToggle) {
         this.app.setSelected(dim, !wasSelected);
@@ -47,7 +47,7 @@ export class SelectTool extends Tool {
       return;
     }
     const hit = this.app.hitTestActiveSketch(world);
-    const isToggle = ev.ctrlKey || ev.metaKey;
+    const isToggle = ev.ctrlKey || ev.metaKey || this.app.multiSelect;
     const isAdd    = ev.shiftKey;
     if (this.app.operationName === 'mirror') {
       if (!hit && this.app.mirrorPickMode === 'entities') {

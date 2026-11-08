@@ -8,7 +8,8 @@
     "test": "node scripts/stamp.mjs --check && node --test \"tests/unit/*.test.js\"",
     "test:e2e": "node tests/smoke.e2e.mjs",
     "lint": "eslint app/src tests",
-    "stamp": "node scripts/stamp.mjs"
+    "stamp": "node scripts/stamp.mjs",
+    "test:mobile": "node tests/mobile.e2e.mjs"
   },
   "devDependencies": {
     "eslint": "^9.39.0",

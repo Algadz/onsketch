@@ -24,6 +24,9 @@ import { SketchWindowMixin } from './sketch-window.js';
 import { ReportMixin } from './report.js';
 import { DimLinksMixin } from './dim-links.js';
 import { InkSelectMixin } from './ink-select.js';
+import { TouchMixin } from './touch.js';
+import { TouchUIMixin } from './touch-ui.js';
+import { CompactMixin } from './compact.js';
 
 /* =============== 10. APP ====================================== */
 export class App {
@@ -75,6 +78,8 @@ export class App {
     this.renderer.labelFor = (c, text) => this.dimensionLabel(c, text);
     this._setupModal();
     this._setupReport();
+    this._loadStylusPref();
+    this._setupCompact();
     this._setupResize();
     const restored = this.loadLocalIfAny();
     this._setupAutosave();
@@ -368,7 +373,7 @@ export class App {
   }
 
   hitTestSketches(world, sketches) {
-    const v = this.view;
+    const v = this._hitView();
     // Prefer points first, then larger entities. Standalone Point
     // entities, such as centerline midpoints, must win over line bodies.
     for (const s of sketches) {
@@ -385,7 +390,7 @@ export class App {
   }
 
   hitTestAllSketches(world, sketches) {
-    const v = this.view;
+    const v = this._hitView();
     const out = [];
     const seen = new Set();
     const add = (e) => {
@@ -644,7 +649,7 @@ export class App {
 }
 
 /* Methods are grouped into mixins by concern; see src/app/*.js. */
-for (const Mixin of [ChromeMixin, EquationsMixin, LayersPanelMixin, FillsMixin, DimensionLabelsMixin, SelectionMixin, DragMixin, SolveMixin, OperationsMixin, ConstraintActionsMixin, RenderEventsMixin, PanelsMixin, PersistenceMixin, SketchWindowMixin, ReportMixin, DimLinksMixin, InkSelectMixin]) {
+for (const Mixin of [ChromeMixin, EquationsMixin, LayersPanelMixin, FillsMixin, DimensionLabelsMixin, SelectionMixin, DragMixin, SolveMixin, OperationsMixin, ConstraintActionsMixin, RenderEventsMixin, PanelsMixin, PersistenceMixin, SketchWindowMixin, ReportMixin, DimLinksMixin, InkSelectMixin, TouchMixin, TouchUIMixin, CompactMixin]) {
   for (const key of Object.getOwnPropertyNames(Mixin.prototype)) {
     if (key === 'constructor') continue;
     Object.defineProperty(App.prototype, key, Object.getOwnPropertyDescriptor(Mixin.prototype, key));

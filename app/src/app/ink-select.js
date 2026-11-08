@@ -20,7 +20,7 @@ export class InkSelectMixin {
     const sketch = this.activeSketch(); if (!sketch) return null;
     const layer = this.project.activeLayer();
     if (!layer || !layer.visible) return null;
-    const tol = 5 / this.view.zoom;
+    const tol = 5 * (this._inputScale || 1) / this.view.zoom;
     for (let i = sketch.strokes.length - 1; i >= 0; i--) {
       const s = sketch.strokes[i];
       if (s.layerId === layer.id && strokeHit(s, world, tol)) return s;

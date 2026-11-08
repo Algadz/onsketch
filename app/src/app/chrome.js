@@ -42,7 +42,7 @@ export class ChromeMixin {
         const t = document.querySelector('.fwin[data-win="tools"]');
         return { x: t && !t.hidden ? t.offsetLeft + t.offsetWidth + 8 : 12, y: 12 };
       },
-    }, () => this._syncWindowButtons());
+    }, () => { this._syncWindowButtons(); if (this.compact) this._renderMobileBar(); });
     this._syncWindowButtons();
     requestAnimationFrame(() => this.windows.layout());
   }
@@ -159,9 +159,11 @@ export class ChromeMixin {
       html += `<label class="opt">Colour <i class="opt-sw" style="--sw:${p.fillColor}"></i></label>`;
       html += sep + '<span class="opt-hint">Click an area of the active layer: a region closed by its shapes is filled; anywhere else fills the background. Other layers are ignored.</span>';
     }
+    html += this._touchOptionsHTML(t);          // touch only (touch-ui.js)
     bar.innerHTML = html;
 
     this._bindSketchOptions(bar);
+    this._bindTouchOptions(bar);
     bar.querySelectorAll('select[data-pen]').forEach(sel => sel.addEventListener('change', () => {
       const k = sel.dataset.pen;
       const v = k === 'lineWidth' ? parseFloat(sel.value) : sel.value;

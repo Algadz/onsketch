@@ -411,6 +411,20 @@
   .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   @media (max-width: 960px) { .hero-grid { grid-template-columns: 1fr; } }
 
+
+  /* Phones: readable demo labels, tags left to the Equations panel. */
+  @media (max-width: 520px) and (pointer: coarse) {
+    #demo .lbl text { font-size: 17px; }
+    #demo .badges text { font-size: 15px; }
+    #demo .tags { display: none; }
+  }
+  /* Touch screens: finger-sized targets. */
+  @media (pointer: coarse) {
+    .swatches { gap: 8px; }
+    .swatches button { width: 32px; height: 32px; }
+    .nav-btn { width: 40px; height: 40px; }
+    .carousel-tabs a { padding: 10px 13px; }
+  }
   @media (prefers-reduced-motion: reduce) { html, .track { scroll-behavior: auto; } }
   @media (max-width: 900px) {
     .features, .details { grid-template-columns: 1fr; }
@@ -509,7 +523,10 @@
         </figure>
         </div>
         <div class="window">
-          <img src="assets/app-preview.png" width="2880" height="1800" alt="The OnSketch editor with a 6 by 4 metre studio layout: coloured furniture on a floor plan, dimensions in millimetres, Tools, Colors and Layers windows" />
+          <picture>
+            <source media="(max-width: 640px) and (pointer: coarse)" srcset="assets/app-preview-phone.webp" type="image/webp" width="900" height="545" />
+            <img src="assets/app-preview.png" width="2880" height="1800" alt="The OnSketch editor with a 6 by 4 metre studio layout: coloured furniture on a floor plan, dimensions in millimetres, Tools, Colors and Layers windows" />
+          </picture>
         </div>
       </div>
     </section>
@@ -723,6 +740,7 @@
       const $ = (id) => document.getElementById(id);
       const el = (tag, attrs, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; };
       const S = 0.2, CX = 280, T = 66, BACK = 150, HOLE = 100, MAT_FRONT = 60;   // px per mm; back edge fixed
+      const F = matchMedia('(max-width: 520px) and (pointer: coarse)').matches ? 1.45 : 1;             // bigger labels on phones
       const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
       const UNITS = { mm: 1, cm: 10, m: 1000, in: 25.4, '"': 25.4, ft: 304.8 };
       const colors = { top: '#c8955f', mat: '#47698f' };
@@ -731,17 +749,17 @@
 
       const label = (g, x, y, text, { edit = false, sigma = false } = {}) => {
         const grp = el('g', { class: 'lbl' + (edit ? ' edit' : '') }, g);
-        const tw = text.length * 7.4 + (sigma ? 14 : 0) + 12;
-        el('rect', { x: x - tw / 2, y: y - 10, width: tw, height: 20, rx: 4 }, grp);
-        if (sigma) el('text', { x: x - tw / 2 + 11, y, class: 'sig' }, grp).textContent = 'Σ';
-        el('text', { x: x + (sigma ? 6 : 0), y }, grp).textContent = text;
+        const tw = (text.length * 7.4 + (sigma ? 14 : 0) + 12) * F;
+        el('rect', { x: x - tw / 2, y: y - 10 * F, width: tw, height: 20 * F, rx: 4 }, grp);
+        if (sigma) el('text', { x: x - tw / 2 + 11 * F, y, class: 'sig' }, grp).textContent = 'Σ';
+        el('text', { x: x + (sigma ? 6 * F : 0), y }, grp).textContent = text;
       };
       const arrow = (g, x, y, dx, dy) => {
         const L = 7, H = 3;
         el('path', { class: 'arrow', d: `M${x} ${y} L${x - dx * L - dy * H} ${y - dy * L + dx * H} L${x - dx * L + dy * H} ${y - dy * L - dx * H} Z` }, g);
       };
       const badge = (g, x, y, glyph) => {
-        el('rect', { x: x - 8, y: y - 8, width: 16, height: 16, rx: 3 }, g);
+        el('rect', { x: x - 8 * F, y: y - 8 * F, width: 16 * F, height: 16 * F, rx: 3 }, g);
         el('text', { x, y: y + 0.5 }, g).textContent = glyph;
       };
       const tag = (g, x, y, text, anchor = 'middle') => { el('text', { x, y, 'text-anchor': anchor }, g).textContent = text; };
