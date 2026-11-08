@@ -1223,6 +1223,7 @@ export class OperationsMixin {
         if (c[key] != null) clone[key] = c[key];
       }
       if (c.sourceSide) clone.sourceSide = c.sourceSide;
+      if (c.axis) clone.axis = c.axis;
       if (c.driven) clone.driven = true;
       if (c.isDiameter) clone.isDiameter = true;
       return clone;

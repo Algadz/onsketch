@@ -1,6 +1,6 @@
 import { EPS, TAU, angleArcFromPoints, angleSectorForValue, drawDirectedArcPath, lineIntersection, normalizeAngleValue } from '../core/math.js';
 import { Arc, Circle, Line, Point } from '../core/entities.js';
-import { CONSTRAINT_GLYPHS } from '../core/constraints.js';
+import { CONSTRAINT_GLYPHS, distanceFrame } from '../core/constraints.js';
 import { resolveStyle, dashFor, withAlpha } from '../core/style.js';
 import { getTheme, INK } from './theme.js';
 
@@ -471,7 +471,7 @@ export class Renderer {
   drawDimPreview(preview) {
     if (!preview) return;
     if (preview.kind === 'distance') {
-      const fake = { p1:'_a', p2:'_b', value: preview.value,
+      const fake = { p1:'_a', p2:'_b', value: preview.value, axis: preview.axis || null,
                       labelOffset: preview.offset, labelParallel: preview.parallel };
       const map = new Map([['_a', preview.p1], ['_b', preview.p2]]);
       this._drawDistance(fake, map, false);
@@ -565,23 +565,24 @@ export class Renderer {
   _drawDistance(c, entMap, grey, recordAs) {
     const p1 = entMap.get(c.p1), p2 = entMap.get(c.p2);
     if (!p1 || !p2) return;
-    const dx = p2.x - p1.x, dy = p2.y - p1.y;
-    const len = Math.hypot(dx, dy);
+    // Aligned (true length), or horizontal / vertical distance: one frame.
+    const fr = distanceFrame(p1, p2, c.axis);
+    const len = fr.len;
     if (len < EPS) return;
     const v = this.view, ctx = this.ctx;
 
     const offsetWorld   = (c.labelOffset   != null) ? c.labelOffset   : (12 / v.zoom);
     const parallelWorld = (c.labelParallel != null) ? c.labelParallel : 0;
-    const nx = -dy / len, ny = dx / len; // perpendicular unit
-    const tx =  dx / len, ty =  dy / len; // tangent unit
+    const { x: nx, y: ny } = fr.n;  // normal: the label is offset along it
+    const { x: tx, y: ty } = fr.t;  // direction the value is measured in
 
-    // Extension feet at the perpendicular projections of p1 and p2 onto
-    // the dim line. The text rides at midpoint + tangent * parallel.
-    const a = { x: p1.x + nx * offsetWorld, y: p1.y + ny * offsetWorld };
-    const b = { x: p2.x + nx * offsetWorld, y: p2.y + ny * offsetWorld };
+    // Feet of the extension lines on the dim line; the text rides at the
+    // midpoint + tangent * parallel.
+    const a = { x: fr.a0.x + nx * offsetWorld, y: fr.a0.y + ny * offsetWorld };
+    const b = { x: fr.b0.x + nx * offsetWorld, y: fr.b0.y + ny * offsetWorld };
     const labelMid = {
-      x: (p1.x + p2.x)/2 + nx * offsetWorld + tx * parallelWorld,
-      y: (p1.y + p2.y)/2 + ny * offsetWorld + ty * parallelWorld
+      x: fr.mid.x + nx * offsetWorld + tx * parallelWorld,
+      y: fr.mid.y + ny * offsetWorld + ty * parallelWorld
     };
 
     const pa = v.worldToScreen(a), pb = v.worldToScreen(b);
@@ -593,15 +594,17 @@ export class Renderer {
     ctx.save();
     ctx.strokeStyle = cols.stroke; ctx.fillStyle = cols.fill; ctx.lineWidth = 1;
 
-    // Extension lines (small gap from anchor, extend slightly past dim line)
-    const ux = pa.x - pp1.x, uy = pa.y - pp1.y;
-    const ul = Math.hypot(ux, uy) || 1;
-    const e1 = { x: ux/ul, y: uy/ul };
+    // Extension lines from each anchor to its foot (small gap at the
+    // anchor, a little past the dim line). For horizontal / vertical
+    // dimensions the two have different lengths.
     ctx.beginPath();
-    ctx.moveTo(pp1.x + e1.x*4, pp1.y + e1.y*4);
-    ctx.lineTo(pa.x  + e1.x*4, pa.y  + e1.y*4);
-    ctx.moveTo(pp2.x + e1.x*4, pp2.y + e1.y*4);
-    ctx.lineTo(pb.x  + e1.x*4, pb.y  + e1.y*4);
+    for (const [from, to] of [[pp1, pa], [pp2, pb]]) {
+      const ux = to.x - from.x, uy = to.y - from.y, ul = Math.hypot(ux, uy);
+      if (ul < 1e-6) continue;
+      const e = { x: ux / ul, y: uy / ul };
+      ctx.moveTo(from.x + e.x * 4, from.y + e.y * 4);
+      ctx.lineTo(to.x + e.x * 4, to.y + e.y * 4);
+    }
 
     // The dim line spans from foot a to foot b, but if the label sits past
     // one of the feet (cursor was dragged outside the segment) we extend

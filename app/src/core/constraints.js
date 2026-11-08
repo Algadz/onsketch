@@ -194,19 +194,50 @@ export class MidpointConstraint extends Constraint {
   toJSON() { return { id:this.id, kind:'midpoint', pointId:this.pointId, l:this.l }; }
 }
 
+/** Frame of a distance dimension between p1 and p2, shared by the
+ *  renderer, the Smart Dimension tool and label dragging.
+ *  axis null: aligned (the true length); 'x': horizontal distance;
+ *  'y': vertical distance. Returns the unit direction t along which the
+ *  value is measured, the normal n the label is offset along, the two
+ *  base points a0 / b0 the extension lines start from the dimension line
+ *  at (before the offset), their midpoint, and the measured length. */
+export function distanceFrame(p1, p2, axis = null) {
+  const dx = p2.x - p1.x, dy = p2.y - p1.y;
+  if (axis === 'x' || axis === 'y') {
+    const along = axis === 'x' ? dx : dy;
+    const s = along < 0 ? -1 : 1;
+    const t = axis === 'x' ? { x: s, y: 0 } : { x: 0, y: s };
+    const n = { x: -t.y, y: t.x };
+    const mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+    // both ends projected onto the line through the midpoint, along the axis
+    const a0 = axis === 'x' ? { x: p1.x, y: mid.y } : { x: mid.x, y: p1.y };
+    const b0 = axis === 'x' ? { x: p2.x, y: mid.y } : { x: mid.x, y: p2.y };
+    return { t, n, a0, b0, mid, len: Math.abs(along) };
+  }
+  const len = Math.hypot(dx, dy) || 1;
+  const t = { x: dx / len, y: dy / len };
+  return { t, n: { x: -t.y, y: t.x }, a0: p1, b0: p2, mid: { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 }, len: Math.hypot(dx, dy) };
+}
+
 export class DistanceConstraint extends Constraint {
-  constructor(p1Id, p2Id, value) {
+  /** axis: null = aligned (true length), 'x' = horizontal distance,
+   *  'y' = vertical distance (SolidWorks-style linear dimensions). */
+  constructor(p1Id, p2Id, value, axis = null) {
     super('distance'); this.p1=p1Id; this.p2=p2Id; this.value=value;
+    this.axis = axis === 'x' || axis === 'y' ? axis : null;
     this.labelOffset=null; this.labelParallel=null; this.driven=false;
   }
   refs() { return [this.p1, this.p2]; }
   residuals(L) {
     if (this.driven) return [];
     const dx=L(this.p1,'x')-L(this.p2,'x'), dy=L(this.p1,'y')-L(this.p2,'y');
+    if (this.axis === 'x') return [ Math.abs(dx) - this.value ];
+    if (this.axis === 'y') return [ Math.abs(dy) - this.value ];
     return [ Math.sqrt(dx*dx+dy*dy) - this.value ];
   }
   toJSON() {
     const o = { id:this.id, kind:'distance', p1:this.p1, p2:this.p2, value:this.value };
+    if (this.axis) o.axis = this.axis;
     if (this.labelOffset   != null) o.labelOffset   = this.labelOffset;
     if (this.labelParallel != null) o.labelParallel = this.labelParallel;
     if (this.driven) o.driven = true;
@@ -610,6 +641,12 @@ export class ArcEndpointOnCircleConstraint extends Constraint {
     return [ Math.sqrt(dx*dx+dy*dy) - L(this.circleId,'r') ];
   }
   toJSON() { return { id:this.id, kind:'arcEndpointOnCircle', ref:this.ref, circleId:this.circleId, centerId:this.centerId }; }
+}
+
+/** Display name of a constraint (horizontal / vertical distances by axis). */
+export function constraintLabel(c) {
+  if (c && c.kind === 'distance' && c.axis) return c.axis === 'x' ? 'Horizontal distance' : 'Vertical distance';
+  return CONSTRAINT_LABELS[c?.kind] || c?.kind;
 }
 
 export const CONSTRAINT_LABELS = {

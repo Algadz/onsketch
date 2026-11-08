@@ -1,5 +1,6 @@
 import { EPS, angleSectorForCursor, dist, lineIntersection } from '../core/math.js';
 import { Line } from '../core/entities.js';
+import { distanceFrame } from '../core/constraints.js';
 
 export class DimensionLabelsMixin {
 
@@ -118,6 +119,12 @@ export class DimensionLabelsMixin {
           c.labelAngle = Math.atan2(dyw, dxw);
           c.labelDist = dw;
         }
+      } else if (c.kind === 'distance' && c.axis) {
+        // horizontal / vertical distance: offset along its own frame
+        const fr = distanceFrame(p1, p2, c.axis);
+        const ox = world.x - fr.mid.x, oy = world.y - fr.mid.y;
+        c.labelOffset   = ox * fr.n.x + oy * fr.n.y;
+        c.labelParallel = ox * fr.t.x + oy * fr.t.y;
       } else {
         c.labelOffset   = wx * nx + wy * ny;
         c.labelParallel = wx * tx + wy * ty;

@@ -3,7 +3,7 @@ import {
   allDimensions, ensureDimensionNames, internalValue, isAngular, renameReferences,
   solveEquations, userValue, validateName,
 } from '../core/equations.js';
-import { CONSTRAINT_LABELS } from '../core/constraints.js';
+import { constraintLabel } from '../core/constraints.js';
 
 const esc = (t) => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const PLAIN = /^\s*-?\d+(?:\.\d+)?\s*$/;          // a plain number (scrubbable)
@@ -349,7 +349,7 @@ export class EquationsMixin {
     html += '<div class="eq-grid">';
     dims.forEach((c, i) => {
       const ang = isAngular(c);
-      const kind = c.isDiameter ? 'Diameter' : (CONSTRAINT_LABELS[c.kind] || c.kind);
+      const kind = c.isDiameter ? 'Diameter' : constraintLabel(c);
       html += `<input class="eq-name" data-k="dim-name" data-i="${i}" value="${esc(c.name || '')}" title="${esc(kind)}" aria-label="Dimension name">
         <input class="eq-expr${c.exprError ? ' bad' : ''}" data-k="dim-expr" data-i="${i}" value="${esc(c.expr ? '=' + c.expr : '')}"
           placeholder="${c.driven ? 'driven (reference)' : 'value or =equation'}" ${c.driven ? 'disabled' : ''} title="${esc(c.exprError || kind)}" aria-label="Dimension equation">

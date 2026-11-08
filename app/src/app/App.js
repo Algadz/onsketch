@@ -1,4 +1,4 @@
-import { CONSTRAINT_LABELS } from '../core/constraints.js';
+import { constraintLabel } from '../core/constraints.js';
 import { Arc, Circle, Line, Point, newId } from '../core/entities.js';
 import { ArcEndpointArcEndpointCoincidentConstraint, ArcEndpointCoincidentConstraint, ArcEndpointFixConstraint, ArcEndpointMidpointConstraint, ArcEndpointOnCircleConstraint, ArcEndpointOnLineConstraint, CoincidentConstraint, FixConstraint, HorizontalConstraint, MidpointConstraint, PointOnCircleConstraint, PointOnLineConstraint, PointRefHorizontalConstraint, PointRefVerticalConstraint, VerticalConstraint } from '../core/constraints.js';
 import { Solver } from '../core/solver.js';
@@ -353,7 +353,7 @@ export class App {
         if (p) p.fixed = false;
       }
       if (!quiet && conflict) {
-        const label = CONSTRAINT_LABELS[c.kind] || c.kind;
+        const label = constraintLabel(c);
         document.getElementById('status-hint').textContent =
           `${label} not added: it conflicts with the existing constraints (the sketch would be over-defined).`;
       }

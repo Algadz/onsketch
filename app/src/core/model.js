@@ -351,7 +351,7 @@ export class Project {
           case 'tangent':       c = new TangentLineCircleConstraint(cj.l, cj.circleId, cj.centerId); break;
           case 'tangentCC':     c = new TangentCircleCircleConstraint(cj.c1, cj.p1, cj.c2, cj.p2, !!cj.internal); break;
           case 'midpoint':      c = new MidpointConstraint(cj.pointId, cj.l); break;
-          case 'distance':      c = new DistanceConstraint(cj.p1, cj.p2, cj.value); break;
+          case 'distance':      c = new DistanceConstraint(cj.p1, cj.p2, cj.value, cj.axis); break;
           case 'pointLineDistance': c = new PointLineDistanceConstraint(cj.pointId, cj.l, cj.value); break;
           case 'radius':        c = new RadiusConstraint(cj.circleId, cj.value); break;
           case 'curveDistance': c = new CurveDistanceConstraint(cj.c1, cj.c2, cj.mode, cj.value); break;

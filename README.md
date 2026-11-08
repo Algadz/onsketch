@@ -97,6 +97,12 @@ touch input. Plan and audit: `docs/mobile-plan.md`.
 
 ## Dimensions, units and equations
 
+- On a slanted line (or two points, or two circle centres), Smart Dimension
+  follows the cursor as in SolidWorks: place it above or below → horizontal
+  distance (X), left or right → vertical distance (Y), beside the slant or off
+  a corner → the true length. Horizontal and vertical lines always get their
+  length. Saved as `distance` with `axis: 'x' | 'y'` (absent = aligned).
+
 - Typed dimension values take units: `4in`, `1.5"`, `2ft`, `35cm`, `25mm`,
   `30deg`, `0.5rad` (stored in mm and degrees). Arithmetic works: `1in + 4mm`.
 - Every dimension is named (D1, D2, …). Start with `=` (or refer to a name) to

@@ -1036,6 +1036,41 @@ await page.evaluate(() => { const a = window._app; a.project.layer('ly1').visibl
   check(during === 50 && after[0] === 50 && after[1] === 50, `dragging the linked line resizes the rectangle live (during ${during}, after ${after.slice(0, 2)})`);
 }
 
+// Smart Dimension on a slanted line: the cursor picks X, Y or the length.
+{
+  const P = (id, x, y) => ({ type: 'point', id, x, y });
+  await page.evaluate((proj) => {
+    const a = window._app; a.project = a.project.constructor.fromJSON(proj); a._afterStateSwap();
+    a.view.zoom = 5; a.view.panX = 0; a.view.panY = 0; a.commit({ diagnostics: 'sync' }); a.setTool('smartdim');
+    for (const w of ['props', 'colors', 'tools', 'layers', 'sketch', 'equations']) a.windows.toggle(w, false);
+  }, { version: 3, activeLayerId: 'la', layers: [{ id: 'la', name: 'A' }], sketches: [{ id: 's', name: 'S',
+    entities: [{ type: 'line', id: 'sl', p1: P('sa', -20, -10), p2: P('sb', 20, 10) }],
+    constraints: [{ id: 'fx', kind: 'fix', pointId: 'sa', x: -20, y: -10 }] }] });
+  const scr = (x, y) => page.evaluate(([x, y]) => window._app.view.worldToScreen({ x, y }), [x, y]).then(p => ({ x: box.x + p.x, y: box.y + p.y }));
+  const axisAt = async (x, y) => { const q = await scr(x, y); await page.mouse.move(q.x, q.y, { steps: 2 });
+    return page.evaluate(() => { const p = window._app.tool.preview; return p ? (p.axis || 'length') + ':' + p.value.toFixed(2) : 'none'; }); };
+  let at = await scr(0, 0); await page.mouse.click(at.x, at.y);           // pick the line
+  const above = await axisAt(0, 20), right = await axisAt(30, 0), beside = await axisAt(-4, 6), corner = await axisAt(30, 20);
+  check(above === 'x:40.00' && right === 'y:20.00' && beside === 'length:44.72' && corner === 'length:44.72',
+    `cursor picks the type: above ${above}, right ${right}, beside ${beside}, off a corner ${corner}`);
+  at = await scr(0, 20); await page.mouse.move(at.x, at.y, { steps: 2 }); await page.mouse.click(at.x, at.y);
+  await page.waitForSelector('.dim-input'); await page.fill('.dim-input', '50'); await page.keyboard.press('Enter');
+  const xr = await page.evaluate(() => { const s = window._app.activeSketch(); const c = s.constraints.find(c => c.kind === 'distance');
+    const l = s.entities[0]; return { axis: c.axis, dx: +(l.p2.x - l.p1.x).toFixed(4), dy: +(l.p2.y - l.p1.y).toFixed(4) }; });
+  check(xr.axis === 'x' && xr.dx === 50 && xr.dy !== 0, `X dimension placed above sets the horizontal distance (${JSON.stringify(xr)})`);
+  at = await scr(10, 3); await page.mouse.click(at.x, at.y);             // pick the line again
+  at = await scr(45, 0); await page.mouse.move(at.x, at.y, { steps: 2 }); await page.mouse.click(at.x, at.y);
+  await page.waitForSelector('.dim-input'); await page.fill('.dim-input', '12'); await page.keyboard.press('Enter');
+  const yr = await page.evaluate(() => { const s = window._app.activeSketch(); const l = s.entities[0];
+    return { axes: s.constraints.filter(c => c.kind === 'distance').map(c => c.axis).join(','), dx: +(l.p2.x - l.p1.x).toFixed(4), dy: +(l.p2.y - l.p1.y).toFixed(4),
+      state: document.getElementById('status-state').textContent, label: document.querySelector('#equations-body') && window._app.constructor.name }; });
+  check(yr.axes === 'x,y' && yr.dx === 50 && yr.dy === 12, `then a Y dimension to the right sets the vertical distance (${JSON.stringify(yr)})`);
+  await page.evaluate(() => { const a = window._app; a.setTool('select'); a.windows.toggle('equations', true); a._refreshEquationsPanel(); });
+  const titles = await page.$$eval('#equations-body [data-k="dim-name"]', els => els.map(e => e.title).join(','));
+  check(titles === 'Horizontal distance,Vertical distance', `Equations window names them (${titles})`);
+  await page.evaluate(() => window._app.windows.toggle('equations', false));
+}
+
 // /app/?example=desk opens the landing page's desk, fully defined, and
 // stays fully defined when the width changes (metre-scale dimensions).
 {

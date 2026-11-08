@@ -1,6 +1,6 @@
 import { EPS, angleArcFromPoints, angleSectorForCursor, dist, lineIntersection, normalizeAngleValue } from '../core/math.js';
 import { Arc, Circle, Line, Point } from '../core/entities.js';
-import { AngleConstraint, CurveDistanceConstraint, DistanceConstraint, PointLineDistanceConstraint, RadiusConstraint } from '../core/constraints.js';
+import { AngleConstraint, CurveDistanceConstraint, DistanceConstraint, PointLineDistanceConstraint, RadiusConstraint, distanceFrame } from '../core/constraints.js';
 import { Tool } from './tool.js';
 
 export class SmartDimensionTool extends Tool {
@@ -189,15 +189,16 @@ export class SmartDimensionTool extends Tool {
     if (!this.preview) return;
     const p = this.preview;
     if (p.kind === 'distance') {
-      const dx = p.p2.x - p.p1.x, dy = p.p2.y - p.p1.y;
-      const len = Math.hypot(dx, dy);
-      if (len < EPS) return;
-      const nx = -dy / len, ny = dx / len;
-      const tx =  dx / len, ty =  dy / len;
-      const mid = { x: (p.p1.x + p.p2.x)/2, y: (p.p1.y + p.p2.y)/2 };
-      const wx = world.x - mid.x, wy = world.y - mid.y;
-      p.offset   = wx * nx + wy * ny;
-      p.parallel = wx * tx + wy * ty;
+      if (Math.hypot(p.p2.x - p.p1.x, p.p2.y - p.p1.y) < EPS) return;
+      // Slanted line / point pair: where the cursor is picks the type, as
+      // in SolidWorks. Above or below it → horizontal (X), left or right of
+      // it → vertical (Y), beside it along its slant → the true length.
+      p.axis = this._distanceAxisFor(p.p1, p.p2, world);
+      const fr = distanceFrame(p.p1, p.p2, p.axis);
+      p.value = fr.len;
+      const wx = world.x - fr.mid.x, wy = world.y - fr.mid.y;
+      p.offset   = wx * fr.n.x + wy * fr.n.y;
+      p.parallel = wx * fr.t.x + wy * fr.t.y;
     } else if (p.kind === 'curveDistance') {
       if (p.mode === 'gap') {
         const geom = this._curveGapEndpoints(p.c1, p.c2);
@@ -256,6 +257,24 @@ export class SmartDimensionTool extends Tool {
     }
   }
 
+  /** X, Y or aligned for a distance between a and b, from the cursor:
+   *  past the pair's extent vertically (but within it horizontally) →
+   *  'x'; past it horizontally (within it vertically) → 'y'; anywhere
+   *  else (beside the slant, or off a corner) → null, the true length.
+   *  A horizontal or vertical pair is always aligned: its length already
+   *  is its X or Y. */
+  _distanceAxisFor(a, b, w) {
+    const dx = Math.abs(b.x - a.x), dy = Math.abs(b.y - a.y);
+    const tiny = 1e-6 * Math.max(dx, dy, 1);
+    if (dx <= tiny || dy <= tiny) return null;
+    const minX = Math.min(a.x, b.x), maxX = Math.max(a.x, b.x);
+    const minY = Math.min(a.y, b.y), maxY = Math.max(a.y, b.y);
+    const inX = w.x > minX && w.x < maxX, inY = w.y > minY && w.y < maxY;
+    if (inX && !inY) return 'x';
+    if (inY && !inX) return 'y';
+    return null;
+  }
+
   _enterTypingPhase() {
     this.phase = 'typing';
     this._showInput();
@@ -293,14 +312,12 @@ export class SmartDimensionTool extends Tool {
     const view = this.app.view;
     const p = this.preview;
     if (p.kind === 'distance') {
-      const dx = p.p2.x - p.p1.x, dy = p.p2.y - p.p1.y;
-      const len = Math.hypot(dx, dy); if (len < EPS) return null;
-      const nx = -dy / len, ny = dx / len;
-      const tx =  dx / len, ty =  dy / len;
+      const fr = distanceFrame(p.p1, p.p2, p.axis);
+      if (fr.len < EPS) return null;
       const par = p.parallel || 0;
       return view.worldToScreen({
-        x: (p.p1.x + p.p2.x)/2 + nx * p.offset + tx * par,
-        y: (p.p1.y + p.p2.y)/2 + ny * p.offset + ty * par
+        x: fr.mid.x + fr.n.x * p.offset + fr.t.x * par,
+        y: fr.mid.y + fr.n.y * p.offset + fr.t.y * par
       });
     }
     if (p.kind === 'curveDistance') {
@@ -375,7 +392,7 @@ export class SmartDimensionTool extends Tool {
     const p = this.preview;
     let made = null;
     if (p.kind === 'distance') {
-      made = new DistanceConstraint(p.p1.id, p.p2.id, value);
+      made = new DistanceConstraint(p.p1.id, p.p2.id, value, p.axis);
       made.labelOffset   = p.offset;
       made.labelParallel = p.parallel || 0;
     } else if (p.kind === 'curveDistance') {

@@ -30,7 +30,7 @@ export class DimLinksMixin {
       let v = null;
       if (c.kind === 'distance') {
         const a = byId.get(c.p1), b = byId.get(c.p2);
-        if (a && b) v = Math.hypot(b.x - a.x, b.y - a.y);
+        if (a && b) v = c.axis === 'x' ? Math.abs(b.x - a.x) : c.axis === 'y' ? Math.abs(b.y - a.y) : Math.hypot(b.x - a.x, b.y - a.y);
       } else if (c.kind === 'radius') {
         const e = byId.get(c.circleId);
         if (e && Number.isFinite(e.r)) v = e.r;
@@ -53,7 +53,7 @@ export class DimLinksMixin {
     let c = null;
     if (e instanceof Line) {
       const ends = new Set([e.p1.id, e.p2.id]);
-      c = sketch.constraints.find(k => k.kind === 'distance' && ends.has(k.p1) && ends.has(k.p2) && k.p1 !== k.p2);
+      c = sketch.constraints.find(k => k.kind === 'distance' && !k.axis && ends.has(k.p1) && ends.has(k.p2) && k.p1 !== k.p2);
       if (!c) {
         c = new DistanceConstraint(e.p1.id, e.p2.id, Math.hypot(e.p2.x - e.p1.x, e.p2.y - e.p1.y));
         c.driven = true;
