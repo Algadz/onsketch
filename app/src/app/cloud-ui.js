@@ -268,6 +268,7 @@ export class CloudMixin {
           <input type="email" id="account-email" name="email" autocomplete="email" placeholder="you@example.com" />
           <button type="submit" class="btn primary">Email me a sign-in link</button>`}
         <p class="account-msg" role="status"></p>
+        <p class="muted">See the <a href="/privacy/" target="_blank" rel="noopener">privacy policy</a>.</p>
       </form>
       <div class="footer"><button type="button" class="btn" data-a="close">Cancel</button></div>`;
     const form = box.querySelector('form');
