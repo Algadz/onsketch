@@ -40,6 +40,12 @@ cached modules after a deploy. `npm test` fails if the stamp is out of date.
   the active layer's shapes (a region they close, or the background anywhere
   else); other layers are ignored. Its cursor is a paint drop in the fill
   colour, pointing at the click spot.
+- **Canvas cursors** (`app/src/ui/cursors.js`) share one style: an arrow for
+  Select (its badge shows what a click picks: line, circle, arc, point,
+  dimension, or the running Mirror/Offset), a crosshair carrying the tool's
+  icon while drawing or dimensioning (a red "no" badge when the click would be
+  refused), the paint drop for Fill, hands for panning (Alt / middle button)
+  and dragging, and not-allowed while the active layer is hidden.
 
 ## Dimensions, units and equations
 
