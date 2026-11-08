@@ -941,3 +941,12 @@
   .palette .sw.on { outline: 2px solid var(--accent); outline-offset: 1px; }
 
   .opt-warn { color: var(--overc); font-weight: 600; }
+
+  /* ---------- UI cursors ----------
+     Canvas cursors are set from JS (ui/cursors.js). In the chrome: pointer
+     on anything clickable, grab on window title bars, text where you type,
+     not-allowed on disabled controls. */
+  input[type=checkbox], input[type=range], input[type=color], select, label.check-row { cursor: pointer; }
+  input:disabled, select:disabled, button:disabled { cursor: not-allowed; }
+  .lyr-row .name[contenteditable="true"] { cursor: text; }
+  .fwin-head .badge { cursor: inherit; }

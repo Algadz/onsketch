@@ -1,5 +1,5 @@
 import { toolDef } from '../ui/tool-defs.js';
-import { fillCursor } from '../ui/cursors.js';
+import { SNAP_LABELS, arrowCursor, crossCursor, fillCursor } from '../ui/cursors.js';
 import { Arc, Circle, Line, Point } from '../core/entities.js';
 import { SelectTool } from '../tools/select.js';
 import { ArcTool, CenterLineTool, CenterRectangleTool, CircleTool, HexagonTool, LineTool, PointTool, RectangleTool, ThreePointCircleTool } from '../tools/draw.js';
@@ -15,6 +15,7 @@ export class RenderEventsMixin {
     requestAnimationFrame(tick);
   }
   _render() {
+    this._updateCanvasCursor();
     this.renderer.drawGrid(this.gridOn, this.project.background);
     this.renderer.drawEntities(this.project, this.fillDisplay());
 
@@ -59,13 +60,38 @@ export class RenderEventsMixin {
     }
   }
 
-  /** Canvas cursor for the active tool. The Fill tool shows a paint drop
-   *  in the current fill colour (with × in erase mode). */
-  _updateCanvasCursor() {
+  /** Canvas cursor for the current state (see ui/cursors.js):
+   *  - panning, or dragging geometry / a dimension label: grabbing hand;
+   *    Alt held over the canvas (Alt-drag pans): open hand;
+   *  - Select: arrow; its badge shows what a click would pick (line,
+   *    circle, dimension…) or the running operation (Mirror, Offset);
+   *  - drawing tools and Smart Dimension: crosshair with the tool's icon,
+   *    a red "no" badge when the next click would be refused;
+   *  - Fill: paint drop in the fill colour (eraser badge in erase mode);
+   *  - any editing tool while the active layer is hidden: not-allowed. */
+  _canvasCursor() {
+    if (this._panning) return 'grabbing';
+    const t = this.tool;
     const name = this.toolName;
-    this.canvas.style.cursor = name === 'select' ? 'default'
-      : name === 'fill' ? fillCursor(this.pen?.fillColor, this.fillErase)
-      : 'crosshair';
+    if (name === 'select') {
+      if (t.dragging || t.dimAction?.moved) return 'grabbing';
+      if (this._altDown && !t.box) return 'grab';
+      const op = this.operationName;
+      if (op === 'offset' && this.offsetPhase === 'placing' && !t.box) return crossCursor('offset');
+      if (op === 'mirror' || op === 'offset') return arrowCursor(op);
+      if (t.box) return arrowCursor(null);
+      if (t.hoverDim) return arrowCursor('smartdim');
+      const kind = t.hoverHit?.constructor?.kind;
+      return arrowCursor(kind || null);
+    }
+    if (this._altDown) return 'grab';
+    if (!this.project.activeLayer()?.visible) return 'not-allowed';
+    if (name === 'fill') return fillCursor(this.pen?.fillColor, this.fillErase);
+    return crossCursor(name, !!t.invalidEnd);
+  }
+  _updateCanvasCursor() {
+    const c = this._canvasCursor();
+    if (c !== this._cursorValue) { this.canvas.style.cursor = c; this._cursorValue = c; }
   }
 
   /* ---- Tool selection ---- */
@@ -130,8 +156,15 @@ export class RenderEventsMixin {
       c.setPointerCapture(ev.pointerId);
       if (ev.button === 1 || (ev.button === 0 && ev.altKey)) {
         panning = true;
+        this._panning = true;
         panStart = { x: ev.clientX, y: ev.clientY, panX: this.view.panX, panY: this.view.panY };
-        c.style.cursor = 'grabbing';
+        this._updateCanvasCursor();
+        return;
+      }
+      // Editing tools do nothing on a hidden layer (the cursor says so).
+      if (this.toolName !== 'select' && !this.project.activeLayer()?.visible) {
+        document.getElementById('status-hint').textContent =
+          `Layer "${this.project.activeLayer()?.name}" is hidden: show it in the Layers window to edit it.`;
         return;
       }
       const snap = this._snapForCurrentTool(world);
@@ -142,6 +175,7 @@ export class RenderEventsMixin {
     c.addEventListener('pointermove', (ev) => {
       const { screen, world } = getWorld(ev);
       this.lastWorldCursor = world;
+      if (this._altDown !== ev.altKey) { this._altDown = ev.altKey; this.requestRender(); }
       document.getElementById('status-coords').textContent = `x: ${world.x.toFixed(3)}  y: ${world.y.toFixed(3)}`;
       if (panning) {
         this.view.panX = panStart.panX + (ev.clientX - panStart.x);
@@ -159,7 +193,7 @@ export class RenderEventsMixin {
       this.tool.onPointerMove(world, snap, ev);
       const hint = document.getElementById('cursor-hint');
       if (snap && !snap.rejected) {
-        hint.textContent = snap.kind;
+        hint.textContent = SNAP_LABELS[snap.kind] || snap.kind;
         hint.style.left = screen.x + 'px';
         hint.style.top  = screen.y + 'px';
         hint.style.display = 'block';
@@ -170,7 +204,7 @@ export class RenderEventsMixin {
     c.addEventListener('pointerup', (ev) => {
       if (ev.button === 2) return;
       const { world } = getWorld(ev);
-      if (panning) { panning = false; this._updateCanvasCursor(); return; }
+      if (panning) { panning = false; this._panning = false; this._updateCanvasCursor(); return; }
       const snap = this._snapForCurrentTool(world);
       this.tool.onPointerUp(world, snap, ev);
     });
@@ -185,10 +219,19 @@ export class RenderEventsMixin {
       document.getElementById('status-zoom').textContent = 'Zoom: ' + Math.round(this.view.zoom*25) + '%';
       this.requestRender();
     }, { passive: false });
+
+    c.addEventListener('pointerleave', () => {
+      if (this.tool.hoverHit || this.tool.hoverDim) { this.tool.hoverHit = null; this.tool.hoverDim = null; this.requestRender(); }
+    });
   }
 
   _setupKeyboard() {
+    // Alt-drag pans: show the open hand while Alt is held.
+    const setAlt = (on) => { if (this._altDown !== on) { this._altDown = on; this.requestRender(); } };
+    window.addEventListener('keyup', (ev) => { if (ev.key === 'Alt') setAlt(false); });
+    window.addEventListener('blur', () => setAlt(false));
     window.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Alt') { setAlt(true); if (!ev.target.matches('input,textarea,select')) ev.preventDefault(); }
       if (ev.target.matches('input,textarea,[contenteditable="true"]')) return;
       if (ev.key === 'Escape' && this.contextMenuEl) {
         ev.preventDefault();

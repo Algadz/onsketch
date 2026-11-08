@@ -166,7 +166,10 @@ export class SelectTool extends Tool {
     } else {
       // Hover is edit affordance, so only the active sketch can light up.
       let changed = false;
-      const hit = this.app.hitTestActiveSketch(world);
+      const r = this.app.canvas.getBoundingClientRect();
+      const dim = ev ? this.app.hitDimAtScreen(ev.clientX - r.left, ev.clientY - r.top) : null;
+      const hit = dim ? null : this.app.hitTestActiveSketch(world);
+      if (this.hoverDim !== dim || this.hoverHit !== hit) { this.hoverDim = dim; this.hoverHit = hit; changed = true; }
       for (const s of this.app.project.visibleSketches()) {
         for (const e of s.entities) {
           const hov = e === hit;
@@ -181,6 +184,7 @@ export class SelectTool extends Tool {
     }
   }
   onPointerUp(world, snap, ev) {
+    this.app.requestRender();                 // refresh the cursor (drag ended)
     if (this.dimAction) {
       if (this.dimAction.moved) {
         // The label position was mutated in-place during pointermove; just
