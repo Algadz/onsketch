@@ -115,6 +115,7 @@ export class CompactMixin {
       ['grid', 'Grid', this.gridOn], ['snap', 'Snap', this.snapOn], ['dimensions', 'Dimensions', this.showDimensions],
       ['relations', 'Relations', this.showRelations], ['zoom-fit', 'Zoom to fit'], ['theme', 'Dark theme', this.themeName === 'dark'],
       '-',
+      ...(this.cloudEnabled ? [['account', this.cloudUser ? 'My projects' : 'Sign in']] : []),
       ['stylus', 'Only the pencil draws', !!this.stylusMode],
       ['report', 'Report a problem'],
     ].map(x => x === '-' ? '<div class="more-sep"></div>'

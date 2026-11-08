@@ -67,6 +67,7 @@ export class ChromeMixin {
       case 'zoom-reset':   this.view.zoom = 4; this.view.panX = 0; this.view.panY = 0; this.requestRender(); break;
       case 'theme':        this.setTheme(this.themeName === 'dark' ? 'light' : 'dark'); break;
       case 'reset-layout': this.windows.reset(); break;
+      case 'account':      this.openAccount(); break;
     }
   }
 

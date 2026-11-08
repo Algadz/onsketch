@@ -9,7 +9,8 @@
     "test:e2e": "node tests/smoke.e2e.mjs",
     "lint": "eslint app/src tests",
     "stamp": "node scripts/stamp.mjs",
-    "test:mobile": "node tests/mobile.e2e.mjs"
+    "test:mobile": "node tests/mobile.e2e.mjs",
+    "test:cloud": "node tests/cloud.e2e.mjs"
   },
   "devDependencies": {
     "eslint": "^9.39.0",

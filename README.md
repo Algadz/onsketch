@@ -15,6 +15,7 @@ npm run serve        # http://localhost:8080/app/
 npm test             # unit tests (node:test, no browser)
 npm run test:e2e     # drives the editor in headless Chromium (needs playwright)
 npm run test:mobile  # phone / tablet layout and touch input on emulated devices
+npm run test:cloud   # account and cloud projects against a fake Supabase
 npm run lint
 npm run stamp        # after changing anything in app/: refresh cache-busting hashes
 node scripts/landing-shots.mjs # regenerate landing page images (hero + examples carousel)
@@ -235,9 +236,21 @@ Layers only affect display and picking. Constraints can link entities on
 different layers, and hidden layers are still solved. Project files are JSON
 (`version: 3`); older files load onto a single default layer.
 
-## Accounts and cloud projects (in progress)
+## Accounts and cloud projects
 
-Optional sign-in and cloud storage on Supabase; plan and setup steps in
-`docs/cloud-plan.md`. The database schema is `supabase/migrations/`; the
-data layer is `app/src/cloud/`. With `app/src/cloud/config.js` empty (the
-default) the editor stays browser-only.
+Optional sign-in (Google, or an emailed link / code) on Supabase. The
+**Sign in** button at the right of the menu bar (⋯ menu on phones) opens
+the account dialog: *Save it to my account* links the open drawing to a
+cloud project; from then on every change is pushed a few seconds later
+(the button shows Saving… / Saved / Not synced). *My projects* lists,
+opens and deletes projects. Saves carry the revision they started from,
+so a save from a stale tab or device asks which version to keep instead
+of overwriting. New project, Import and examples make a browser-only
+drawing; signing out keeps the drawing in the browser.
+
+supabase-js is loaded from jsDelivr only once someone signs in. Schema and
+policies: `supabase/migrations/`; data layer: `app/src/cloud/`; UI:
+`app/src/app/cloud-ui.js`; plan and setup: `docs/cloud-plan.md`. Emptying
+`app/src/cloud/config.js` turns all of it off. `npm run test:cloud` drives
+it against a fake client (`-- --live` adds signed-out checks on the real
+project).

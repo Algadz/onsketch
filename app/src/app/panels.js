@@ -12,6 +12,7 @@ export class PanelsMixin {
   _setupSidebar() {
     document.getElementById('project-name').addEventListener('input', (e) => {
       this.project.name = e.target.value;
+      this.scheduleAutosave();
     });
   }
 

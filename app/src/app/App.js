@@ -27,6 +27,7 @@ import { InkSelectMixin } from './ink-select.js';
 import { TouchMixin } from './touch.js';
 import { TouchUIMixin } from './touch-ui.js';
 import { CompactMixin } from './compact.js';
+import { CloudMixin } from './cloud-ui.js';
 
 /* =============== 10. APP ====================================== */
 export class App {
@@ -84,6 +85,7 @@ export class App {
     this._setupResize();
     const restored = this.loadLocalIfAny();
     this._setupAutosave();
+    this._setupCloud();
     this.refreshUI();
     this.solveAndRender();
     if (restored) { this._primeFillRegions(); this.zoomFit(); }
@@ -650,7 +652,7 @@ export class App {
 }
 
 /* Methods are grouped into mixins by concern; see src/app/*.js. */
-for (const Mixin of [ChromeMixin, EquationsMixin, LayersPanelMixin, FillsMixin, DimensionLabelsMixin, SelectionMixin, DragMixin, SolveMixin, OperationsMixin, ConstraintActionsMixin, RenderEventsMixin, PanelsMixin, PersistenceMixin, SketchWindowMixin, ReportMixin, DimLinksMixin, InkSelectMixin, TouchMixin, TouchUIMixin, CompactMixin]) {
+for (const Mixin of [ChromeMixin, EquationsMixin, LayersPanelMixin, FillsMixin, DimensionLabelsMixin, SelectionMixin, DragMixin, SolveMixin, OperationsMixin, ConstraintActionsMixin, RenderEventsMixin, PanelsMixin, PersistenceMixin, SketchWindowMixin, ReportMixin, DimLinksMixin, InkSelectMixin, TouchMixin, TouchUIMixin, CompactMixin, CloudMixin]) {
   for (const key of Object.getOwnPropertyNames(Mixin.prototype)) {
     if (key === 'constructor') continue;
     Object.defineProperty(App.prototype, key, Object.getOwnPropertyDescriptor(Mixin.prototype, key));

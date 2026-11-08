@@ -26,6 +26,7 @@ export const TOOL_ICONS = {
 export const ACTION_ICONS = {
   new: svg('<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v5h4"/><path d="M9 14h6M12 11v6"/>'),
   import: svg('<path d="M3 7h6l2 2h10v10H3z"/><path d="M12 16v-5M9.5 13.5L12 16l2.5-2.5"/>'),
+  account: svg('<circle cx="12" cy="8" r="4"/><path d="M4 21c1-4.5 4.4-6.5 8-6.5s7 2 8 6.5"/>'),
   save: svg('<path d="M5 4h12l2 2v14H5z"/><path d="M8 4v6h8V4"/><path d="M8 20v-6h8v6"/>'),
   export: svg('<path d="M12 15V4"/><path d="M8 8l4-4 4 4"/><path d="M5 14v5h14v-5"/>'),
   undo: svg('<path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-15-6.7L3 13"/>'),

@@ -17,7 +17,9 @@ without breaking the editor's offline, no-build, GitHub Pages setup.
 
 ## Data model
 
-`public.projects` (see `supabase/migrations/0001_projects.sql`):
+`public.projects` (see `supabase/migrations/0001_projects.sql`, which
+upgrades the table left by the earlier OnSketch: it adds `revision`, the
+trigger and the policies, and keeps `share_code` and existing rows):
 
 | column | |
 |---|---|
@@ -43,7 +45,7 @@ Policies: owners read / insert / update / delete their rows; anyone reads
   visibility / delete. `ConflictError` when a save is stale.
 - `tests/unit/cloud.test.js`: the data layer against a fake client.
 
-### Phase 2: account UI (needs the Supabase project details)
+### Phase 2: account UI ✅
 - Menu bar: **Sign in** button (account chip with avatar / email once signed
   in; menu: My projects, Sign out). Phone layout: same entries in the ⋯ menu.
 - Sign-in dialog: email → "check your inbox" (magic link, plus the 6-digit
@@ -51,9 +53,10 @@ Policies: owners read / insert / update / delete their rows; anyone reads
   buttons for the providers that are enabled.
 - Return from the email / OAuth redirect lands back in `/app/` signed in
   (PKCE, `detectSessionInUrl`).
-- e2e: the sign-in dialog and account menu with a stubbed client.
+- e2e: `npm run test:cloud` (in-page fake of supabase-js; `-- --live` also
+  checks the real project signed out).
 
-### Phase 3: cloud projects
+### Phase 3: cloud projects ✅ (except thumbnails; first sign-in offers, never forces, the upload)
 - **My projects** window: list (name, last changed), Open, Rename, Delete,
   New. The open project's cloud id and revision are kept with the local copy
   (`localStorage`), so a reload continues the same cloud project.

@@ -10,6 +10,7 @@ export class PersistenceMixin {
      and by the Save button; read back when the editor opens. */
   saveLocal() {
     if (!this._writeLocal()) return;
+    if (this.cloudLink) this._cloudPush();
     const pill = document.getElementById('status-solve');
     const old = pill.textContent;
     pill.textContent = 'saved to browser';
@@ -24,6 +25,7 @@ export class PersistenceMixin {
   scheduleAutosave() {
     clearTimeout(this._autosaveTimer);
     this._autosaveTimer = setTimeout(() => this._writeLocal(), 400);
+    if (this._cloudChanged) this._cloudChanged();
   }
   /** Restores the last saved project. Bad or missing data leaves the new
    *  empty project in place. */
@@ -54,6 +56,7 @@ export class PersistenceMixin {
       const res = await fetch(`examples/${slug}.json`, { cache: 'no-cache' });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const project = Project.fromJSON(await res.json());
+      if (this._cloudUnlink) this._cloudUnlink();
       this.project = project;
       this.selectionOrder = [];
       if (this.tool && this.tool.activate) this.tool.activate();
@@ -70,12 +73,13 @@ export class PersistenceMixin {
   }
 
   _setupAutosave() {
-    const flush = () => this._writeLocal();
+    const flush = () => { this._writeLocal(); if (this.cloudLink?.dirty) this._cloudPush(); };
     window.addEventListener('pagehide', flush);
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flush(); });
   }
   newProject() {
     if (!confirm('Discard current project and start a new one?')) return;
+    if (this._cloudUnlink) this._cloudUnlink();
     this.project = new Project(); this.project.addSketch('Sketch 1');
     this.undoStack.length = 0; this.redoStack.length = 0;
     this.selectionOrder = [];
@@ -87,7 +91,9 @@ export class PersistenceMixin {
     this._modal('Import JSON', '', true).then(text => {
       if (!text) return;
       try {
-        this.project = Project.fromJSON(JSON.parse(text));
+        const project = Project.fromJSON(JSON.parse(text));
+        if (this._cloudUnlink) this._cloudUnlink();
+        this.project = project;
         this.selectionOrder = [];
         this.commit({ diagnostics:'sync' });
         this.refreshUI();

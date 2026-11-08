@@ -49,6 +49,12 @@ export class Cloud {
     const { error } = await this.client.auth.signInWithOtp({ email, options: { emailRedirectTo: redirectTo } });
     if (error) throw error;
   }
+  /** Signs in with the 6-digit code from the sign-in email. */
+  async verifyEmailCode(email, code) {
+    const { data, error } = await this.client.auth.verifyOtp({ email, token: String(code).trim(), type: 'email' });
+    if (error) throw error;
+    return data.user;
+  }
   /** Redirects to Google / GitHub / … and back to `redirectTo`. */
   async signInWithProvider(provider, redirectTo = location.href) {
     const { error } = await this.client.auth.signInWithOAuth({ provider, options: { redirectTo } });
