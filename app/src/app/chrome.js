@@ -50,7 +50,7 @@ export class ChromeMixin {
   _runAction(a, b) {
     switch (a) {
       case 'new':          this.newProject(); break;
-      case 'save':         this.saveLocal(); break;
+      case 'save':         this.save(); break;
       case 'export':       this.exportJSON(); break;
       case 'import':       this.importJSON(); break;
       case 'undo':         this.undo(); break;

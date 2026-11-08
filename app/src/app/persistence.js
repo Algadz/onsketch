@@ -8,9 +8,16 @@ export class PersistenceMixin {
      The project is kept in the browser under STORE_KEY: written shortly
      after every change (autosave), when the page is hidden or closed,
      and by the Save button; read back when the editor opens. */
+  /** Save (button, ⋯ menu, Ctrl+S). With accounts enabled it saves to the
+   *  account (signing in first if needed); the browser copy is kept
+   *  silently either way. Without accounts it is the browser save. */
+  save() {
+    this._writeLocal();
+    if (this.cloudEnabled) { this.cloudSave(); return; }
+    this.saveLocal();
+  }
   saveLocal() {
     if (!this._writeLocal()) return;
-    if (this.cloudLink) this._cloudPush();
     const pill = document.getElementById('status-solve');
     const old = pill.textContent;
     pill.textContent = 'saved to browser';

@@ -160,8 +160,19 @@ await page.keyboard.press('r');
 await page.mouse.click(cx - 100, cy - 60); await page.mouse.click(cx + 80, cy + 50);
 await page.keyboard.press('Escape');
 await page.fill('#project-name', 'Shelf');
-await page.click('#account-btn');
+
+// Signed out: no browser-save message, but a reload keeps the drawing.
+await page.waitForTimeout(600);                                   // autosave
+await page.reload();
+await page.waitForFunction(() => window._app && window._app.activeSketch().entities.length > 0);
+check(await app(() => window._app.project.name === 'Shelf'), 'signed out, a reload keeps the drawing');
+check(!(await page.getAttribute('#menubar [data-action="save"]', 'title')).includes('browser'), 'the Save button no longer talks about the browser');
+
+// Save while signed out asks to sign in (Ctrl+S too), then goes on with the save.
+await page.keyboard.press('Control+s');
 await page.waitForSelector('#account-modal.show input[type=email]');
+check((await page.textContent('#account-modal h3')) === 'Sign in to save your sketch', 'Save (Ctrl+S) signed out asks to sign in');
+check(!(await app(() => document.getElementById('status-solve').textContent)).includes('browser'), 'no "saved to browser" message');
 check(await page.isVisible('#account-modal [data-a="google"]'), 'sign-in dialog offers Google');
 await page.fill('#account-modal input[type=email]', 'me@example.com');
 await page.click('#account-modal button[type=submit]');
@@ -173,12 +184,9 @@ await page.waitForFunction(() => document.querySelector('#account-modal .account
 check(true, 'a wrong code shows an error');
 await page.fill('#account-modal input[name=code]', '123456');
 await page.click('#account-modal button[type=submit]');
-await page.waitForSelector('#account-modal [data-a="upload"]');
-check((await page.textContent('#account-modal')).includes('me@example.com'), 'signed in: projects dialog shows the email');
-check(await page.locator('#account-btn .avatar').count() === 1, 'account button shows an avatar');
+check(await page.locator('#account-btn .avatar').count() === 1 || await page.waitForSelector('#account-btn .avatar').then(() => true), 'account button shows an avatar');
 
-// Save the drawing to the account: title + description required.
-await page.click('#account-modal [data-a="upload"]');
+// Right after signing in, the save goes on: title + description required.
 await page.waitForSelector('#details-modal');
 check(await page.isVisible('#details-modal .details-preview canvas'), 'save dialog shows a preview');
 check((await page.inputValue('#details-name')) === 'Shelf', 'title pre-filled from the project name');
@@ -202,6 +210,9 @@ await page.waitForFunction(() => window._app.cloudLink && !window._app.cloudLink
 rows = await rowsOnServer();
 check(rows[0].data.sketches[0].entities.some(e => e.type === 'circle'), `change pushed automatically (revision ${rows[0].revision})`);
 check((await page.textContent('#account-btn')).includes('Saved'), 'account button says Saved');
+await page.keyboard.press('Control+s');
+await page.waitForFunction(() => document.getElementById('status-solve').textContent === 'Saved');
+check(!(await page.isVisible('#account-modal.show')) && !(await page.isVisible('#details-modal')), 'Save signed in saves at once, no dialog');
 
 // Another device saves first → conflict; keep mine.
 await app(() => { const r = JSON.parse(localStorage.getItem('fake-sb:rows')); r[0].revision += 5; r[0].name = 'Shelf (laptop)'; localStorage.setItem('fake-sb:rows', JSON.stringify(r)); });

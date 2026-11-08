@@ -245,6 +245,7 @@ export class RenderEventsMixin {
         return;
       }
       const k = ev.key.toLowerCase();
+      if ((ev.ctrlKey || ev.metaKey) && k === 's') { ev.preventDefault(); this.save(); return; }
       if ((ev.ctrlKey || ev.metaKey) && k === 'z') { ev.preventDefault(); this.undo(); return; }
       if ((ev.ctrlKey || ev.metaKey) && (k === 'y' || (ev.shiftKey && k === 'z'))) { ev.preventDefault(); this.redo(); return; }
       if (k === 's') this.setTool('select');

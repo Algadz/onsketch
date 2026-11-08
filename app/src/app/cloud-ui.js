@@ -23,6 +23,7 @@ const LINK_KEY = 'onsketch:cloud';
 const PUSH_DELAY = 2500;
 const THUMB_EVERY = 30000;        // at most one thumbnail upload per 30 s
 const PAGE_PARAMS = ['project', 'view', 'new', 'signin'];
+const PENDING_SAVE = 'onsketch:save-after-sign-in';   // sessionStorage: survives the sign-in redirect
 const AUTH_PARAMS = ['code', 'error', 'error_code', 'error_description'];
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -132,6 +133,7 @@ export class CloudMixin {
       this.cloud.ensureProfile().catch(() => {});              // the name shown in the library
       if (this._accountOpen) this._renderAccount();
       this._cloudSync();
+      this._resumePendingSave();
     }
     if (!user) this.cloudPlan = null;
   }
@@ -281,6 +283,7 @@ export class CloudMixin {
     this._renderAccount();
   }
   closeAccount() {
+    if (this._accountOpen && !this.cloudUser) { try { sessionStorage.removeItem(PENDING_SAVE); } catch { /* storage unavailable */ } }
     this._accountOpen = false;
     this._conflictRow = null;
     document.getElementById('account-modal')?.classList.remove('show');
@@ -301,9 +304,12 @@ export class CloudMixin {
 
   _renderSignIn(box) {
     const step = this._signInStep;
-    box.innerHTML = `<h3>Sign in to OnSketch</h3>
+    const forSave = this._pendingSave();
+    box.innerHTML = `<h3>${forSave ? 'Sign in to save your sketch' : 'Sign in to OnSketch'}</h3>
       <form class="body" novalidate>
-        <p class="muted">Keep your projects in your account and open them on any device. Without an account, OnSketch keeps working in this browser.</p>
+        <p class="muted">${forSave
+          ? 'Saving keeps your sketch in your account, so you can open it on any device. It\'s free.'
+          : 'Keep your projects in your account and open them on any device.'}</p>
         ${step ? `
           <p>We sent a link to <b>${esc(step.email)}</b>. Open it on this device, or type the code from the email:</p>
           <input type="text" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="Code from the email" />
@@ -394,6 +400,41 @@ export class CloudMixin {
     } else {
       cur.innerHTML = `<span class="muted">This drawing is only in this browser. You've used your ${plan.limit} free sketches: delete one on My sketches to save it, or go Premium.</span>`;
     }
+  }
+
+  /* ---- Save (button, ⋯ menu, Ctrl+S) ---- */
+  /** Signed in: saves now (first time: title + description). Signed out:
+   *  asks to sign in, then continues with the save. */
+  async cloudSave() {
+    const cloud = await this._ensureCloud();
+    if (!cloud) { this._hint("Couldn't reach the server to save. Check your connection and try again."); return; }
+    if (!this.cloudUser) {
+      try { sessionStorage.setItem(PENDING_SAVE, '1'); } catch { /* storage unavailable */ }
+      this.openAccount();
+      return;
+    }
+    if (this.cloudLink) {
+      if (this.cloudLink.dirty) await this._cloudPush();
+      if (this._cloudStatus === 'saved') this._flashStatus('Saved');
+      return;
+    }
+    await this.saveToAccount();
+  }
+  _pendingSave() { try { return sessionStorage.getItem(PENDING_SAVE) === '1'; } catch { return false; } }
+  /** After signing in from Save (also after a Google / email-link redirect). */
+  _resumePendingSave() {
+    if (!this._pendingSave()) return;
+    try { sessionStorage.removeItem(PENDING_SAVE); } catch { /* storage unavailable */ }
+    if (this.cloudLink) return;
+    this.closeAccount();
+    this.saveToAccount();
+  }
+  _flashStatus(text) {
+    const pill = document.getElementById('status-solve');
+    if (!pill) return;
+    const old = pill.textContent;
+    pill.textContent = text;
+    setTimeout(() => { if (pill.textContent === text) pill.textContent = old; }, 1500);
   }
 
   /** First save of the open drawing: asks for title + description. */
