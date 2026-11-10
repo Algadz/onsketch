@@ -32,6 +32,7 @@ export const THEMES = {
     dimGreyText: '#7a828c',
     dimSelectedText: '#bf5b00',
     textHalo: 'rgba(255,255,255,0.85)',
+    paper: '#fbfcfd',          // text boxes in the "paper" colour: the canvas
   },
   dark: {
     name: 'dark',
@@ -56,6 +57,7 @@ export const THEMES = {
     dimGreyText: '#8a94a1',
     dimSelectedText: '#ffb066',
     textHalo: 'rgba(21,25,31,0.85)',
+    paper: '#1b2027',
   },
 };
 

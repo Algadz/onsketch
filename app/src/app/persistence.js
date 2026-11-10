@@ -136,6 +136,9 @@ export class PersistenceMixin {
    *  exist (e.g. LineTool.startPt, SmartDim.picks). Re-activating the
    *  tool resets that state without changing tool selection. */
   _afterStateSwap() {
+    this.cancelTextEdit();
+    this._inkDragItems = null;
+    this.linkPick = null;
     if (this.tool && this.tool.activate) this.tool.activate();
     this.lastSnap = null;
     this.lastDragSnaps = [];

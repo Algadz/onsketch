@@ -1,6 +1,7 @@
 import { Arc, Circle, Line, Point } from '../core/entities.js';
 import { Renderer } from './renderer.js';
 import { View } from './view.js';
+import { inkBounds } from '../core/strokes.js';
 
 /* =============== PROJECT THUMBNAIL ==============================
    Draws the whole project (fills, shapes, ink) on an off-screen canvas,
@@ -25,8 +26,8 @@ export function projectBounds(project) {
     }
     for (const st of s.strokes || []) {
       if (project.layer(st.layerId)?.visible === false) continue;
-      const h = (st.width || 0) / 2;
-      for (const p of st.points || []) { acc(p.x - h, p.y - h); acc(p.x + h, p.y + h); }
+      const b = inkBounds(st);
+      acc(b.minX, b.minY); acc(b.maxX, b.maxY);
     }
   }
   return minX === Infinity ? null : { minX, minY, maxX, maxY };
@@ -53,6 +54,9 @@ export function renderThumbnail(project, fillDisplay = new Map(), { width = THUM
   for (const s of project.sketches) for (const e of s.entities) for (const x of [e, ...e.children()]) {
     if (x.hover || x.selected) { flags.push([x, x.hover, x.selected]); x.hover = false; x.selected = false; }
   }
+  for (const s of project.sketches) for (const st of s.strokes || []) {
+    if (st.selected) { flags.push([st, false, true]); st.selected = false; }
+  }
   try {
     r.drawGrid(false, project.background);            // clears, paints the canvas colour if any
     r.ctx.globalCompositeOperation = 'destination-over';
@@ -61,7 +65,7 @@ export function renderThumbnail(project, fillDisplay = new Map(), { width = THUM
     r.ctx.globalCompositeOperation = 'source-over';
     r.drawEntities(project, fillDisplay);
   } finally {
-    for (const [x, h, s] of flags) { x.hover = h; x.selected = s; }
+    for (const [x, h, s] of flags) { if (h) x.hover = h; x.selected = s; }
   }
   return canvas;
 }

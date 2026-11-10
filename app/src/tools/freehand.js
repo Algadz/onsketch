@@ -1,5 +1,5 @@
 import { newId } from '../core/entities.js';
-import { simplifyPoints, strokeHit } from '../core/strokes.js';
+import { inkHit, simplifyPoints } from '../core/strokes.js';
 import { Tool } from './tool.js';
 
 /* =============== SKETCH TOOLS (freehand) =======================
@@ -86,7 +86,7 @@ export class EraserTool extends Tool {
     const layerId = this.app.project.activeLayerId;
     const r = this._radius();
     const before = sketch.strokes.length;
-    sketch.strokes = sketch.strokes.filter(s => s.layerId !== layerId || !points.some(p => strokeHit(s, p, r)));
+    sketch.strokes = sketch.strokes.filter(s => s.layerId !== layerId || !points.some(p => inkHit(s, p, r)));
     this.removed += before - sketch.strokes.length;
   }
   onPointerDown(world, _snap, ev) {

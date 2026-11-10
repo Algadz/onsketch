@@ -10,6 +10,8 @@ export class SelectTool extends Tool {
   }
   hint() { return 'Click to select. Ctrl-click to add/remove. Drag to move. Click a selected driving dimension to edit.'; }
   onPointerDown(world, snap, ev) {
+    // "Link to…" is waiting for its target: this click picks it.
+    if (this.app.linkPick) { this.app.handleLinkPick(world); return; }
     // Dimension labels first — they sit "on top of" any underlying entity
     // and need their own select / edit / drag handling.
     const r = this.app.canvas.getBoundingClientRect();
@@ -112,9 +114,9 @@ export class SelectTool extends Tool {
       this.app.requestRender();
     } else if (this.app.hitStrokeAt(world)) {
       const ink = this.app.hitStrokeAt(world);
-      if (isToggle) this.app.setStrokeSelected(ink, !ink.selected);
-      else if (isAdd) this.app.setStrokeSelected(ink, true);
-      else if (!ink.selected) { this.app.clearSelection(); this.app.setStrokeSelected(ink, true); }
+      if (isToggle) this.app.selectInk(ink, !ink.selected);
+      else if (isAdd) this.app.selectInk(ink, true);
+      else if (!ink.selected) { this.app.clearSelection(); this.app.selectInk(ink, true); }
       this.inkDrag = ink.selected ? this.app.beginInkDrag(world) : null;
       this.app.refreshUI();
       this.app.requestRender();
@@ -126,6 +128,12 @@ export class SelectTool extends Tool {
     }
   }
   onPointerMove(world, snap, ev) {
+    if (this.app.linkPick) {
+      const target = this.app.hitAnchorAt(world);
+      this.app._setHoverTarget(target);
+      this.app.canvas.style.cursor = target ? 'pointer' : 'crosshair';
+      return;
+    }
     if (this.app.operationName === 'offset' && this.app.offsetPhase === 'placing' && !this.dimAction && !this.dragging && !this.box) {
       this.app.updateOffsetCursor(world);
       return;
@@ -210,6 +218,7 @@ export class SelectTool extends Tool {
   onPointerUp(world, snap, ev) {
     if (this.inkDrag) {
       const moved = this.inkDrag.moved;
+      this.app.endInkDrag(this.inkDrag);
       this.inkDrag = null;
       if (moved && !this.dragging) { this.app.commit(); this.app.refreshUI(); return; }
     }
@@ -313,7 +322,9 @@ export class SelectTool extends Tool {
   onKey(ev) {
     if (ev.key === 'Delete' || ev.key === 'Backspace') { this.app.deleteSelection(); ev.preventDefault(); }
     else if (ev.key === 'Escape') {
-      if (this.app.cancelOperation()) {
+      if (this.app.cancelLinkPick()) {
+        ev.preventDefault();
+      } else if (this.app.cancelOperation()) {
         ev.preventDefault();
       } else {
         this.app.clearSelection();

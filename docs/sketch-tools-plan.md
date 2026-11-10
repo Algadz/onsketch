@@ -16,9 +16,9 @@ the tool.
 | Removing ink without touching geometry | none | **Phase 1, shipped** (Eraser) |
 | Ink colour separate from geometry status colour | lines always show constraint state | **Phase 1, shipped** (ink colour) |
 | Move / recolour / delete a stroke | none | **Shipped** (Select tool) |
-| Text labels ("Kitchen", "Ø 40 bore", titles) | none | Phase 2 |
+| Text labels ("Kitchen", "Ø 40 bore", titles) | none | **Shipped** (Text tool, boxes) |
 | Arrows, leaders and callouts | none | Phase 2 |
-| Annotation that follows the geometry when a dimension changes | none | Phase 3 |
+| Annotation that follows the geometry when a dimension changes | none | **Shipped** (Link to…), plus Group |
 | Reference image (photo, plan, screenshot) scaled to real size | none | Phase 3 |
 | Presentation view: clean lines without vertices, state colours or grid | none | Phase 4 |
 | Image export (PNG / SVG / PDF) | JSON only | Phase 4 |
@@ -91,11 +91,15 @@ that hard and would not fit "to scale".
    box select on the active layer, drag to move (with selected shapes too),
    Delete, Properties for colour, opacity, width and layer, dashed orange
    box as the selection mark. *Still to do:* scale / rotate handles.
-2. **Text tool (T).** Click to place, type, Enter to finish. Text height in
-   world units (default 1/40 of the view) or "screen size" for titles.
-   Options: font size, bold, colour (ink), background pill (none,
-   panel, ink colour). Double-click to edit. Stored as
-   `{ kind: 'text', at, text, size, color, align, bg }` in `sketch.notes[]`.
+2. **Text tool (T).** *Shipped:* click to place, type in an inline box
+   that looks like the result, Enter / Esc / click away to finish,
+   Shift+Enter for a new line, click (Text tool) or double-click (Select)
+   to edit. Size in screen px stored in world units, Bold, colour (shared
+   colour), box None / Box / Outlined with a box colour (Paper = canvas
+   colour, light tints, any colour). Stored in `sketch.strokes[]` as
+   `{ kind: 'text', text, size, bold, box, pts: [x, y] }` so texts share
+   layers, order, selection, eraser and undo with strokes. *Still to do:*
+   "screen size" titles, alignment, fields (phase 3.2).
 3. **Arrow / leader tool (W).** Drag from the target to the label point;
    options: arrowhead (none, open, filled, dot), line type, ink colour.
    A leader can carry a text label at its tail (callout).
@@ -111,7 +115,10 @@ that hard and would not fit "to scale".
 This mirrors what fills already do (paint follows areas) and is the
 feature no drawing app has.
 
-1. **Anchoring.** An arrow tip, a text label or a whole stroke can be
+1. **Anchoring.** *Shipped as "Link to…" (and Group):* a text or a
+   stroke (or a group) follows a point, a line (at its fraction along
+   it, turning with it) or a circle / arc (scaled by the radius); see
+   `core/ink-links.js`. Original plan: an arrow tip, a text label or a whole stroke can be
    pinned to geometry: to a point, to a line at parameter *t*, or to a
    region (fill seed). Stored in the anchor's local frame (origin and
    direction of the line or the point), so when a dimension changes and
@@ -159,7 +166,7 @@ of the product and is the strongest story for "Paint, but to scale".
 
 ## Open questions
 
-- **Keyboard:** N, G and E are used now; T (text) and W (arrow) are planned.
+- **Keyboard:** N, G, E and T are used now; W (arrow) is planned. Ctrl+G groups ink.
   Is P better kept for Point or moved to the presentation view?
 - **Ink with Snap on:** should a stroke's ends snap to geometry so a hand
   arrow touches the edge exactly? Probably only for arrows and leaders

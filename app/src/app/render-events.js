@@ -5,6 +5,7 @@ import { SelectTool } from '../tools/select.js';
 import { ArcTool, CenterLineTool, CenterRectangleTool, CircleTool, HexagonTool, LineTool, PointTool, RectangleTool, ThreePointCircleTool } from '../tools/draw.js';
 import { FillTool } from '../tools/fill.js';
 import { EraserTool, InkTool } from '../tools/freehand.js';
+import { TextTool } from '../tools/text.js';
 import { SmartDimensionTool } from '../tools/smartdim.js';
 
 export class RenderEventsMixin {
@@ -17,8 +18,11 @@ export class RenderEventsMixin {
   }
   _render() {
     this.refreshDrivenDimensions();           // floating dimensions show what they measure
+    this.syncInkLinks();                      // linked ink follows its geometry
     this.renderer.drawGrid(this.gridOn, this.project.background);
     this.renderer.drawEntities(this.project, this.fillDisplay());
+    this._drawInkLinks();
+    if (this._textEdit) this._textEdit.place();
 
     // Build a project-wide id → entity lookup for dimension drawing.
     const entMap = new Map();
@@ -73,6 +77,7 @@ export class RenderEventsMixin {
     const name = this.toolName;
     this.canvas.style.cursor = name === 'select' ? 'default'
       : name === 'fill' ? fillCursor(this.pen?.fillColor, this.fillErase)
+      : name === 'text' ? 'text'
       : 'crosshair';
   }
 
@@ -80,6 +85,9 @@ export class RenderEventsMixin {
   setTool(name) {
     this.hideContextMenu();
     this._clearOperationState();
+    this.finishTextEdit();
+    this.linkPick = null;
+    this._inkDragItems = null;
     if (this.tool && this.tool.deactivate) this.tool.deactivate();
     this.toolName = name;
     switch (name) {
@@ -98,6 +106,7 @@ export class RenderEventsMixin {
       case 'pen':       this.tool = new InkTool(this, 'pen'); break;
       case 'marker':    this.tool = new InkTool(this, 'marker'); break;
       case 'eraser':    this.tool = new EraserTool(this); break;
+      case 'text':      this.tool = new TextTool(this); break;
     }
     if (this.tool.activate) this.tool.activate();
     document.querySelectorAll('[data-tool]').forEach(b => b.classList.toggle('active', b.dataset.tool === name));
@@ -130,6 +139,13 @@ export class RenderEventsMixin {
       if (this.toolName === 'line' && this.tool && this.tool.startPt) {
         ev.preventDefault();
         this.tool.terminateChain(true);
+        return;
+      }
+      // Double-click a text (not under geometry) to edit it.
+      if (this.toolName === 'select' && !this.linkPick) {
+        const { world } = getWorld(ev);
+        const t = !this.hitTestActiveSketch(world) && this.hitStrokeAt(world, { textOnly: true });
+        if (t) { ev.preventDefault(); this.editText(t); }
       }
     });
 
@@ -240,6 +256,16 @@ export class RenderEventsMixin {
         this.hideContextMenu();
         return;
       }
+      if (ev.key === 'Escape' && this.linkPick) {
+        ev.preventDefault();
+        this.cancelLinkPick();
+        return;
+      }
+      if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'g') {
+        ev.preventDefault();
+        if (ev.shiftKey) this.ungroupSelectedInk(); else this.groupSelectedInk();
+        return;
+      }
       if (ev.key === 'Escape' && this.operationName && this.cancelOperation()) {
         ev.preventDefault();
         return;
@@ -261,6 +287,7 @@ export class RenderEventsMixin {
       else if (k === 'n') this.setTool('pen');
       else if (k === 'g') this.setTool('marker');
       else if (k === 'e') this.setTool('eraser');
+      else if (k === 't') this.setTool('text');
       else if (k === 'm') this.setDimensionsVisible(!this.showDimensions);
       else if (k === 'k') this.setRelationsVisible(!this.showRelations);
       else if (k === 'f') this.zoomFit();

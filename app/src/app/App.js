@@ -24,6 +24,8 @@ import { SketchWindowMixin } from './sketch-window.js';
 import { ReportMixin } from './report.js';
 import { DimLinksMixin } from './dim-links.js';
 import { InkSelectMixin } from './ink-select.js';
+import { InkLinksMixin } from './ink-links.js';
+import { TextEditMixin } from './text-edit.js';
 import { TouchMixin } from './touch.js';
 import { TouchUIMixin } from './touch-ui.js';
 import { CompactMixin } from './compact.js';
@@ -460,8 +462,13 @@ export class App {
 
   showContextMenu(screen, world, ev) {
     this.hideContextMenu();
+    this.cancelLinkPick();
     const items = this.hitTestAllSketches(world, this.activeVisibleSketches());
-    if (!items.length) return false;
+    // Ink under the cursor (no geometry there): select it with its group,
+    // as most apps do on right-click, and offer the ink actions.
+    const ink = items.length ? null : this.hitStrokeAt(world);
+    if (!items.length && !ink) return false;
+    if (ink && !ink.selected) { this.clearSelection(); this.selectInk(ink, true); this.refreshUI(); this.requestRender(); }
 
     const menu = document.createElement('div');
     menu.id = 'context-menu';
@@ -482,17 +489,28 @@ export class App {
       menu.appendChild(row);
     }
 
-    const actions = this.contextActions(items);
+    if (ink) {
+      const sel = this.selectedStrokes();
+      const head = document.createElement('div');
+      head.className = 'context-menu-head';
+      const texts = sel.filter(s => s.kind === 'text').length;
+      head.textContent = sel.length === 1 ? (texts ? 'Text' : 'Stroke')
+        : `${sel.length} ink items${sel.every(s => s.group && s.group === sel[0].group) ? ' (group)' : ''}`;
+      menu.appendChild(head);
+    }
+    // Geometry: its own actions, plus "link the selected ink here".
+    const actions = ink ? this.inkContextActions()
+      : [...this.contextActions(items), ...this.linkHereActions(items[0])];
     if (actions.length) {
       const sep = document.createElement('div');
       sep.className = 'context-menu-sep';
-      menu.appendChild(sep);
+      if (!ink) menu.appendChild(sep);
       for (const a of actions) {
         const row = document.createElement('button');
         row.type = 'button';
         row.className = 'context-menu-item action';
         row.dataset.action = a.id;
-        row.innerHTML = `<span class="glyph">${a.id === 'midpoint' ? '⌐' : a.id === 'delete' ? '✕' : '┄'}</span><span>${a.label}</span>`;
+        row.innerHTML = `<span class="glyph">${a.glyph || (a.id === 'midpoint' ? '⌐' : a.id === 'delete' ? '✕' : '┄')}</span><span>${a.label}</span>${a.hint ? `<span class="meta">${a.hint}</span>` : ''}`;
         row.addEventListener('click', () => { this.hideContextMenu(); a.run(); });
         menu.appendChild(row);
       }
@@ -506,7 +524,7 @@ export class App {
     menu.style.left = Math.max(margin, left) + 'px';
     menu.style.top = Math.max(margin, top) + 'px';
     this.contextMenuEl = menu;
-    this._setHoverTarget(items[0]);
+    if (items.length) this._setHoverTarget(items[0]);
 
     this.contextMenuDocPointerDown = (e) => {
       if (this.contextMenuEl && !this.contextMenuEl.contains(e.target)) this.hideContextMenu();
@@ -651,7 +669,7 @@ export class App {
 }
 
 /* Methods are grouped into mixins by concern; see src/app/*.js. */
-for (const Mixin of [ChromeMixin, EquationsMixin, LayersPanelMixin, FillsMixin, DimensionLabelsMixin, SelectionMixin, DragMixin, SolveMixin, OperationsMixin, ConstraintActionsMixin, RenderEventsMixin, PanelsMixin, PersistenceMixin, SketchWindowMixin, ReportMixin, DimLinksMixin, InkSelectMixin, TouchMixin, TouchUIMixin, CompactMixin, CloudMixin]) {
+for (const Mixin of [ChromeMixin, EquationsMixin, LayersPanelMixin, FillsMixin, DimensionLabelsMixin, SelectionMixin, DragMixin, SolveMixin, OperationsMixin, ConstraintActionsMixin, RenderEventsMixin, PanelsMixin, PersistenceMixin, SketchWindowMixin, ReportMixin, DimLinksMixin, InkSelectMixin, InkLinksMixin, TextEditMixin, TouchMixin, TouchUIMixin, CompactMixin, CloudMixin]) {
   for (const key of Object.getOwnPropertyNames(Mixin.prototype)) {
     if (key === 'constructor') continue;
     Object.defineProperty(App.prototype, key, Object.getOwnPropertyDescriptor(Mixin.prototype, key));

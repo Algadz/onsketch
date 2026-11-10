@@ -14,6 +14,7 @@ npm install          # dev tools only (eslint)
 npm run serve        # http://localhost:8080/app/
 npm test             # unit tests (node:test, no browser)
 npm run test:e2e     # drives the editor in headless Chromium (needs playwright)
+npm run test:ink     # text, text boxes, groups and linked ink, driven like a user
 npm run test:mobile  # phone / tablet layout and touch input on emulated devices
 npm run test:cloud   # account and cloud projects against a fake Supabase
 npm run lint
@@ -56,6 +57,30 @@ cached modules after a deploy. `npm test` fails if the stamp is out of date.
   (colour, opacity, width, layer); geometry under the cursor wins, and
   selected ink moves along when a selected shape is dragged. Roadmap:
   `docs/sketch-tools-plan.md`.
+- **Text (T)**, in the Sketch window: click to type a label where you
+  click, Enter or Esc finishes, Shift+Enter adds a line, clicking away
+  finishes (an empty new text leaves nothing behind). The editor is an
+  inline box drawn exactly like the result. Click a text with the Text
+  tool, or double-click it with Select, to edit it. Size (picked in
+  screen px, stored in world units so it scales with the drawing), Bold,
+  and a **box**: None / Box / Outlined, with a box colour: *Paper* (the
+  canvas colour, so a label masks the lines behind it in both themes),
+  light tints, or any colour; the outline is in the text colour.
+  Properties edits the text, size, bold, box and box colour of the
+  selected texts. Text is ink: the eraser removes it, the solver ignores it.
+- **Group / link ink** (right-click a stroke or text, Properties, or the
+  keyboard): **Group** (Ctrl+G) makes strokes and texts select and move
+  as one; **Ungroup** (Ctrl+Shift+G). **Link to a shape…** then click a
+  point, line, circle or arc (any visible layer; Esc cancels), or with
+  ink selected right-click a shape → *Link selected … to this line*.
+  Linked ink follows its geometry through solves, dimension and equation
+  changes and drags: on a point it moves with the point; on a line it
+  keeps its spot along the line (as a fraction) and turns with it (text
+  letters stay upright); on a circle or arc it scales with the radius.
+  Dragging linked ink re-places it and keeps the link; a selected linked
+  item shows a dotted leader to the spot it follows; deleting the shape
+  unlinks the ink and leaves it in place. Grouping ink where the linked
+  members share one anchor links the whole group to it.
 - **Colors** window: one colour for Fill, Pen and Marker. Pick a swatch or
   click the chip for any colour. The opacity slider is the current tool's
   (Pen and Marker keep their own; other tools show the fill opacity). Shapes
@@ -229,7 +254,11 @@ Project
    │               (line weight, line type)
    ├─ constraints[]
    ├─ fills[]      fill-tool paint: colour, opacity, layer, a point inside the area
-   └─ strokes[]    freehand ink: kind (pen / marker), colour, opacity, width, layer, points
+   └─ strokes[]    ink, in drawing order: pen / marker strokes (colour, opacity, width,
+                   points) and texts (text, size, bold, box {colour | 'paper', border},
+                   top-left point); any item may carry a group id and a link
+                   { to: entity id, t: fraction along a line, f: anchor frame }
+                   (`core/strokes.js`, `core/ink-links.js`)
 ```
 
 New geometry takes the current line weight and type. Files from earlier

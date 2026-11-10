@@ -23,6 +23,8 @@ export class SolveMixin {
     // merge / re-cut / opened). After the solve: a snap constraint added on
     // release only closes an area once solved.
     this._reconcileStoredFills();
+    // Linked ink follows the settled geometry before the snapshot.
+    this.syncInkLinks();
     // The undo step holds the settled, recoloured state.
     this.undoStack.push(JSON.stringify(this.project.toJSON()));
     if (this.undoStack.length > 100) this.undoStack.shift();

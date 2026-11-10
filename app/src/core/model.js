@@ -401,7 +401,7 @@ export class Project {
       const walk = (e) => { noteId(e.id); for (const c of e.children()) walk(c); };
       for (const l of p.layers) noteId(l.id);
       for (const f of s.fills) noteId(f.id);
-      for (const st of s.strokes) noteId(st.id);
+      for (const st of s.strokes) { noteId(st.id); noteId(st.group); }
       for (const e of s.entities) walk(e);
       for (const c of s.constraints) noteId(c.id);
     }

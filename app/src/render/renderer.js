@@ -3,6 +3,17 @@ import { Arc, Circle, Line, Point } from '../core/entities.js';
 import { CONSTRAINT_GLYPHS, distanceFrame } from '../core/constraints.js';
 import { resolveStyle, dashFor, withAlpha } from '../core/style.js';
 import { getTheme, INK } from './theme.js';
+import { PAPER, TEXT_LINE, inkBounds, isText, textFont, textLines } from '../core/strokes.js';
+
+function roundRect(ctx, x, y, w, h, r) {
+  r = Math.max(0, Math.min(r, w / 2, h / 2));
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
 
 export class Renderer {
   constructor(canvas, view) {
@@ -22,6 +33,7 @@ export class Renderer {
   }
   drawGrid(showGrid, background = null) {
     const ctx = this.ctx, v = this.view;
+    this.background = background;            // "paper" text boxes match it
     ctx.clearRect(0, 0, v.cssW, v.cssH);
     if (background) {
       ctx.fillStyle = background === INK ? this.theme.ink : background;
@@ -149,6 +161,7 @@ export class Renderer {
    *  (quadratic smoothing), so marker ink doesn't darken where it
    *  overlaps itself. Never thinner than a hairline on screen. */
   drawStroke(st) {
+    if (isText(st)) { this.drawTextItem(st); return; }
     const ctx = this.ctx, v = this.view;
     const pts = st.points.map(p => v.worldToScreen(p));
     if (!pts.length) return;
@@ -176,6 +189,67 @@ export class Renderer {
     ctx.stroke();
     ctx.restore();
     if (st.selected) this._drawInkSelection(pts, w);
+  }
+
+  /** A text: one canvas line per text line, top-left at its point, in
+   *  world size (it scales with zoom). Skipped while the inline editor
+   *  shows it. */
+  drawTextItem(st) {
+    if (st._editing) return;
+    const ctx = this.ctx, v = this.view;
+    const p = v.worldToScreen(st.points[0]);
+    const px = st.size * v.zoom;
+    const b = inkBounds(st);
+    const box = [v.worldToScreen({ x: b.minX, y: b.maxY }), v.worldToScreen({ x: b.maxX, y: b.minY })];
+    const ink = st.color === INK ? this.theme.ink : st.color;
+    if (st.box) {
+      ctx.save();
+      ctx.globalAlpha *= st.opacity ?? 1;
+      ctx.beginPath();
+      roundRect(ctx, box[0].x, box[0].y, box[1].x - box[0].x, box[1].y - box[0].y, Math.min(6, px * 0.25));
+      ctx.fillStyle = this.boxColor(st.box.color);
+      ctx.fill();
+      if (st.box.border) {
+        ctx.lineWidth = Math.max(1, px * 0.06);
+        ctx.strokeStyle = ink;
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+    if (px >= 0.5) {
+      ctx.save();
+      ctx.globalAlpha *= st.opacity ?? 1;
+      ctx.fillStyle = ink;
+      ctx.font = textFont(px, st.bold);
+      ctx.textBaseline = 'middle';
+      ctx.textAlign = 'left';
+      textLines(st).forEach((line, i) => ctx.fillText(line, p.x, p.y + (i + 0.5) * px * TEXT_LINE));
+      ctx.restore();
+    }
+    if (st.selected) this._drawInkSelection(box, 0);
+  }
+
+  /** Fill colour of a text box: 'paper' is the canvas colour. */
+  boxColor(c) {
+    if (c === PAPER) return this.background ? (this.background === INK ? this.theme.ink : this.background) : this.theme.paper;
+    return c === INK ? this.theme.ink : c;
+  }
+
+  /** Selected linked ink: a dotted leader from the ink to the spot it
+   *  follows, and a small ring there. */
+  drawInkLink(from, to) {
+    const ctx = this.ctx, v = this.view;
+    const a = v.worldToScreen(from), b = v.worldToScreen(to);
+    ctx.save();
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = this.theme.selected;
+    ctx.lineWidth = 1.2;
+    ctx.setLineDash([2, 3]);
+    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = this.theme.previewHalo;
+    ctx.beginPath(); ctx.arc(b.x, b.y, 4.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.restore();
   }
 
   /** Selected ink: a dashed box around it, in the selection colour. */

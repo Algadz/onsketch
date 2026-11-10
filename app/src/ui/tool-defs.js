@@ -19,6 +19,7 @@ export const TOOL_ICONS = {
   smartdim: svg('<path d="M4 7v10M20 7v10"/><path d="M4 12h16"/><path d="M7 9.5L4 12l3 2.5M17 9.5l3 2.5-3 2.5"/>'),
   pen: svg('<path d="M4 20l1-4L16 5l3 3L8 19z"/><path d="M14 7l3 3"/><path d="M4 20l4-1"/>'),
   marker: svg('<path d="M9 15l-3 3v2h4l3-3"/><path d="M9 15l6-10 4 4-10 6z"/><path d="M4 21h16" stroke-width="3" opacity="0.45"/>'),
+  text: svg('<path d="M5 7V5h14v2"/><path d="M12 5v14"/><path d="M9 19h6"/>'),
   eraser: svg('<path d="M9 20h11"/><path d="M4.5 15.5l9-9a2 2 0 0 1 2.8 0l2.2 2.2a2 2 0 0 1 0 2.8L11 19H8z"/><path d="M9 11l5 5"/>'),
   fill: svg('<path d="M5 11l7-7 7 7-7 7z"/><path d="M5 11h14"/><path d="M19.5 15.5s1.5 2 1.5 3a1.5 1.5 0 0 1-3 0c0-1 1.5-3 1.5-3z" fill="currentColor"/>'),
 };
@@ -73,6 +74,7 @@ export const TOOLS = [
   { id: 'fill',             label: 'Fill',            key: 'B',       group: 'paint' },
   { id: 'pen',              label: 'Pen',             key: 'N',       group: 'freehand' },
   { id: 'marker',           label: 'Marker',          key: 'G',       group: 'freehand' },
+  { id: 'text',             label: 'Text',            key: 'T',       group: 'freehand' },
   { id: 'eraser',           label: 'Eraser',          key: 'E',       group: 'freehand' },
 ];
 

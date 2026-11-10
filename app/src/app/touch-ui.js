@@ -26,7 +26,7 @@ export class TouchUIMixin {
           + ['←', '↑', '↓', '→'].map((g, i) => `<button class="tbtn" data-nudge="${i}" title="Nudge ${['left', 'up', 'down', 'right'][i]}">${g}</button>`).join('')
           + `<span class="opt-val">${this._nudgeStep()} ${esc(this.project.units)}</span></span>`;
       }
-    } else if (DRAW_TOOLS.has(t.id) || ['smartdim', 'pen', 'marker', 'eraser', 'fill'].includes(t.id)) {
+    } else if (DRAW_TOOLS.has(t.id) || ['smartdim', 'pen', 'marker', 'text', 'eraser', 'fill'].includes(t.id)) {
       html += sep + `<button class="tbtn" data-touch="done" title="Finish (like Escape)">✓<span class="btn-label">Done</span></button>`;
     }
     return html;
@@ -131,7 +131,9 @@ export class TouchUIMixin {
       const drag = this.beginLocalizedDrag(start, pts, first, rigidLines);
       if (drag) { this.solveLocalizedDrag(drag, dx, dy); moved = true; }
     }
-    for (const s of this.selectedStrokes()) { s.points = s.points.map(p => ({ x: p.x + dx, y: p.y + dy })); moved = true; }
+    const ink = this.selectedStrokes();
+    for (const s of ink) { s.points = s.points.map(p => ({ x: p.x + dx, y: p.y + dy })); moved = true; }
+    this.rebaseInk(ink);                  // nudged linked ink stays linked, from its new place
     if (moved) { this.commit(); this.refreshUI(); this.requestRender(); }
   }
 
@@ -198,7 +200,7 @@ export class TouchUIMixin {
   /* used by tests and the compact shell */
   _toolGroupOf(id) {
     if (DRAW_TOOLS.has(id)) return 'draw';
-    if (['fill', 'pen', 'marker', 'eraser'].includes(id)) return 'paint';
+    if (['fill', 'pen', 'marker', 'text', 'eraser'].includes(id)) return 'paint';
     return id;
   }
   _toolLabel(id) { return toolDef(id).label; }

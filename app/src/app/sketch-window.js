@@ -1,11 +1,12 @@
 import { PALETTE } from '../core/style.js';
+import { BOX_COLORS, PAPER } from '../core/strokes.js';
 import { INK } from '../render/theme.js';
 import { TOOL_ICONS, toolDef } from '../ui/tool-defs.js';
 
 /* =============== SKETCH WINDOW =================================
-   Floating window for the freehand side of OnSketch: Pen, Marker and
-   Eraser, and size / opacity for the current tool (the colour is the
-   one shared colour of the Colors window).
+   Floating window for the freehand side of OnSketch: Fill, Pen, Marker,
+   Text and Eraser, and the settings of the current tool (the colour is
+   the one shared colour of the Colors window).
 
    Ink is separate from geometry:
    - strokes live on the active layer (visibility, opacity, order and
@@ -14,14 +15,15 @@ import { TOOL_ICONS, toolDef } from '../ui/tool-defs.js';
    - their colour is the shared colour, never the constraint-state colour.
    Settings are per browser (saved with the drawing style).
    ============================================================ */
-export const SKETCH_TOOLS = ['fill', 'pen', 'marker', 'eraser'];
+export const SKETCH_TOOLS = ['fill', 'pen', 'marker', 'text', 'eraser'];
 
 /** Size limits in screen pixels, and defaults. */
-const LIMITS = { pen: [1, 40], marker: [4, 80], eraser: [4, 120] };
+const LIMITS = { pen: [1, 40], marker: [4, 80], text: [8, 120], eraser: [4, 120] };
 export const INK_DEFAULTS = {
   penSize: 3, penOpacity: 1,
   markerSize: 18, markerOpacity: 0.4,
   eraserSize: 16,
+  textSize: 18, textBold: false, textBox: 'none', textBoxColor: PAPER,
 };
 
 export class SketchWindowMixin {
@@ -30,6 +32,13 @@ export class SketchWindowMixin {
     const p = this.pen;
     if (kind === 'marker') return { size: p.markerSize, opacity: p.markerOpacity };
     if (kind === 'eraser') return { size: p.eraserSize, opacity: 1 };
+    if (kind === 'text') {
+      const mode = ['box', 'outline'].includes(p.textBox) ? p.textBox : 'none';
+      return {
+        size: p.textSize ?? INK_DEFAULTS.textSize, opacity: 1, bold: !!p.textBold, boxMode: mode,
+        box: mode === 'none' ? null : (mode === 'outline' ? { color: p.textBoxColor || PAPER, border: true } : { color: p.textBoxColor || PAPER }),
+      };
+    }
     return { size: p.penSize, opacity: p.penOpacity };
   }
 
@@ -74,14 +83,22 @@ export class SketchWindowMixin {
       const [min, max] = LIMITS[target];
       opts = `<div class="prop-row"><label>${toolDef(target).label} size</label>
         <div class="range-row"><input type="range" min="${min}" max="${max}" step="1" value="${s.size}" aria-label="Size"><span>${s.size} px</span></div></div>
+        ${target === 'text' ? `<div class="prop-row"><label>Style</label><span class="seg"><button class="${s.bold ? '' : 'on'}" data-bold="0">Regular</button><button class="${s.bold ? 'on' : ''}" data-bold="1"><b>Bold</b></button></span></div>
+          <div class="prop-row"><label>Box</label>${boxModeHTML(s.boxMode, 'data-boxmode')}</div>
+          ${s.box ? `<div class="prop-row"><label>Box colour</label>${boxSwatchesHTML(s.box.color, 'data-boxcolor')}</div>` : ''}` : ''}
         <div class="hint">${target === 'eraser'
-          ? 'Removes whole strokes on the active layer. Shapes and fills are not affected.'
-          : 'Freehand ink on the active layer. Not solved or dimensioned, and it doesn\'t close areas for the Fill tool.'}</div>`;
+          ? 'Removes whole strokes and texts on the active layer. Shapes and fills are not affected.'
+          : target === 'text'
+            ? 'Click to type a label; click a text to edit it. Right-click ink to group it or link it to a shape so it follows the geometry.'
+            : 'Freehand ink on the active layer. Not solved or dimensioned, and it doesn\'t close areas for the Fill tool.'}</div>`;
     }
     body.innerHTML = `<div class="tool-grid sketch-grid">${SKETCH_TOOLS.map(btn).join('')}</div><div class="tool-sep"></div>${opts}`;
 
     body.querySelectorAll('[data-tool]').forEach(b => b.addEventListener('click', () => this.setTool(b.dataset.tool)));
     body.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => this.setFillErase(b.dataset.mode === 'erase')));
+    body.querySelectorAll('[data-bold]').forEach(b => b.addEventListener('click', () => this._setInk({ textBold: b.dataset.bold === '1' })));
+    body.querySelectorAll('[data-boxmode]').forEach(b => b.addEventListener('click', () => this._setInk({ textBox: b.dataset.boxmode })));
+    bindBoxSwatches(body, 'data-boxcolor', (c) => this._setInk({ textBoxColor: c }));
     const r = body.querySelector('input[type=range]');
     if (r) {
       const key = target + 'Size';
@@ -165,12 +182,21 @@ export class SketchWindowMixin {
     const sep = '<span class="opt-sep"></span>';
     const [min, max] = LIMITS[id];
     let html = sep + `<label class="opt">Size <input type="range" min="${min}" max="${max}" step="1" value="${s.size}" data-ink="${id}Size"><span class="opt-val">${s.size} px</span></label>`;
-    if (id !== 'eraser') {
+    if (id === 'text') {
+      html += `<button class="tbtn toggle${s.bold ? ' on' : ''}" data-opt="text-bold" title="Bold text"><b>B</b><span class="btn-label">Bold</span></button>`;
+      html += `<span class="opt">Box ${boxModeHTML(s.boxMode, 'data-opt-boxmode')}</span>`;
+      if (s.box) html += `<span class="opt">${boxSwatchesHTML(s.box.color, 'data-opt-boxcolor')}</span>`;
+      const ink = this.pen.fillColor;
+      html += `<label class="opt">Colour <i class="opt-sw" style="--sw:${ink === INK ? 'var(--text)' : ink}"></i></label>`;
+    } else if (id !== 'eraser') {
       html += `<label class="opt">Opacity <input type="range" min="0.05" max="1" step="0.05" value="${s.opacity}" data-ink="${id}Opacity"><span class="opt-val">${Math.round(s.opacity * 100)}%</span></label>`;
       const ink = this.pen.fillColor;
       html += `<label class="opt">Colour <i class="opt-sw" style="--sw:${ink === INK ? 'var(--text)' : ink}"></i></label>`;
     }
-    html += sep + `<span class="opt-hint">${id === 'eraser' ? 'Drag over strokes to erase them (active layer only).' : 'Drag to draw. Esc cancels the stroke. Alt-drag pans.'}</span>`;
+    const hint = id === 'eraser' ? 'Drag over strokes and texts to erase them (active layer only).'
+      : id === 'text' ? 'Click to place text, Enter to finish, Shift+Enter for a new line. Click a text to edit it.'
+        : 'Drag to draw. Esc cancels the stroke. Alt-drag pans.';
+    html += sep + `<span class="opt-hint">${hint}</span>`;
     return html;
   }
   _bindSketchOptions(bar) {
@@ -184,5 +210,34 @@ export class SketchWindowMixin {
       r.addEventListener('input', () => { this.pen[key] = read(); this.requestRender(); });
       r.addEventListener('change', () => { this.pen[key] = read(); this._savePrefs(); this._refreshSketchWindow(); });
     });
+    bar.querySelector('[data-opt="text-bold"]')?.addEventListener('click', () => this._setInk({ textBold: !this.pen.textBold }));
+    bar.querySelectorAll('[data-opt-boxmode]').forEach(b => b.addEventListener('click', (e) => { e.preventDefault(); this._setInk({ textBox: b.dataset.optBoxmode }); }));
+    bindBoxSwatches(bar, 'data-opt-boxcolor', (c) => this._setInk({ textBoxColor: c }));
   }
+}
+
+/* ---- Text box controls (Sketch window, options bar, Properties) ----
+   Box: None · Box · Outlined (the outline is in the text colour), and a
+   row of box colours: Paper (the canvas colour, so a label masks the
+   lines behind it in both themes), light tints that keep any text colour
+   readable, and a picker for any colour. */
+const BOX_MODES = [['none', 'None', 'No box'], ['box', 'Box', 'A filled box behind the text'], ['outline', 'Outlined', 'A filled box with an outline in the text colour']];
+
+export function boxModeHTML(mode, attr) {
+  return `<span class="seg">${BOX_MODES.map(([id, label, title]) =>
+    `<button class="${mode === id ? 'on' : ''}" ${attr}="${id}" title="${title}">${label}</button>`).join('')}</span>`;
+}
+
+/** `current` may be null (mixed). */
+export function boxSwatchesHTML(current, attr) {
+  const custom = current && current !== PAPER && !BOX_COLORS.includes(current) ? current : null;
+  return `<span class="box-swatches">${BOX_COLORS.map(c =>
+    `<button class="bsw${c === current ? ' on' : ''}${c === PAPER ? ' paper' : ''}" ${attr}="${c}" style="--sw:${c === PAPER ? 'var(--canvas-a)' : c}" title="${c === PAPER ? 'Paper: the canvas colour (hides the lines behind the text)' : c}"></button>`).join('')}`
+    + `<label class="bsw custom${custom ? ' on' : ''}" style="--sw:${custom || 'transparent'}" title="Any colour"><input type="color" ${attr}="custom" value="${custom || '#ffffff'}" aria-label="Box colour"></label></span>`;
+}
+
+export function bindBoxSwatches(root, attr, set) {
+  root.querySelectorAll(`button[${attr}]`).forEach(b => b.addEventListener('click', (e) => { e.preventDefault(); set(b.getAttribute(attr)); }));
+  const inp = root.querySelector(`input[${attr}="custom"]`);
+  if (inp) inp.addEventListener('change', () => set(inp.value));
 }
