@@ -16,6 +16,11 @@ export class Solver {
       seen.add(e);
       for (const c of e.children()) walk(c);
       if (e.locked) return;   // locked geometry is constant (see Project.syncLocks)
+      // An arc's start / end points are derived (center + r·angle, see
+      // Arc.syncEnds); constraints reach them through r / a0 / a1. As
+      // parameters they would be four free unknowns no constraint touches,
+      // so no arc could ever read as fully defined.
+      if (e.arcOwner) return;
       for (const k of e.paramKeys()) params.push({ ent: e, key: k });
     };
     for (const e of editScope.entities) walk(e);
@@ -283,6 +288,15 @@ export class Solver {
       entToIdx.get(e).push(i);
     }
     const gather = (e, acc) => {
+      if (e.arcOwner) {
+        // Derived arc endpoint: defined by the arc's center, r and its angle.
+        const arc = e.arcOwner;
+        const own = entToIdx.get(arc) || [];
+        const key = e.arcEndpoint === 'start' ? 'a0' : 'a1';
+        for (const i of own) if (params[i].key === 'r' || params[i].key === key) acc.push(i);
+        gather(arc.center, acc);
+        return;
+      }
       const own = entToIdx.get(e); if (own) for (const i of own) acc.push(i);
       for (const c of e.children()) gather(c, acc);
     };

@@ -1,4 +1,4 @@
-import { EPS, TAU, clamp, dist, nullSpaceBasis, rowSpaceBasis, solveLeastSquares, unwrapAngleNear } from '../core/math.js';
+import { EPS, TAU, clamp, directedArcSpan, dist, nullSpaceBasis, rowSpaceBasis, solveLeastSquares, unwrapAngleNear } from '../core/math.js';
 import { Arc, Circle, Line, Point } from '../core/entities.js';
 import { DistanceConstraint, FixConstraint, ParamFixConstraint } from '../core/constraints.js';
 import { sameLineRefs } from '../editor/relations.js';
@@ -891,6 +891,13 @@ export class DragMixin {
 
     const endpointRef = this.arcEndpointRef(hit);
     if (endpointRef && pts.length === 1) {
+      // Track the dragged end continuously from the arc's current directed
+      // span, so the sweep starts with the arc's real sign. Seeding it with
+      // the raw angles flipped any arc that crosses the ±180° direction to
+      // its complement on the first pixel of drag.
+      const arc = hit.arcOwner;
+      const span = directedArcSpan(arc.a0, arc.a1, arc.clockwise);
+      const isStart = hit.arcEndpoint === 'start';
       return {
         mode:'arcEndpoint',
         startWorld,
@@ -901,9 +908,9 @@ export class DragMixin {
         arc:hit.arcOwner,
         which:hit.arcEndpoint,
         startRadius:hit.arcOwner.r,
-        startAngle:hit.arcEndpoint === 'start' ? hit.arcOwner.a0 : hit.arcOwner.a1,
-        referenceAngle:hit.arcEndpoint === 'start' ? hit.arcOwner.a1 : hit.arcOwner.a0,
-        unwrappedAngle:hit.arcEndpoint === 'start' ? hit.arcOwner.a0 : hit.arcOwner.a1,
+        startAngle:isStart ? arc.a0 : arc.a1,
+        referenceAngle:isStart ? arc.a1 : arc.a0,
+        unwrappedAngle:isStart ? arc.a1 - span : arc.a0 + span,
         offsetGuard,
         snapIgnoreIds:this._offsetLinkedSnapIgnoreIds(sketch, [hit.id, hit.arcOwner.id])
       };

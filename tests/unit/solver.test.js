@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as C from '../../app/src/core/constraints.js';
-import { ref, sketch, line, circle, solve } from './helpers.js';
+import { ref, sketch, line, circle, arc, solve } from './helpers.js';
 
 test('a line with only a length dimension has 3 DOF', () => {
   const s = sketch(); line(s, 0, 0, 10, 3);
@@ -84,4 +84,34 @@ test('a failing group does not stop an independent group from solving', () => {
   solve(s, { revertOnFailure: true });
   assert.equal(a.p2.x, 10);
   assert.ok(Math.abs(c.r - 7) < 1e-9);
+});
+
+test('an arc has 5 DOF: its endpoints are derived, not free unknowns', () => {
+  const s = sketch(); arc(s, 0, 0, 10, 0, Math.PI / 2);
+  const r = solve(s);
+  assert.equal(r.dof, 5); assert.equal(r.n, 5);
+});
+
+test('arc with fixed center and both endpoints fixed is fully defined', () => {
+  const s = sketch(); const a = arc(s, 0, 0, 10, 0, Math.PI / 2);
+  const end = (which) => ({ arcId: a.id, centerId: a.center.id, which });
+  s.constraints.push(new C.FixConstraint(a.center.id, 0, 0));
+  s.constraints.push(new C.ArcEndpointFixConstraint(end('start'), 10, 0));
+  s.constraints.push(new C.ArcEndpointFixConstraint(end('end'), 0, 10));
+  const r = solve(s);
+  assert.equal(r.dof, 0); assert.equal(r.state, 'fully');
+  assert.equal(r.entityStatus.get(a.id), 'fully');
+  assert.equal(r.entityStatus.get(a.start.id), 'fully');
+  assert.equal(r.entityStatus.get(a.end.id), 'fully');
+});
+
+test('an arc endpoint reads under-defined while its angle is free', () => {
+  const s = sketch(); const a = arc(s, 0, 0, 10, 0, Math.PI / 2);
+  s.constraints.push(new C.FixConstraint(a.center.id, 0, 0));
+  s.constraints.push(new C.ArcEndpointFixConstraint({ arcId: a.id, centerId: a.center.id, which: 'start' }, 10, 0));
+  const r = solve(s);
+  assert.equal(r.dof, 1);
+  assert.equal(r.entityStatus.get(a.start.id), 'fully');
+  assert.equal(r.entityStatus.get(a.end.id), 'under');
+  assert.equal(r.entityStatus.get(a.id), 'under');
 });

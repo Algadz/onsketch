@@ -1120,6 +1120,35 @@ await page.evaluate(() => { const a = window._app; const P = a.project.construct
 await page.click('#layer-delete');
 await page.waitForFunction(() => /at least one layer/.test(document.getElementById('app-notice')?.textContent || ''));
 check(true, 'deleting the last layer: a notice explains why not');
+// Center arc across the ±180° direction: dragging an endpoint a few pixels
+// must keep the short arc, not flip it to its complement.
+await page.keyboard.press('Escape');
+await page.keyboard.press('a');
+await page.mouse.click(cx + 300, cy + 150);
+await page.mouse.click(cx + 150, cy + 120);
+await page.mouse.move(cx + 150, cy + 150, { steps: 5 });
+await page.mouse.move(cx + 150, cy + 180, { steps: 5 });
+await page.mouse.click(cx + 150, cy + 180);
+await page.keyboard.press('Escape');
+await page.keyboard.press('Escape');
+const arcSpan = () => page.evaluate(() => {
+  const a = window._app.activeSketch().entities.filter(e => e.constructor.kind === 'arc').pop();
+  const n = v => ((v % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+  return a ? (a.clockwise ? -n(a.a0 - a.a1) : n(a.a1 - a.a0)) * 180 / Math.PI : null;
+});
+const arcBefore = await arcSpan();
+const arcEnd = await page.evaluate(() => {
+  const a = window._app.activeSketch().entities.filter(e => e.constructor.kind === 'arc').pop();
+  a.syncEnds(); return window._app.view.worldToScreen(a.end);
+});
+const cbox = await page.locator('#canvas').boundingBox();
+await page.mouse.move(cbox.x + arcEnd.x, cbox.y + arcEnd.y);
+await page.mouse.down();
+await page.mouse.move(cbox.x + arcEnd.x - 3, cbox.y + arcEnd.y + 6, { steps: 4 });
+await page.mouse.up();
+const arcAfter = await arcSpan();
+check(arcBefore != null && Math.abs(arcBefore) < 60 && Math.abs(arcAfter) < 60 && Math.sign(arcBefore) === Math.sign(arcAfter),
+  `center arc keeps its side when an endpoint is dragged (${arcBefore?.toFixed(1)}° → ${arcAfter?.toFixed(1)}°)`);
 check(nativeDialogs.length === 0, 'no browser pop-ups' + (nativeDialogs.length ? ': ' + nativeDialogs.join(' | ') : ''));
 check(errors.length === 0, `no page errors${errors.length ? ': ' + errors.join(' / ') : ''}`);
 
