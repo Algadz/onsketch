@@ -3,7 +3,8 @@ import { Arc, Circle, Line, Point } from '../core/entities.js';
 import { CONSTRAINT_GLYPHS, distanceFrame } from '../core/constraints.js';
 import { resolveStyle, dashFor, withAlpha } from '../core/style.js';
 import { getTheme, INK } from './theme.js';
-import { PAPER, TEXT_LINE, inkBounds, isText, textFont, textLines } from '../core/strokes.js';
+import { BOX_PAD, PAPER, TEXT_LINE, isText, textBox, textCorners, textFont, textLines } from '../core/strokes.js';
+import { headSize, headedEnds, isArrow } from '../core/arrows.js';
 
 function roundRect(ctx, x, y, w, h, r) {
   r = Math.max(0, Math.min(r, w / 2, h / 2));
@@ -162,6 +163,7 @@ export class Renderer {
    *  overlaps itself. Never thinner than a hairline on screen. */
   drawStroke(st) {
     if (isText(st)) { this.drawTextItem(st); return; }
+    if (isArrow(st)) { this.drawArrow(st); return; }
     const ctx = this.ctx, v = this.view;
     const pts = st.points.map(p => v.worldToScreen(p));
     if (!pts.length) return;
@@ -199,14 +201,18 @@ export class Renderer {
     const ctx = this.ctx, v = this.view;
     const p = v.worldToScreen(st.points[0]);
     const px = st.size * v.zoom;
-    const b = inkBounds(st);
-    const box = [v.worldToScreen({ x: b.minX, y: b.maxY }), v.worldToScreen({ x: b.maxX, y: b.minY })];
+    const tb = textBox(st);
     const ink = st.color === INK ? this.theme.ink : st.color;
+    ctx.save();
+    ctx.globalAlpha *= st.opacity ?? 1;
+    // The text's own frame: origin at its top-left, x along the line, y
+    // down the lines (screen y is down, so a CCW world angle is −angle).
+    ctx.translate(p.x, p.y);
+    if (st.angle) ctx.rotate(-st.angle);
     if (st.box) {
-      ctx.save();
-      ctx.globalAlpha *= st.opacity ?? 1;
+      const m = st.size * BOX_PAD * v.zoom;
       ctx.beginPath();
-      roundRect(ctx, box[0].x, box[0].y, box[1].x - box[0].x, box[1].y - box[0].y, Math.min(6, px * 0.25));
+      roundRect(ctx, -m, -m, tb.w * v.zoom + 2 * m, tb.h * v.zoom + 2 * m, Math.min(6, px * 0.25));
       ctx.fillStyle = this.boxColor(st.box.color);
       ctx.fill();
       if (st.box.border) {
@@ -214,19 +220,116 @@ export class Renderer {
         ctx.strokeStyle = ink;
         ctx.stroke();
       }
-      ctx.restore();
     }
     if (px >= 0.5) {
-      ctx.save();
-      ctx.globalAlpha *= st.opacity ?? 1;
       ctx.fillStyle = ink;
       ctx.font = textFont(px, st.bold);
       ctx.textBaseline = 'middle';
       ctx.textAlign = 'left';
-      textLines(st).forEach((line, i) => ctx.fillText(line, p.x, p.y + (i + 0.5) * px * TEXT_LINE));
-      ctx.restore();
+      textLines(st).forEach((line, i) => ctx.fillText(line, 0, (i + 0.5) * px * TEXT_LINE));
     }
-    if (st.selected) this._drawInkSelection(box, 0);
+    ctx.restore();
+    if (st.selected) this._drawInkSelection(textCorners(st).map(q => v.worldToScreen(q)), 0);
+  }
+
+  /** An arrow: a straight line from tail to tip with a head at the
+   *  tip (and the tail for 'both'): filled, open or a dot. A filled head
+   *  ends the line at its base so the tip stays sharp. */
+  drawArrow(st) {
+    const ctx = this.ctx, v = this.view;
+    const [t0, t1] = st.points.map(p => v.worldToScreen(p));
+    const w = Math.max(0.75, st.width * v.zoom);
+    const len = Math.hypot(t1.x - t0.x, t1.y - t0.y);
+    const ink = st.color === INK ? this.theme.ink : st.color;
+    ctx.save();
+    ctx.globalAlpha *= st.opacity ?? 1;
+    ctx.strokeStyle = ink; ctx.fillStyle = ink;
+    ctx.lineWidth = w; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    if (len < 0.5) { ctx.beginPath(); ctx.arc(t0.x, t0.y, w / 2, 0, Math.PI * 2); ctx.fill(); ctx.restore(); return; }
+    const ux = (t1.x - t0.x) / len, uy = (t1.y - t0.y) / len;
+    const hs = headSize(w);
+    const head = st.head || 'filled';
+    // never let the heads eat more than 45 % of the line each
+    const hl = Math.min(hs.len, len * 0.45), hh = hs.half * (hl / hs.len);
+    const [hasTail, hasTip] = headedEnds(st);
+    const inset = (on) => (on && head === 'filled' ? hl * 0.9 : on && head === 'dot' ? hh * 0.8 : 0);
+    const a = { x: t0.x + ux * inset(hasTail), y: t0.y + uy * inset(hasTail) };
+    const b = { x: t1.x - ux * inset(hasTip), y: t1.y - uy * inset(hasTip) };
+    if (st.dash) ctx.setLineDash([w * 3.2, w * 2.4]);
+    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    ctx.setLineDash([]);
+    const drawHead = (tip, dx, dy) => {
+      ctx.beginPath();
+      if (head === 'dot') {
+        ctx.arc(tip.x, tip.y, Math.max(w * 0.9, hh * 0.8), 0, Math.PI * 2);
+        ctx.fill();
+        return;
+      }
+      const bx = tip.x - dx * hl, by = tip.y - dy * hl;
+      ctx.moveTo(bx - dy * hh, by + dx * hh);
+      ctx.lineTo(tip.x, tip.y);
+      ctx.lineTo(bx + dy * hh, by - dx * hh);
+      if (head === 'filled') { ctx.closePath(); ctx.fill(); ctx.stroke(); } else ctx.stroke();
+    };
+    if (hasTip) drawHead(t1, ux, uy);
+    if (hasTail) drawHead(t0, -ux, -uy);
+    ctx.restore();
+    if (st.selected) this._drawInkSelection([t0, t1], hs.half * 2);
+  }
+
+  /** Handles at both ends of a selected arrow; an attached end is a
+   *  filled dot (it sits on a shape). */
+  drawArrowHandles(item, scale = 1) {
+    const ctx = this.ctx, v = this.view;
+    ctx.save();
+    ctx.globalAlpha = 1;
+    item.points.forEach((p, i) => {
+      const q = v.worldToScreen(p);
+      const attached = !!(item.at && item.at[i]);
+      ctx.beginPath(); ctx.arc(q.x, q.y, 5 * scale, 0, Math.PI * 2);
+      ctx.fillStyle = attached ? this.theme.selected : this.theme.previewHalo;
+      ctx.fill();
+      ctx.lineWidth = 1.5; ctx.strokeStyle = this.theme.selected; ctx.stroke();
+    });
+    ctx.restore();
+  }
+
+  /** Transform box around selected ink: dashed frame, square handles at
+   *  the corners and edge middles, and a round turn handle on a stem
+   *  above the top edge. `corners` are the 4 screen corners (TL, TR, BR,
+   *  BL), `turn` the turn handle's screen position. */
+  drawTransformBox(corners, turn, scale = 1, label = null) {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = this.theme.selected;
+    ctx.lineWidth = 1.2;
+    ctx.setLineDash([4, 3]);
+    ctx.beginPath();
+    corners.forEach((c, i) => (i ? ctx.lineTo(c.x, c.y) : ctx.moveTo(c.x, c.y)));
+    ctx.closePath(); ctx.stroke();
+    ctx.setLineDash([]);
+    const topMid = { x: (corners[0].x + corners[1].x) / 2, y: (corners[0].y + corners[1].y) / 2 };
+    ctx.beginPath(); ctx.moveTo(topMid.x, topMid.y); ctx.lineTo(turn.x, turn.y); ctx.stroke();
+    const hs = 4 * scale;
+    const square = (p) => { ctx.beginPath(); ctx.rect(p.x - hs, p.y - hs, hs * 2, hs * 2); ctx.fill(); ctx.stroke(); };
+    ctx.fillStyle = this.theme.previewHalo;
+    for (let i = 0; i < 4; i++) {
+      const a = corners[i], b = corners[(i + 1) % 4];
+      square(a);
+      square({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+    }
+    // turn handle: a circle with a small curved arrow
+    const r = 6 * scale;
+    ctx.beginPath(); ctx.arc(turn.x, turn.y, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.arc(turn.x, turn.y, r * 0.5, -Math.PI * 0.9, Math.PI * 0.4); ctx.stroke();
+    if (label) {
+      ctx.font = '600 11px ui-sans-serif, system-ui, sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+      ctx.fillStyle = this.theme.selected;
+      ctx.fillText(label, turn.x, turn.y - r - 4);
+    }
+    ctx.restore();
   }
 
   /** Fill colour of a text box: 'paper' is the canvas colour. */

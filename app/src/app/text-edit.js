@@ -68,6 +68,9 @@ export class TextEditMixin {
       ta.style.boxShadow = item.box?.border ? `inset 0 0 0 ${Math.max(1, px * 0.06)}px ${ink}` : 'none';
       ta.style.width = Math.ceil(b.w * v.zoom + px * 0.8 + 2 + 2 * pad) + 'px';
       ta.style.height = Math.ceil(b.h * v.zoom + 2 * pad) + 'px';
+      // a turned text is edited turned, about its top-left corner
+      ta.style.transformOrigin = `${pad}px ${pad}px`;
+      ta.style.transform = item.angle ? `rotate(${-item.angle}rad)` : '';
     };
     te.place();
     ta.addEventListener('input', () => te.place());

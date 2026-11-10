@@ -1,6 +1,7 @@
 import { Arc, Circle, Line, Point, newId } from '../core/entities.js';
 import { anchorFrame, anchorLookup, canAnchor, groupItems, linkItems, rebaseLinks, syncLinks, ungroupItems, unlinkItems } from '../core/ink-links.js';
 import { inkBounds, isText, unionBounds } from '../core/strokes.js';
+import { detachMovedEnds, syncArrowEnds } from '../core/arrows.js';
 
 /* =============== GROUP AND LINK INK ============================
    Two right-click actions on ink (strokes and texts), also in
@@ -29,16 +30,24 @@ export class InkLinksMixin {
    *  render and before every undo snapshot.
    *  @returns {boolean} whether any ink moved or lost its link */
   syncInkLinks() {
-    if (!this.project.sketches.some(s => s.strokes.some(x => x.link))) return false;
+    if (!this.project.sketches.some(s => s.strokes.some(x => x.link || x.at))) return false;
     const lookup = this._anchorLookup();
+    const skip = this._inkDragItems || null;
     let changed = false;
-    for (const s of this.project.sketches) changed = syncLinks(s.strokes, lookup, this._inkDragItems || null) || changed;
+    for (const s of this.project.sketches) {
+      changed = syncLinks(s.strokes, lookup, skip) || changed;
+      // then attached arrow ends sit back on their shapes
+      changed = syncArrowEnds(s.strokes, lookup, skip) || changed;
+    }
     return changed;
   }
 
   /** Ink moved by hand keeps its links, from where it now is. */
   rebaseInk(items) {
-    if (items.some(i => i.link)) rebaseLinks(items, this._anchorLookup());
+    if (!items.some(i => i.link || i.at)) return;
+    const lookup = this._anchorLookup();
+    detachMovedEnds(items, lookup);
+    rebaseLinks(items, lookup);
   }
 
   /* ---- Group ---- */
@@ -146,6 +155,9 @@ export class InkLinksMixin {
     const linked = items.some(i => i.link);
     out.push({ id: 'link', glyph: '⇢', label: linked ? 'Link to another shape…' : 'Link to a shape…', run: () => this.startLinkPick() });
     if (linked) out.push({ id: 'unlink', glyph: '⇥', label: 'Unlink', run: () => this.unlinkSelectedInk() });
+    out.push({ id: 'rotate90', glyph: '↻', label: 'Rotate 90°', run: () => this.transformSelectedInk('rotate') });
+    out.push({ id: 'flipH', glyph: '⇋', label: 'Flip horizontal', run: () => this.transformSelectedInk('flipH') });
+    out.push({ id: 'flipV', glyph: '⇵', label: 'Flip vertical', run: () => this.transformSelectedInk('flipV') });
     if (this.touchUI) out.push({ id: 'delete', glyph: '✕', label: items.length > 1 ? `Delete (${items.length})` : 'Delete', run: () => this.deleteSelection() });
     return out;
   }

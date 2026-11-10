@@ -1,5 +1,6 @@
-import { PAPER, cleanBox, inkHit, inkInBox, isText } from '../core/strokes.js';
-import { bindBoxSwatches, boxModeHTML, boxSwatchesHTML } from './sketch-window.js';
+import { PAPER, cleanBox, inkHit, inkInBox, isText, placeTextCenter, textCenter } from '../core/strokes.js';
+import { isArrow, setArrowEnd } from '../core/arrows.js';
+import { arrowStyleHTML, bindArrowStyle, bindBoxSwatches, boxModeHTML, boxSwatchesHTML } from './sketch-window.js';
 import { groupOf, withGroups } from '../core/ink-links.js';
 import { INK } from '../render/theme.js';
 
@@ -104,8 +105,11 @@ export class InkSelectMixin {
     const shown = (c) => c === INK ? '#111418' : c;
     const opacity = same(items, 'opacity') ? first.opacity : null;
     const units = esc(this.project.units);
+    const arrows = items.filter(isArrow);
+    const lines = strokes.length - arrows.length;
     const what = [
-      strokes.length ? `${strokes.length} stroke${strokes.length === 1 ? '' : 's'}` : '',
+      lines ? `${lines} stroke${lines === 1 ? '' : 's'}` : '',
+      arrows.length ? `${arrows.length} arrow${arrows.length === 1 ? '' : 's'}` : '',
       texts.length ? `${texts.length} text${texts.length === 1 ? '' : 's'}` : '',
     ].filter(Boolean).join(', ');
     let html = `<div class="sb-subhead">Ink (${what})</div>`;
@@ -118,11 +122,24 @@ export class InkSelectMixin {
       const width = same(strokes, 'width') ? strokes[0].width : null;
       html += `<div class="prop-row"><label>width</label><div class="unit-row"><input type="number" min="0.01" step="any" data-ink-k="width" value="${width == null ? '' : Number(width.toPrecision(4))}" placeholder="mixed"><span>${units}</span></div></div>`;
     }
+    if (arrows.length) {
+      const pick = (k, d) => (arrows.every(a => (a[k] ?? d) === (arrows[0][k] ?? d)) ? (arrows[0][k] ?? d) : null);
+      html += arrowStyleHTML({ tips: pick('tips', 'end'), head: pick('head', 'filled'), dash: pick('dash', false) && true }, 'data-ink-arrow', true)
+        .replace(/<label>Ends<\/label>/, '<label>ends</label>').replace(/<label>Head<\/label>/, '<label>head</label>').replace(/<label>Line<\/label>/, '<label>line</label>');
+      const attached = arrows.filter(a => a.at && (a.at[0] || a.at[1]));
+      if (attached.length) {
+        const lookup = this._anchorLookup();
+        const names = [...new Set(attached.flatMap(a => a.at.filter(Boolean).map(x => lookup.get(x.to)).filter(Boolean).map(e => esc(this._entityLabel(e)))))];
+        html += `<div class="prop-row"><label>attached</label><span class="prop-val">${names.join(', ') || 'a shape'} <button class="mini-btn" data-ink-act="detach" title="Free the arrow ends from the shapes">Detach</button></span></div>`;
+      }
+    }
     if (texts.length) {
       const size = same(texts, 'size') ? texts[0].size : null;
       const bold = texts.every(t => t.bold);
       html += `<div class="prop-row"><label>text size</label><div class="unit-row"><input type="number" min="0.01" step="any" data-ink-k="size" value="${size == null ? '' : Number(size.toPrecision(4))}" placeholder="mixed"><span>${units}</span></div></div>`;
       html += `<div class="prop-row"><label>bold</label><input type="checkbox" data-ink-k="bold"${bold ? ' checked' : ''}></div>`;
+      const ang = same(texts, 'angle') ? (texts[0].angle || 0) : null;
+      html += `<div class="prop-row"><label>angle</label><div class="unit-row"><input type="number" step="any" data-ink-k="angle" value="${ang == null ? '' : Number((ang * 180 / Math.PI).toFixed(2))}" placeholder="mixed"><span>°</span></div></div>`;
       const modes = texts.map(t => !t.box ? 'none' : t.box.border ? 'outline' : 'box');
       html += `<div class="prop-row"><label>box</label>${boxModeHTML(modes.every(m => m === modes[0]) ? modes[0] : null, 'data-ink-boxmode')}</div>`;
       const boxed = texts.filter(t => t.box);
@@ -187,6 +204,10 @@ export class InkSelectMixin {
           for (const s of (k === 'width' ? strokes : texts)) s[k] = v;
         } else if (k === 'bold') {
           for (const t of texts) t.bold = inp.checked;
+        } else if (k === 'angle') {
+          const deg = parseFloat(inp.value);
+          if (!Number.isFinite(deg)) { inp.classList.add('bad'); return; }
+          for (const t of texts) { const c = textCenter(t); if (deg) t.angle = deg * Math.PI / 180; else delete t.angle; placeTextCenter(t, c); }
         } else if (k === 'text') {
           if (!inp.value.trim()) { inp.value = texts[0].text; return; }
           texts[0].text = inp.value.replace(/\s+$/, '');
@@ -199,6 +220,14 @@ export class InkSelectMixin {
       });
     });
     const done = () => { this.commit(); this.refreshUI(); this.requestRender(); };
+    bindArrowStyle(body, 'data-ink-arrow', (k, v) => {
+      for (const a of items.filter(isArrow)) {
+        if (k === 'tips') { if (v === 'end') delete a.tips; else a.tips = v; }
+        else if (k === 'head') { if (v === 'filled') delete a.head; else a.head = v; }
+        else if (v) a.dash = true; else delete a.dash;
+      }
+      done();
+    });
     body.querySelectorAll('[data-ink-boxmode]').forEach(b => b.addEventListener('click', () => {
       const mode = b.dataset.inkBoxmode;
       for (const t of texts) {
@@ -217,6 +246,7 @@ export class InkSelectMixin {
       else if (act === 'ungroup') this.ungroupSelectedInk();
       else if (act === 'link') this.startLinkPick();
       else if (act === 'unlink') this.unlinkSelectedInk();
+      else if (act === 'detach') { for (const a of items.filter(isArrow)) { setArrowEnd(a, 0, null); setArrowEnd(a, 1, null); } done(); }
     }));
   }
 }

@@ -9,13 +9,16 @@
 
    Saved form (one list, `sketch.strokes`, in drawing order):
      stroke { id, layerId, kind: 'pen' | 'marker', color, opacity, width, pts: [x0, y0, x1, y1, …] }
-     text   { id, layerId, kind: 'text', color, opacity, size, text, bold?, box?, pts: [x, y] }
+     text   { id, layerId, kind: 'text', color, opacity, size, text, bold?, box?, angle?, pts: [x, y] }
+     arrow  { id, layerId, kind: 'arrow', color, opacity, width, tips?, head?, dash?, at?, pts: [tail, tip] }
+            (core/arrows.js)
    plus, on any item:
      group  'g12'          items with the same group select and move together
      link   { to, t?, f }  follows a point / line / circle / arc (core/ink-links.js)
    `width` and `size` are in world units; `pts` is a flat list of
    coordinates. A text's point is the top-left corner of its first line;
    `size` is the letter height (font size), lines are 1.25 × size apart.
+   `angle` (radians, counter-clockwise) turns a text about that corner.
 
    Text box: `box: { color, border? }` draws an opaque rounded box behind
    the text (padding 0.35 × size), so a label stays readable over lines
@@ -25,8 +28,10 @@
    themes. `border` outlines the box in the text colour.
    ============================================================ */
 
+import { ARROW_HEADS, ARROW_TIPS, cleanAttach } from './arrows.js';
+
 export const STROKE_KINDS = ['pen', 'marker'];
-export const INK_KINDS = ['pen', 'marker', 'text'];
+export const INK_KINDS = ['pen', 'marker', 'arrow', 'text'];
 
 /** Font used for text, on the canvas and in the inline editor. */
 export const TEXT_FONT = 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
@@ -57,9 +62,17 @@ export function strokeToJSON(s) {
     o.size = s.size;
     o.text = s.text;
     if (s.bold) o.bold = true;
+    if (s.angle) o.angle = s.angle;
     if (s.box) o.box = s.box.border ? { color: s.box.color, border: true } : { color: s.box.color };
   } else o.width = s.width;
-  o.pts = s.points.flatMap(p => [round(p.x), round(p.y)]);
+  if (s.kind === 'arrow') {
+    if (s.tips && s.tips !== 'end') o.tips = s.tips;
+    if (s.head && s.head !== 'filled') o.head = s.head;
+    if (s.dash) o.dash = true;
+    // Attached ends are saved at full precision: they sit exactly on the shape.
+    if (s.at && (s.at[0] || s.at[1])) o.at = [cleanAttach(s.at[0]), cleanAttach(s.at[1])];
+  }
+  o.pts = s.points.flatMap(p => (s.at ? [p.x, p.y] : [round(p.x), round(p.y)]));
   if (s.group) o.group = s.group;
   if (s.link) o.link = linkToJSON(s.link);
   return o;
@@ -108,9 +121,26 @@ export function reviveStroke(o) {
     const t = { ...base, kind: 'text', text, size: Number.isFinite(size) && size > 0 ? size : 5, bold: !!o.bold, points: [points[0]] };
     const box = cleanBox(o.box);
     if (box) t.box = box;
+    const angle = Number(o.angle);
+    if (Number.isFinite(angle) && angle) t.angle = angle;
     return t;
   }
   const width = Number(o.width);
+  if (o.kind === 'arrow') {
+    if (points.length < 2) return null;
+    const a = {
+      ...base, kind: 'arrow', width: Number.isFinite(width) && width > 0 ? width : 1,
+      points: [points[0], points[points.length - 1]],
+    };
+    if (ARROW_TIPS.includes(o.tips) && o.tips !== 'end') a.tips = o.tips;
+    if (ARROW_HEADS.includes(o.head) && o.head !== 'filled') a.head = o.head;
+    if (o.dash) a.dash = true;
+    if (Array.isArray(o.at)) {
+      const at = [cleanAttach(o.at[0]), cleanAttach(o.at[1])];
+      if (at[0] || at[1]) a.at = at;
+    }
+    return a;
+  }
   return {
     ...base,
     kind: STROKE_KINDS.includes(o.kind) ? o.kind : 'pen',
@@ -170,7 +200,9 @@ export function distanceToStroke(stroke, p) {
 
 /** True when a circle of radius r at p touches the stroke's ink. */
 export function strokeHit(stroke, p, r) {
-  return distanceToStroke(stroke, p) <= r + stroke.width / 2;
+  // An arrow's head is wider than its line.
+  const reach = stroke.kind === 'arrow' ? stroke.width * 1.8 : stroke.width / 2;
+  return distanceToStroke(stroke, p) <= r + reach;
 }
 
 /* ---- Text measuring ----
@@ -210,27 +242,58 @@ export function textBox(item) {
   return { w, h: lines.length * item.size * TEXT_LINE };
 }
 
-/** World box of a text's letters (without its box). */
-export function textBounds(item) {
-  const p = item.points[0], b = textBox(item);
-  return { minX: p.x, maxX: p.x + b.w, minY: p.y - b.h, maxY: p.y };
+/* ---- Text frame ----
+   A text may be turned by `angle` (radians, counter-clockwise, about its
+   top-left point). In its own frame x runs along the first line and y
+   runs down the lines; `u` and `d` are those directions in world units. */
+export function textAxes(item) {
+  const a = item.angle || 0, c = Math.cos(a), s = Math.sin(a);
+  return { u: { x: c, y: s }, d: { x: s, y: -c } };
 }
+
+/** The four world corners of a text's box (with its box padding when
+ *  `withBox` and it has a box), clockwise from the top-left. */
+export function textCorners(item, withBox = true) {
+  const p = item.points[0], b = textBox(item), { u, d } = textAxes(item);
+  const m = withBox && item.box ? item.size * BOX_PAD : 0;
+  const at = (x, y) => ({ x: p.x + u.x * x + d.x * y, y: p.y + u.y * x + d.y * y });
+  return [at(-m, -m), at(b.w + m, -m), at(b.w + m, b.h + m), at(-m, b.h + m)];
+}
+
+/** Middle of a text's letters, in world units. */
+export function textCenter(item) {
+  const p = item.points[0], b = textBox(item), { u, d } = textAxes(item);
+  return { x: p.x + u.x * b.w / 2 + d.x * b.h / 2, y: p.y + u.y * b.w / 2 + d.y * b.h / 2 };
+}
+
+/** Moves a text so the middle of its letters is at c. */
+export function placeTextCenter(item, c) {
+  const b = textBox(item), { u, d } = textAxes(item);
+  item.points = [{ x: c.x - u.x * b.w / 2 - d.x * b.h / 2, y: c.y - u.y * b.w / 2 - d.y * b.h / 2 }];
+}
+
+const aabb = (pts) => {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const p of pts) {
+    if (p.x < minX) minX = p.x; if (p.y < minY) minY = p.y;
+    if (p.x > maxX) maxX = p.x; if (p.y > maxY) maxY = p.y;
+  }
+  return { minX, minY, maxX, maxY };
+};
+
+/** World box of a text's letters (without its box). */
+export function textBounds(item) { return aabb(textCorners(item, false)); }
 
 /** World bounding box of a stroke (with its width) or a text (with its
  *  box, when it has one). */
 export function inkBounds(item) {
-  if (isText(item)) {
-    const b = textBounds(item);
-    if (!item.box) return b;
-    const m = item.size * BOX_PAD;
-    return { minX: b.minX - m, maxX: b.maxX + m, minY: b.minY - m, maxY: b.maxY + m };
-  }
+  if (isText(item)) return aabb(textCorners(item, true));
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   for (const p of item.points) {
     if (p.x < minX) minX = p.x; if (p.y < minY) minY = p.y;
     if (p.x > maxX) maxX = p.x; if (p.y > maxY) maxY = p.y;
   }
-  const h = (item.width || 0) / 2;
+  const h = (item.width || 0) * (item.kind === 'arrow' ? 1.8 : 0.5);
   return { minX: minX - h, minY: minY - h, maxX: maxX + h, maxY: maxY + h };
 }
 
@@ -249,15 +312,16 @@ export function unionBounds(items) {
  *  or anywhere in a text's box. */
 export function inkHit(item, p, r) {
   if (!isText(item)) return strokeHit(item, p, r);
-  const b = inkBounds(item);
-  return p.x >= b.minX - r && p.x <= b.maxX + r && p.y >= b.minY - r && p.y <= b.maxY + r;
+  // In the text's own frame, so a turned text is hit on its letters only.
+  const o = item.points[0], b = textBox(item), { u, d } = textAxes(item);
+  const m = (item.box ? item.size * BOX_PAD : 0) + r;
+  const qx = p.x - o.x, qy = p.y - o.y;
+  const x = qx * u.x + qy * u.y, y = qx * d.x + qy * d.y;
+  return x >= -m && x <= b.w + m && y >= -m && y <= b.h + m;
 }
 
 /** True when the item lies entirely inside the world box. */
 export function inkInBox(item, x0, y0, x1, y1) {
-  if (isText(item)) {
-    const b = inkBounds(item);
-    return b.minX >= x0 && b.maxX <= x1 && b.minY >= y0 && b.maxY <= y1;
-  }
+  if (isText(item)) return textCorners(item).every(p => p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1);
   return item.points.every(p => p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1);
 }

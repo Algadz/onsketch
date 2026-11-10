@@ -1283,9 +1283,11 @@
     border: 1px solid color-mix(in srgb, var(--text) 22%, transparent);
   }
   .palette .sw:hover { transform: scale(1.08); }
-  /* Sketch window: Fill, Pen, Marker, Text, Eraser in one row */
-  .fwin[data-win="sketch"] .fwin-body { width: 228px; }
-  .sketch-grid { grid-template-columns: repeat(5, 36px); }
+  /* Sketch window: Fill, Pen, Marker, Arrow, Text, Eraser in one row */
+  .fwin[data-win="sketch"] .fwin-body { width: 260px; }
+  .sketch-grid { grid-template-columns: repeat(6, 36px); }
+  .arrow-seg button, #sketch-body .seg.arrow-seg button { padding: 3px 6px; line-height: 0; }
+  .arrow-seg svg { display: block; }
   /* Text settings in the Sketch window: narrow label column, segments fit */
   #sketch-body .prop-row { grid-template-columns: 62px minmax(0, 1fr); }
   #sketch-body .seg button { padding: 4px 8px; }

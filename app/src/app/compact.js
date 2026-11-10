@@ -15,7 +15,7 @@ import { ACTION_ICONS, DRAW_TOOLS, TOOLS, TOOL_ICONS, WINDOW_ICONS, toolDef } fr
    ============================================================ */
 // Also used by the inline start-up script in app/index.html: keep both in step.
 const COMPACT_QUERY = '(pointer: coarse) and (max-width: 699px), (pointer: coarse) and (max-height: 499px)';
-const PAINT_TOOLS = ['fill', 'pen', 'marker', 'text', 'eraser'];
+const PAINT_TOOLS = ['fill', 'pen', 'marker', 'arrow', 'text', 'eraser'];
 const PANELS = [['layers', 'Layers'], ['colors', 'Colours'], ['props', 'Properties'], ['equations', 'Equations']];
 
 export class CompactMixin {

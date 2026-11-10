@@ -6,6 +6,7 @@ import { ArcTool, CenterLineTool, CenterRectangleTool, CircleTool, HexagonTool, 
 import { FillTool } from '../tools/fill.js';
 import { EraserTool, InkTool } from '../tools/freehand.js';
 import { TextTool } from '../tools/text.js';
+import { ArrowTool } from '../tools/arrow.js';
 import { SmartDimensionTool } from '../tools/smartdim.js';
 
 export class RenderEventsMixin {
@@ -22,6 +23,7 @@ export class RenderEventsMixin {
     this.renderer.drawGrid(this.gridOn, this.project.background);
     this.renderer.drawEntities(this.project, this.fillDisplay());
     this._drawInkLinks();
+    this._drawInkTransform(this.tool?.inkTransform);
     if (this._textEdit) this._textEdit.place();
 
     // Build a project-wide id → entity lookup for dimension drawing.
@@ -107,6 +109,7 @@ export class RenderEventsMixin {
       case 'marker':    this.tool = new InkTool(this, 'marker'); break;
       case 'eraser':    this.tool = new EraserTool(this); break;
       case 'text':      this.tool = new TextTool(this); break;
+      case 'arrow':     this.tool = new ArrowTool(this); break;
     }
     if (this.tool.activate) this.tool.activate();
     document.querySelectorAll('[data-tool]').forEach(b => b.classList.toggle('active', b.dataset.tool === name));
@@ -288,6 +291,7 @@ export class RenderEventsMixin {
       else if (k === 'g') this.setTool('marker');
       else if (k === 'e') this.setTool('eraser');
       else if (k === 't') this.setTool('text');
+      else if (k === 'w') this.setTool('arrow');
       else if (k === 'm') this.setDimensionsVisible(!this.showDimensions);
       else if (k === 'k') this.setRelationsVisible(!this.showRelations);
       else if (k === 'f') this.zoomFit();

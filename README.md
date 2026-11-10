@@ -15,6 +15,7 @@ npm run serve        # http://localhost:8080/app/
 npm test             # unit tests (node:test, no browser)
 npm run test:e2e     # drives the editor in headless Chromium (needs playwright)
 npm run test:ink     # text, text boxes, groups and linked ink, driven like a user
+npm run test:arrow   # arrows (snapping, attached ends, end handles), resize and turn
 npm run test:mobile  # phone / tablet layout and touch input on emulated devices
 npm run test:cloud   # account and cloud projects against a fake Supabase
 npm run lint
@@ -68,6 +69,26 @@ cached modules after a deploy. `npm test` fails if the stamp is out of date.
   light tints, or any colour; the outline is in the text colour.
   Properties edits the text, size, bold, box and box colour of the
   selected texts. Text is ink: the eraser removes it, the solver ignores it.
+- **Arrow (W)**, in the Sketch window: drag from where the arrow starts
+  to what it points at (the head goes where you release; a click without
+  a drag draws nothing; Shift keeps 15° steps; Esc cancels). Ends: tip
+  only / both / none (a leader); Head: filled / open / dot; Line: solid /
+  dashed; width in screen px stored in world units. With Snap on, each end
+  snaps like a line end and, dropped on a point, line, circle or arc,
+  **stays attached** to it: change a dimension and the tip keeps pointing
+  at the hole while the tail stays put. A selected arrow shows two end
+  handles to re-aim it (snapping and attaching the same way); dragging an
+  end off its shape, or the whole arrow away, detaches it. Properties
+  shows the style and what the arrow is attached to (Detach).
+- **Resize and turn ink**: select strokes, arrows, texts or a group (no
+  shapes) and a transform box appears. Corner handles resize keeping
+  proportions (Shift: free), edge handles stretch one way (Shift: keep
+  proportions), Alt resizes about the middle, the round handle above
+  turns about the middle (Shift: 15° steps); a label shows the scale or
+  angle, Esc cancels. Line widths and text sizes scale with the ink;
+  texts turn but are never stretched or mirrored (a flip moves them,
+  readable). Right-click: Rotate 90°, Flip horizontal, Flip vertical.
+  A text's angle is also in Properties. One gesture = one undo step.
 - **Group / link ink** (right-click a stroke or text, Properties, or the
   keyboard): **Group** (Ctrl+G) makes strokes and texts select and move
   as one; **Ungroup** (Ctrl+Shift+G). **Link to a shape…** then click a
@@ -255,8 +276,10 @@ Project
    ├─ constraints[]
    ├─ fills[]      fill-tool paint: colour, opacity, layer, a point inside the area
    └─ strokes[]    ink, in drawing order: pen / marker strokes (colour, opacity, width,
-                   points) and texts (text, size, bold, box {colour | 'paper', border},
-                   top-left point); any item may carry a group id and a link
+                   points), arrows (tail, tip, tips, head, dash, attached ends `at`:
+                   point / line + t / circle + angle) and texts (text, size, bold,
+                   angle, box {colour | 'paper', border}, top-left point); any item
+                   may carry a group id and a link
                    { to: entity id, t: fraction along a line, f: anchor frame }
                    (`core/strokes.js`, `core/ink-links.js`)
 ```

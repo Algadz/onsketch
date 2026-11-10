@@ -26,6 +26,7 @@ import { DimLinksMixin } from './dim-links.js';
 import { InkSelectMixin } from './ink-select.js';
 import { InkLinksMixin } from './ink-links.js';
 import { TextEditMixin } from './text-edit.js';
+import { InkTransformMixin } from './ink-transform.js';
 import { TouchMixin } from './touch.js';
 import { TouchUIMixin } from './touch-ui.js';
 import { CompactMixin } from './compact.js';
@@ -552,7 +553,10 @@ export class App {
    *  hints flash at the cursor. */
   _snapForCurrentTool(world) {
     if (!this.snapOn) return null;
-    const drawing = ['line','centerLine','rectangle','centerRectangle','circle','threePointCircle','hexagon','arc','point'].includes(this.toolName);
+    // Arrow ends snap like line ends (and attach to what they land on),
+    // when drawing an arrow or dragging the end of a selected one.
+    const drawing = ['line','centerLine','rectangle','centerRectangle','circle','threePointCircle','hexagon','arc','point','arrow'].includes(this.toolName)
+      || (this.toolName === 'select' && this.tool && this.tool.arrowEnd);
     const dragging = this.toolName === 'select' && this.tool && this.tool.dragging;
     if (!drawing && !dragging) return null;
     if (dragging) return this._snapForDragging(world);
@@ -669,7 +673,7 @@ export class App {
 }
 
 /* Methods are grouped into mixins by concern; see src/app/*.js. */
-for (const Mixin of [ChromeMixin, EquationsMixin, LayersPanelMixin, FillsMixin, DimensionLabelsMixin, SelectionMixin, DragMixin, SolveMixin, OperationsMixin, ConstraintActionsMixin, RenderEventsMixin, PanelsMixin, PersistenceMixin, SketchWindowMixin, ReportMixin, DimLinksMixin, InkSelectMixin, InkLinksMixin, TextEditMixin, TouchMixin, TouchUIMixin, CompactMixin, CloudMixin]) {
+for (const Mixin of [ChromeMixin, EquationsMixin, LayersPanelMixin, FillsMixin, DimensionLabelsMixin, SelectionMixin, DragMixin, SolveMixin, OperationsMixin, ConstraintActionsMixin, RenderEventsMixin, PanelsMixin, PersistenceMixin, SketchWindowMixin, ReportMixin, DimLinksMixin, InkSelectMixin, InkLinksMixin, TextEditMixin, InkTransformMixin, TouchMixin, TouchUIMixin, CompactMixin, CloudMixin]) {
   for (const key of Object.getOwnPropertyNames(Mixin.prototype)) {
     if (key === 'constructor') continue;
     Object.defineProperty(App.prototype, key, Object.getOwnPropertyDescriptor(Mixin.prototype, key));

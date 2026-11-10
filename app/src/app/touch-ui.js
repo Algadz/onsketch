@@ -26,7 +26,7 @@ export class TouchUIMixin {
           + ['←', '↑', '↓', '→'].map((g, i) => `<button class="tbtn" data-nudge="${i}" title="Nudge ${['left', 'up', 'down', 'right'][i]}">${g}</button>`).join('')
           + `<span class="opt-val">${this._nudgeStep()} ${esc(this.project.units)}</span></span>`;
       }
-    } else if (DRAW_TOOLS.has(t.id) || ['smartdim', 'pen', 'marker', 'text', 'eraser', 'fill'].includes(t.id)) {
+    } else if (DRAW_TOOLS.has(t.id) || ['smartdim', 'pen', 'marker', 'arrow', 'text', 'eraser', 'fill'].includes(t.id)) {
       html += sep + `<button class="tbtn" data-touch="done" title="Finish (like Escape)">✓<span class="btn-label">Done</span></button>`;
     }
     return html;
@@ -200,7 +200,7 @@ export class TouchUIMixin {
   /* used by tests and the compact shell */
   _toolGroupOf(id) {
     if (DRAW_TOOLS.has(id)) return 'draw';
-    if (['fill', 'pen', 'marker', 'text', 'eraser'].includes(id)) return 'paint';
+    if (['fill', 'pen', 'marker', 'arrow', 'text', 'eraser'].includes(id)) return 'paint';
     return id;
   }
   _toolLabel(id) { return toolDef(id).label; }

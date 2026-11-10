@@ -17,7 +17,7 @@ the tool.
 | Ink colour separate from geometry status colour | lines always show constraint state | **Phase 1, shipped** (ink colour) |
 | Move / recolour / delete a stroke | none | **Shipped** (Select tool) |
 | Text labels ("Kitchen", "Ø 40 bore", titles) | none | **Shipped** (Text tool, boxes) |
-| Arrows, leaders and callouts | none | Phase 2 |
+| Arrows, leaders and callouts | none | **Shipped** (Arrow tool, attached ends); callout text still to do |
 | Annotation that follows the geometry when a dimension changes | none | **Shipped** (Link to…), plus Group |
 | Reference image (photo, plan, screenshot) scaled to real size | none | Phase 3 |
 | Presentation view: clean lines without vertices, state colours or grid | none | Phase 4 |
@@ -100,9 +100,18 @@ that hard and would not fit "to scale".
    `{ kind: 'text', text, size, bold, box, pts: [x, y] }` so texts share
    layers, order, selection, eraser and undo with strokes. *Still to do:*
    "screen size" titles, alignment, fields (phase 3.2).
-3. **Arrow / leader tool (W).** Drag from the target to the label point;
-   options: arrowhead (none, open, filled, dot), line type, ink colour.
-   A leader can carry a text label at its tail (callout).
+3. **Arrow / leader tool (W).** *Shipped:* drag towards what you point at
+   (the head goes where you release, as in every drawing app, rather
+   than "from the target" as first planned). Ends: tip / both / none;
+   head: filled / open / dot; line: solid / dashed. Ends snap like line
+   ends and stay attached to the point, line (fraction t) or circle /
+   arc (angle) they land on (`core/arrows.js`). End handles re-aim a
+   selected arrow. *Still to do:* a text label at the tail (callout),
+   curved arrows.
+3b. *Shipped:* **resize and turn ink** — a transform box on selected ink
+   (corner / edge / turn handles, Shift and Alt modifiers), Rotate 90°
+   and Flip in the right-click menu; texts gain an angle
+   (`core/ink-transform.js`).
 4. **Straight segments in Pen.** Shift-click continues the stroke with a
    straight segment (as in Paint), Shift-drag constrains to 15°.
 5. **Partial eraser** (option in the eraser): cut strokes where the eraser
@@ -166,11 +175,10 @@ of the product and is the strongest story for "Paint, but to scale".
 
 ## Open questions
 
-- **Keyboard:** N, G, E and T are used now; W (arrow) is planned. Ctrl+G groups ink.
+- **Keyboard:** N, G, E, T and W are used now. Ctrl+G groups ink.
   Is P better kept for Point or moved to the presentation view?
-- **Ink with Snap on:** should a stroke's ends snap to geometry so a hand
-  arrow touches the edge exactly? Probably only for arrows and leaders
-  (phase 2), not freehand.
+- **Ink with Snap on:** settled: arrow ends snap (and attach); freehand
+  pen and marker strokes don't.
 - **Strokes and fills:** should a closed freehand loop be fillable? Not by
   the Fill tool (keeps the rule simple); tidy-up (phase 5) is the way.
 - **Size of projects with images:** move images out of the project JSON

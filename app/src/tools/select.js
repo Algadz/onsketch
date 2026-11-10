@@ -16,6 +16,13 @@ export class SelectTool extends Tool {
     // and need their own select / edit / drag handling.
     const r = this.app.canvas.getBoundingClientRect();
     const sx = ev.clientX - r.left, sy = ev.clientY - r.top;
+    // Handles of selected ink: resize / turn box, or the ends of an arrow.
+    const handle = ev.button === 0 || ev.button == null ? this.app.hitInkHandle(sx, sy) : null;
+    if (handle) {
+      this.inkTransform = this.app.beginInkTransform(handle, world);
+      this.arrowEnd = handle.type === 'end';
+      return;
+    }
     // Relation badges: click to select (Delete removes the relation).
     // A tap on a selected dimension edits it, even when a relation badge
     // is within reach (finger hit areas are larger and overlap).
@@ -131,6 +138,7 @@ export class SelectTool extends Tool {
     }
   }
   onPointerMove(world, snap, ev) {
+    if (this.inkTransform) { this.app.updateInkTransform(this.inkTransform, world, snap, ev); return; }
     if (this.app.linkPick) {
       const target = this.app.hitAnchorAt(world);
       this.app._setHoverTarget(target);
@@ -214,11 +222,21 @@ export class SelectTool extends Tool {
         }
       }
       if (changed) this.app.requestRender();
-      // Ink is selectable and movable: show it under the cursor.
-      this.app.canvas.style.cursor = !hit && this.app.hitStrokeAt(world) ? 'move' : 'default';
+      // Ink is selectable and movable: show it under the cursor; handles
+      // of selected ink show what they do.
+      const r = this.app.canvas.getBoundingClientRect();
+      const hc = ev ? this.app.inkHandleCursor(this.app.hitInkHandle(ev.clientX - r.left, ev.clientY - r.top)) : null;
+      this.app.canvas.style.cursor = hc || (!hit && this.app.hitStrokeAt(world) ? 'move' : 'default');
     }
   }
   onPointerUp(world, snap, ev) {
+    if (this.inkTransform) {
+      const t = this.inkTransform;
+      if (t.h.type === 'end' && world) this.app.updateInkTransform(t, world, snap, ev);
+      this.inkTransform = null; this.arrowEnd = false;
+      this.app.endInkTransform(t);
+      return;
+    }
     if (this.inkDrag) {
       const moved = this.inkDrag.moved;
       this.app.endInkDrag(this.inkDrag);
@@ -325,7 +343,12 @@ export class SelectTool extends Tool {
   onKey(ev) {
     if (ev.key === 'Delete' || ev.key === 'Backspace') { this.app.deleteSelection(); ev.preventDefault(); }
     else if (ev.key === 'Escape') {
-      if (this.app.cancelLinkPick()) {
+      if (this.inkTransform) {
+        const t = this.inkTransform;
+        this.inkTransform = null; this.arrowEnd = false;
+        this.app.endInkTransform(t, true);
+        ev.preventDefault();
+      } else if (this.app.cancelLinkPick()) {
         ev.preventDefault();
       } else if (this.app.cancelOperation()) {
         ev.preventDefault();

@@ -1,5 +1,5 @@
 import { Arc, Circle, Line, Point } from './entities.js';
-import { inkBounds, isText, unionBounds } from './strokes.js';
+import { isText, placeTextCenter, textCenter, unionBounds } from './strokes.js';
 
 /* =============== LINKED INK ====================================
    A stroke or a text can be linked to a point, a line, a circle or an
@@ -69,17 +69,13 @@ export function frameMap(from, to) {
   };
 }
 
-/** Moves one item from its stored frame to `frame`. A text moves its
- *  corner so the middle of its first line follows the frame; the letters
- *  keep their size and stay upright. */
+/** Moves one item from its stored frame to `frame`. A text moves so the
+ *  middle of its letters follows the frame; the letters keep their size
+ *  and their angle. */
 function carry(item, frame) {
   const map = frameMap(item.link.f, frame);
   if (isText(item)) {
-    const b = inkBounds(item);
-    const p = item.points[0];
-    const cx = (b.minX + b.maxX) / 2, cy = p.y - item.size * 0.6;
-    const q = map({ x: cx, y: cy });
-    item.points = [{ x: p.x + q.x - cx, y: p.y + q.y - cy }];
+    placeTextCenter(item, map(textCenter(item)));
   } else {
     item.points = item.points.map(map);
   }
