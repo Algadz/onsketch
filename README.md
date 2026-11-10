@@ -52,8 +52,18 @@ cached modules after a deploy. `npm test` fails if the stamp is out of date.
   Select (Mirror and Offset are in the Tools window); step-by-step help for
   Smart Dimension; Fill / Erase for the Fill tool.
 - **Floating windows** over the canvas, dragged by their title bar and
-  remembered per browser: Tools, Colors, Layers, Properties (selection,
-  relations, dimensions), Equations. *Reset window layout* puts them back.
+  remembered per browser: Tools, Colors, Layers, Properties, Equations.
+  *Reset window layout* puts them back.
+- **Properties** reads top to bottom: what is selected, its values (X / Y,
+  length and angle, centre and diameter, construction, layer), Relations,
+  Dimensions. Relation buttons are toggles: lit with ✓ when the relation
+  already holds (click again to remove it), dashed when it holds for part
+  of the selection, so a relation is never added twice. Under them, every
+  relation on the selection; hover highlights it on the canvas, click
+  selects it, × removes it. Dimensions are edited in place (a value or
+  `=equation`); only missing ones are offered. Typing a length or diameter
+  changes the driving dimension when there is one. A selected relation or
+  dimension shows what it ties, its value, Driven, and Delete.
 - **Line colour always shows state**, as in SolidWorks: blue under-defined,
   black fully defined, red over-defined, pink construction, orange selected.
 - **Sketch** window: Fill (B), Pen (N), Marker (G) and Eraser (E), with the

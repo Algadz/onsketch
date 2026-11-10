@@ -1101,6 +1101,70 @@ await page.evaluate(() => { const a = window._app; a.clearSelection?.(); a.selec
 await page.waitForFunction(() => document.getElementById('app-notice')?.classList.contains('show'));
 check(/mirror/i.test(await page.textContent('#app-notice')), 'Mirror with nothing selected: a notice, not a pop-up');
 await page.evaluate(() => { const w = window._app.windows; if (!w.isOpen('layers')) w.toggle('layers'); });
+// Properties: relations are toggles and can't be applied twice; values
+// and dimensions are edited in place.
+{
+  const P = (id, x, y) => ({ type: 'point', id, x, y });
+  await page.evaluate((proj) => {
+    const a = window._app; a.project = a.project.constructor.fromJSON(proj); a._afterStateSwap();
+    a.setTool('select'); a.windows.toggle('props', true); a.commit({ diagnostics: 'sync' });
+  }, { version: 3, activeLayerId: 'la', layers: [{ id: 'la', name: 'A' }], sketches: [{ id: 's', name: 'S',
+    entities: [{ type: 'line', id: 'pa', p1: P('pa1', 0, 0), p2: P('pa2', 30, 0) },
+               { type: 'line', id: 'pb', p1: P('pb1', 0, 20), p2: P('pb2', 30, 25) }],
+    constraints: [{ id: 'dl', kind: 'distance', p1: 'pa1', p2: 'pa2', value: 30, name: 'D1' }] }] });
+  const pick = (...ids) => page.evaluate((ids) => {
+    const a = window._app, s = a.activeSketch(); a.clearSelection();
+    for (const id of ids) a.setSelected(s.entities.flatMap(e => [e, ...e.children()]).find(e => e.id === id), true);
+    a.refreshUI();
+  }, ids);
+  const kinds = () => page.evaluate(() => window._app.activeSketch().constraints.map(c => c.kind + ':' + c.refs().join(',')));
+  const btn = (k) => `#sel-body .rel-btn[data-rel="${k}"]`;
+
+  await pick('pa');
+  await page.fill('#sel-body input[data-dim-edit="dl"]', '42');
+  await page.press('#sel-body input[data-dim-edit="dl"]', 'Enter');
+  const len = await page.evaluate(() => { const l = window._app.activeSketch().entities[0]; return Math.hypot(l.p2.x - l.p1.x, l.p2.y - l.p1.y); });
+  check(Math.abs(len - 42) < 1e-6, `dimension value edited in Properties drives the line (${len.toFixed(4)})`);
+  check(!(await page.isVisible('#sel-body [data-dim="distance"]')), 'no second Length dimension offered');
+  await pick('pa1');
+  await page.click(btn('fix'));
+  await page.click(btn('fix'));      // second click removes it again
+  check((await kinds()).filter(k => k.startsWith('fix')).length === 0, 'Fix button toggles: on, then off');
+  await page.click(btn('fix'));
+  await page.evaluate(() => { window._app.applyConstraint('fix'); window._app.applyConstraint('fix'); });
+  const fixes = (await kinds()).filter(k => k.startsWith('fix:'));
+  check(fixes.length === 1, `Fix is never applied twice (${fixes.length})`);
+  check(await page.evaluate(() => window._app.activeSketch().entities[0].p1.fixed) &&
+        (await page.getAttribute(btn('fix'), 'aria-pressed')) === 'true', 'fixed point shows Fix as applied');
+  await pick('pa');                  // the line: Fix holds on one end only
+  check((await page.getAttribute(btn('fix'), 'class')).includes('partial'), 'line with one fixed end shows Fix as partial');
+  await page.click(btn('fix'));
+  check((await kinds()).filter(k => k.startsWith('fix:')).length === 2, 'Fix on the line adds only the missing end');
+  await page.click(btn('horizontal'));
+  await page.evaluate(() => window._app.applyConstraint('horizontal'));
+  check((await kinds()).filter(k => k.startsWith('horizontal')).length === 1, 'Horizontal is never applied twice');
+
+
+  await pick('pa', 'pb');
+  await page.click(btn('parallel'));
+  check((await page.getAttribute(btn('parallel'), 'aria-pressed')) === 'true', 'Parallel lights up once applied');
+  await page.hover('#sel-body .rel-row');
+  check(await page.evaluate(() => window._app.activeSketch().constraints.some(c => c.hover)), 'hovering a relation row highlights it');
+  await page.evaluate(() => window._app.applyConstraint('parallel'));
+  check((await kinds()).filter(k => k.startsWith('parallel')).length === 1, 'Parallel is never applied twice');
+  await page.click('#sel-body .rel-row[data-cid] .rel-text >> nth=-1');
+  check(/Parallel/.test(await page.textContent('#sel-body .ps-head')) && await page.isVisible('#sel-body [data-delete-sel]'), 'clicking a relation row selects it');
+  await page.click('#sel-body [data-delete-sel]');
+  check(!(await kinds()).some(k => k.startsWith('parallel')), 'Delete removes the selected relation');
+  const unfix = await page.evaluate(() => {
+    const a = window._app, s = a.activeSketch();
+    a.clearSelection(); for (const c of s.constraints.filter(c => c.kind === 'fix')) a.setSelected(c, true);
+    a.deleteSelection();
+    return s.entities[0].p1.fixed || s.entities[0].p2.fixed;
+  });
+  check(!unfix, 'deleting Fix relations frees the points');
+}
+
 const dlgLayers = await page.evaluate(() => {
   const p = window._app.project;
   const full = p.layers.find(l => p.entitiesOnLayer(l.id).length);

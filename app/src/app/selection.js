@@ -63,7 +63,9 @@ export class SelectionMixin {
       if (inkDeleted) { this.commit(); this.refreshUI(); this.requestRender(); }
       return;
     }
+    const gone = sketch.constraints.filter(c => c.selected);
     sketch.constraints = sketch.constraints.filter(c => !c.selected);
+    this._syncFixFlags([], gone);
     for (const e of toDelete) sketch.removeEntity(e);
     this.commit();
     this.refreshUI();

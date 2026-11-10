@@ -588,7 +588,8 @@ export class Renderer {
       if (st === 'hidden') continue;
       const anchors = this._relationAnchors(c, entMap);
       if (!anchors.length) continue;
-      const colour = c.selected ? t.selected
+      const lit = c.selected || c.hover;          // hover: from the Properties list
+      const colour = lit ? t.selected
         : st !== 'active' ? t.dimGrey
         : (redundantIds && redundantIds.has(c.id)) ? t.over : t.accent;
       for (const an of anchors) {
@@ -603,13 +604,13 @@ export class Renderer {
         ctx.globalAlpha = st === 'active' ? 1 : 0.7;
         ctx.fillStyle = t.previewHalo;
         ctx.strokeStyle = colour;
-        ctx.lineWidth = c.selected ? 1.6 : 1;
+        ctx.lineWidth = lit ? 1.6 : 1;
         ctx.beginPath();
         if (ctx.roundRect) ctx.roundRect(x, y, size, size, 3); else ctx.rect(x, y, size, size);
         ctx.fill(); ctx.stroke();
         ctx.fillStyle = colour;
         ctx.fillText(glyph, x + size / 2, y + size / 2 + 0.5);
-        if (c.selected) {                     // show what it ties
+        if (lit) {                            // show what it ties
           ctx.beginPath(); ctx.arc(sp.x, sp.y, 5, 0, TAU); ctx.stroke();
         }
         if (st === 'active') this.lastRelRects.push({ constraint: c, x, y, w: size, h: size });
@@ -767,7 +768,7 @@ export class Renderer {
     const plab = v.worldToScreen(labelMid);
 
     const target = recordAs || c;
-    const cols = this._dimColors(grey, !!target.selected);
+    const cols = this._dimColors(grey, !!(target.selected || target.hover));
     ctx.save();
     ctx.strokeStyle = cols.stroke; ctx.fillStyle = cols.fill; ctx.lineWidth = 1;
 
@@ -918,7 +919,7 @@ export class Renderer {
     const center = circ.center;
     const r = circ.r;
     const v = this.view, ctx = this.ctx;
-    const cols = this._dimColors(grey, !!c.selected);
+    const cols = this._dimColors(grey, !!(c.selected || c.hover));
 
     const angle = (c.labelAngle != null) ? c.labelAngle : Math.PI/6;
     // labelDist controls inside-vs-outside placement based on cursor
@@ -979,7 +980,7 @@ export class Renderer {
     if (!inter) return;
 
     const v = this.view, ctx = this.ctx;
-    const cols = this._dimColors(grey, !!c.selected);
+    const cols = this._dimColors(grey, !!(c.selected || c.hover));
     const sector = angleSectorForValue(
       { p1:a1, p2:b1 },
       { p1:a2, p2:b2 },
