@@ -6,6 +6,10 @@ import { Tool } from './tool.js';
    canvas (app/text-edit.js): Enter or Esc finishes, Shift+Enter starts
    a new line, clicking elsewhere finishes. A click that finishes an
    edit only finishes it, so clicking away never drops an empty box.
+   Style is always editable: while typing, and after finishing, the
+   text's size, Bold, box and colour follow the style controls (Sketch
+   window, options bar, Colors); so do texts selected before. The next
+   new text, or Esc, deselects; Delete removes.
    Text is ink: on the active layer, in the shared colour, never solved.
    ============================================================ */
 export class TextTool extends Tool {
@@ -18,6 +22,7 @@ export class TextTool extends Tool {
     if (this.app.finishTextEdit()) { ev?.preventDefault?.(); return; }
     const hit = this.app.hitStrokeAt(world, { textOnly: true });
     if (hit) { this.app.editText(hit); ev?.preventDefault?.(); return; }
+    this.app.releaseInkCurrent();          // a new text: deselect the others
     this.app.startNewText(world);
     ev?.preventDefault?.();
   }
@@ -27,7 +32,15 @@ export class TextTool extends Tool {
     this.app.canvas.style.cursor = hit ? 'pointer' : 'text';
   }
   onKey(ev) {
-    if (ev.key === 'Escape' && !this.app._textEdit) this.app.setTool('select');
+    if (this.app._textEdit) return;
+    if ((ev.key === 'Delete' || ev.key === 'Backspace') && this.app.deleteInkCurrent()) {
+      ev.preventDefault();
+      document.getElementById('status-hint').textContent = this.hint();
+      return;
+    }
+    if (ev.key !== 'Escape') return;
+    if (this.app.releaseInkCurrent()) document.getElementById('status-hint').textContent = this.hint();
+    else this.app.setTool('select');
   }
   getPreview() {
     if (!this.cursor || this.app._textEdit) return null;

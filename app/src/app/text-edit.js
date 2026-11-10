@@ -12,7 +12,13 @@ import { INK } from '../render/theme.js';
    - finishing with no text removes the text (a new one is just dropped).
    A new text is added to the sketch only when it is finished, so
    starting one and clicking away leaves no trace and no undo step.
+   Restyling while typing: pressing a style button (Sketch window,
+   options bar, Colors palette) doesn't take the focus from the box, so
+   Bold / Box / a colour apply to the text being typed and typing goes
+   on. A finished text stays selected and keeps following the settings
+   until the next one starts (sketch-window.js, "Draw first, refine").
    ============================================================ */
+const STYLE_BUTTONS = '#sketch-body button, #optbar button, #colors-body .palette button';
 export class TextEditMixin {
   /** Starts a new text with the middle of its first line at `world`. */
   startNewText(world) {
@@ -46,6 +52,7 @@ export class TextEditMixin {
     ta.setAttribute('autocapitalize', 'sentences');
     ta.setAttribute('aria-label', 'Text');
     item._editing = true;
+    this._keepTextFocusOnStyleButtons();
     const te = { item, isNew, ta };
     te.place = () => {
       const v = this.view;
@@ -91,8 +98,18 @@ export class TextEditMixin {
     this._textEdit = te;
     focus();                     // at once, so typing right away goes in the box
     setTimeout(focus, 0);
-    document.getElementById('status-hint').textContent = 'Type the text. Enter or Esc finishes, Shift+Enter adds a line.';
+    document.getElementById('status-hint').textContent = 'Type the text. Enter or Esc finishes, Shift+Enter adds a line. Size, Bold, box and colour apply to it.';
     this.requestRender();
+  }
+
+  /** While a text is being typed, a press on a style button must not move
+   *  the focus away (that would finish the text): the click still runs. */
+  _keepTextFocusOnStyleButtons() {
+    if (this._textFocusGuard) return;
+    this._textFocusGuard = (e) => {
+      if (this._textEdit && e.target.closest?.(STYLE_BUTTONS)) e.preventDefault();
+    };
+    document.addEventListener('mousedown', this._textFocusGuard, true);
   }
 
   /** Closes the editor and keeps what was typed (one undo step).
@@ -121,6 +138,12 @@ export class TextEditMixin {
     }
     if (changed) { this.commit(); this.refreshUI(); }
     document.getElementById('status-hint').textContent = (this.tool?.hint && this.tool.hint()) || '';
+    // The text just written stays selected and keeps following the settings.
+    if (this.toolName === 'text' && sketch?.strokes.includes(item)) {
+      this.setInkCurrent(item);
+      document.getElementById('status-hint').textContent =
+        `Text ${isNew ? 'added' : 'updated'}. Change its size, Bold, box or colour now to restyle it, or click to write the next one. Delete removes it, Esc deselects.`;
+    }
     this.requestRender();
     return true;
   }

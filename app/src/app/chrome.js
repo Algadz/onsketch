@@ -149,7 +149,9 @@ export class ChromeMixin {
         html += sep + `<label class="opt">Sides <input type="number" min="3" max="64" step="1" value="${this.polygonSides}" data-opt="sides"></label>`;
       }
     } else if (t.id === 'select') {
-      html += sep + '<span class="opt-hint">Click to select, Ctrl-click to add, drag a box to select many, drag geometry to move it.</span>';
+      const kind = this._selectedStyleKind?.();          // selected arrows or texts: their style, editable here
+      html += kind ? this._sketchOptionsHTML(kind, true)
+        : sep + '<span class="opt-hint">Click to select, Ctrl-click to add, drag a box to select many, drag geometry to move it.</span>';
     } else if (t.id === 'smartdim') {
       html += sep + '<span class="opt-hint"><b>1.</b> Click one or two entities &nbsp; <b>2.</b> Click to place the dimension &nbsp; <b>3.</b> Type a value, Enter. Click an existing dimension to edit it.</span>';
     } else if (t.group === 'freehand') {

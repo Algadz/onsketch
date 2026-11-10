@@ -1,6 +1,6 @@
 import { PALETTE } from '../core/style.js';
-import { BOX_COLORS, PAPER } from '../core/strokes.js';
-import { ARROW_HEADS, ARROW_TIPS } from '../core/arrows.js';
+import { BOX_COLORS, PAPER, cleanBox, isText } from '../core/strokes.js';
+import { ARROW_HEADS, ARROW_TIPS, isArrow } from '../core/arrows.js';
 import { INK } from '../render/theme.js';
 import { TOOL_ICONS, toolDef } from '../ui/tool-defs.js';
 
@@ -20,6 +20,8 @@ export const SKETCH_TOOLS = ['fill', 'pen', 'marker', 'arrow', 'text', 'eraser']
 
 /** Size limits in screen pixels, and defaults. */
 const LIMITS = { pen: [1, 40], marker: [4, 80], arrow: [1, 16], text: [8, 120], eraser: [4, 120] };
+const clampPx = (v, [min, max]) => Math.max(min, Math.min(max, Math.round(v)));
+
 export const INK_DEFAULTS = {
   penSize: 3, penOpacity: 1,
   markerSize: 18, markerOpacity: 0.4,
@@ -61,11 +63,141 @@ export class SketchWindowMixin {
     this.requestRender();
   }
 
+  /* ---- Style of arrows and texts: always editable ----
+     The style controls (Sketch window, options bar, Colors) edit the
+     selected arrows and texts whenever the Select, Arrow or Text tool is
+     in use, and show their current style; with nothing selected they set
+     the style of the next one. The change also becomes the setting for
+     the next one, so "draw, then pick the style" and "pick the style,
+     then draw" both work.
+     - a new arrow or text is selected on its own as soon as it is made
+       (and a text while it is typed), so it can be restyled right away;
+     - with the Arrow tool, a click (no drag) on an arrow selects it;
+       with the Text tool, a click on a text edits it;
+     - starting the next arrow / text, or Esc, deselects; Delete removes. */
+
+  /** Select only `item` among the ink (geometry selection is kept). */
+  setInkCurrent(item) {
+    for (const s of this.project.sketches) for (const st of s.strokes) st.selected = false;
+    item.selected = true;
+    this.refreshUI();
+    this.requestRender();
+  }
+
+  /** Deselect the selected arrows and texts.
+   *  @returns {boolean} whether any were selected */
+  releaseInkCurrent() {
+    const items = this._styleTargets(true);
+    if (!items.length) return false;
+    for (const it of items) it.selected = false;
+    this.refreshUI();
+    this.requestRender();
+    return true;
+  }
+
+  /** Delete / Backspace in the Arrow or Text tool: removes the selected
+   *  arrows and texts (one undo step). @returns {boolean} */
+  deleteInkCurrent() {
+    const items = new Set(this._styleTargets(true)), sketch = this.activeSketch();
+    if (!items.size || !sketch) return false;
+    sketch.strokes = sketch.strokes.filter(s => !items.has(s));
+    this.commit();
+    this.refreshUI();
+    this.requestRender();
+    return true;
+  }
+
+  /** The arrows and texts the style controls edit now: the text being
+   *  typed, else the selected ones on the active layer (Select, Arrow and
+   *  Text tools only; `anyTool` skips that check). */
+  _styleTargets(anyTool = false) {
+    if (this._textEdit) return this.toolName === 'text' || anyTool ? [this._textEdit.item] : [];
+    if (!anyTool && !['select', 'arrow', 'text'].includes(this.toolName)) return [];
+    const sketch = this.activeSketch(); if (!sketch) return [];
+    const layerId = this.project.activeLayerId;
+    return sketch.strokes.filter(s => s.selected && s.layerId === layerId && (isArrow(s) || isText(s)));
+  }
+
+  /** Settings as the controls show them: the style of the first selected
+   *  item of that kind, else the settings for the next one. */
+  _shownSettings(kind) {
+    const s = this.inkSettings(kind);
+    if (kind !== 'arrow' && kind !== 'text') return s;
+    const it = this._styleTargets().find(x => (kind === 'arrow' ? isArrow(x) : isText(x)));
+    if (!it) return s;
+    const z = this.view.zoom;
+    if (kind === 'arrow') {
+      return { ...s, size: clampPx(it.width * z, LIMITS.arrow), tips: it.tips || 'end', head: it.head || 'filled', dash: !!it.dash };
+    }
+    const boxMode = !it.box ? 'none' : it.box.border ? 'outline' : 'box';
+    return { ...s, size: clampPx(it.size * z, LIMITS.text), bold: !!it.bold, boxMode, box: it.box ? { ...it.box } : null };
+  }
+
+  /** The colour the Colors window shows: the selection's, when every
+   *  selected arrow / text has the same one. */
+  _shownColor() {
+    const items = this._styleTargets();
+    if (items.length && items.every(x => x.color === items[0].color)) return items[0].color;
+    return this.pen.fillColor;
+  }
+
+  /** Applies changed style settings (pen keys) to the selected arrows and
+   *  texts. `final` makes one undo step; otherwise it only redraws (while
+   *  a slider is dragged). @returns {boolean} whether something changed */
+  _refineInk(changes, final = true) {
+    const items = this._styleTargets(); if (!items.length) return false;
+    const z = this.view.zoom;
+    let hit = false;
+    for (const it of items) {
+      for (const [k, v] of Object.entries(changes)) {
+        if (k === 'fillColor') { it.color = v; hit = true; continue; }
+        if (isArrow(it)) {
+          if (k === 'arrowSize') it.width = v / z;
+          else if (k === 'arrowTips') { if (v === 'end') delete it.tips; else it.tips = v; }
+          else if (k === 'arrowHead') { if (v === 'filled') delete it.head; else it.head = v; }
+          else if (k === 'arrowDash') { if (v) it.dash = true; else delete it.dash; }
+          else continue;
+          hit = true;
+        } else if (isText(it)) {
+          if (k === 'textSize') it.size = v / z;
+          else if (k === 'textBold') it.bold = !!v;
+          else if (k === 'textBox') {
+            if (v === 'none') delete it.box;
+            else it.box = cleanBox({ color: it.box?.color || this.pen.textBoxColor || PAPER, border: v === 'outline' });
+          } else if (k === 'textBoxColor') {
+            it.box = cleanBox({ color: v, border: !!it.box?.border });
+          } else continue;
+          hit = true;
+        }
+      }
+    }
+    if (!hit) return false;
+    if (this._textEdit && items.includes(this._textEdit.item)) this._textEdit.place();   // the open editor takes the new look
+    const unsaved = this._textEdit && !this.activeSketch()?.strokes.includes(this._textEdit.item);
+    if (final && !unsaved) { this.commit(); this._refreshSelectionPanel(); }  // a new text is committed when finished
+    this.requestRender();
+    return true;
+  }
+
   /** The tool whose size / opacity the window edits: the active sketch
    *  tool, else the last one used. */
   _sketchTarget() {
     if (SKETCH_TOOLS.includes(this.toolName)) this._lastSketchTool = this.toolName;
+    const kind = this._selectedStyleKind();
+    if (this.toolName === 'select' && kind) return kind;
     return this._lastSketchTool || 'pen';
+  }
+
+  /** 'arrow' or 'text' when the selected ink is all arrows or all texts
+   *  (a mix with strokes keeps the window as it is). */
+  _selectedStyleKind() {
+    const items = this._styleTargets();
+    if (!items.length) return null;
+    const layerId = this.project.activeLayerId;
+    if (this.selectedStrokes().some(s => s.layerId === layerId && !isArrow(s) && !isText(s))) return null;
+    if (items.every(isArrow)) return 'arrow';
+    if (items.every(isText)) return 'text';
+    return null;
   }
 
   /** Called on every tool change: the Colors window shows the opacity of
@@ -89,7 +221,7 @@ export class SketchWindowMixin {
         <span class="seg"><button class="${this.fillErase ? '' : 'on'}" data-mode="fill">Fill</button><button class="${this.fillErase ? 'on' : ''}" data-mode="erase">Erase</button></span></div>
         <div class="hint">Click inside a closed area of the active layer to colour it; outside every area colours the background.</div>`;
     } else {
-      const s = this.inkSettings(target);
+      const s = this._shownSettings(target);
       const [min, max] = LIMITS[target];
       opts = `<div class="prop-row"><label>${toolDef(target).label} size</label>
         <div class="range-row"><input type="range" min="${min}" max="${max}" step="1" value="${s.size}" aria-label="Size"><span>${s.size} px</span></div></div>
@@ -117,7 +249,7 @@ export class SketchWindowMixin {
     if (r) {
       const key = target + 'Size';
       const read = () => { const v = parseFloat(r.value); r.nextElementSibling.textContent = v + ' px'; return v; };
-      r.addEventListener('input', () => { this.pen[key] = read(); this.requestRender(); });
+      r.addEventListener('input', () => { this.pen[key] = read(); this._refineInk({ [key]: this.pen[key] }, false); this.requestRender(); });
       r.addEventListener('change', () => this._setInk({ [key]: read() }));
     }
   }
@@ -143,7 +275,7 @@ export class SketchWindowMixin {
     const body = document.getElementById('colors-body');
     if (!body) return;
     const p = this.pen;
-    const c = p.fillColor;
+    const c = this._shownColor();
     const target = this._opacityTarget();
     const opacity = target === 'fill' ? p.fillOpacity : this.inkSettings(target).opacity;
     body.innerHTML = `
@@ -161,6 +293,7 @@ export class SketchWindowMixin {
 
     const setColor = (x, final = true) => {
       this._setPen('fillColor', x, final);
+      this._refineInk({ fillColor: x }, final);
       if (final) { this._refreshColorsPanel(); this._refreshOptionsBar(); }
       this.requestRender();
     };
@@ -182,6 +315,7 @@ export class SketchWindowMixin {
 
   _setInk(changes) {
     Object.assign(this.pen, changes);
+    this._refineInk(changes, true);
     this._savePrefs();
     this._refreshSketchWindow();
     this._refreshColorsPanel();
@@ -191,8 +325,8 @@ export class SketchWindowMixin {
   }
 
   /** Options bar for the sketch tools: size, opacity and the colour. */
-  _sketchOptionsHTML(id) {
-    const s = this.inkSettings(id);
+  _sketchOptionsHTML(id, restyle = false) {
+    const s = this._shownSettings(id);
     const sep = '<span class="opt-sep"></span>';
     const [min, max] = LIMITS[id];
     let html = sep + `<label class="opt">Size <input type="range" min="${min}" max="${max}" step="1" value="${s.size}" data-ink="${id}Size"><span class="opt-val">${s.size} px</span></label>`;
@@ -200,18 +334,19 @@ export class SketchWindowMixin {
       html += `<button class="tbtn toggle${s.bold ? ' on' : ''}" data-opt="text-bold" title="Bold text"><b>B</b><span class="btn-label">Bold</span></button>`;
       html += `<span class="opt">Box ${boxModeHTML(s.boxMode, 'data-opt-boxmode')}</span>`;
       if (s.box) html += `<span class="opt">${boxSwatchesHTML(s.box.color, 'data-opt-boxcolor')}</span>`;
-      const ink = this.pen.fillColor;
+      const ink = this._shownColor();
       html += `<label class="opt">Colour <i class="opt-sw" style="--sw:${ink === INK ? 'var(--text)' : ink}"></i></label>`;
     } else if (id === 'arrow') {
       html += `<span class="opt">${arrowStyleHTML(s, 'data-opt-arrow', false)}</span>`;
-      const ink = this.pen.fillColor;
+      const ink = this._shownColor();
       html += `<label class="opt">Colour <i class="opt-sw" style="--sw:${ink === INK ? 'var(--text)' : ink}"></i></label>`;
     } else if (id !== 'eraser') {
       html += `<label class="opt">Opacity <input type="range" min="0.05" max="1" step="0.05" value="${s.opacity}" data-ink="${id}Opacity"><span class="opt-val">${Math.round(s.opacity * 100)}%</span></label>`;
       const ink = this.pen.fillColor;
       html += `<label class="opt">Colour <i class="opt-sw" style="--sw:${ink === INK ? 'var(--text)' : ink}"></i></label>`;
     }
-    const hint = id === 'eraser' ? 'Drag over strokes and texts to erase them (active layer only).'
+    const hint = restyle ? `Restyles the selected ${id === 'arrow' ? 'arrows' : 'texts'}; it also sets the style of the next one.`
+      : id === 'eraser' ? 'Drag over strokes and texts to erase them (active layer only).'
       : id === 'text' ? 'Click to place text, Enter to finish, Shift+Enter for a new line. Click a text to edit it.'
       : id === 'arrow' ? 'Drag to what you point at. Ends snap to shapes and stay attached. Shift: 15° steps.'
         : 'Drag to draw. Esc cancels the stroke. Alt-drag pans.';
@@ -226,8 +361,8 @@ export class SketchWindowMixin {
         r.nextElementSibling.textContent = key.endsWith('Size') ? v + ' px' : Math.round(v * 100) + '%';
         return v;
       };
-      r.addEventListener('input', () => { this.pen[key] = read(); this.requestRender(); });
-      r.addEventListener('change', () => { this.pen[key] = read(); this._savePrefs(); this._refreshSketchWindow(); });
+      r.addEventListener('input', () => { this.pen[key] = read(); this._refineInk({ [key]: this.pen[key] }, false); this.requestRender(); });
+      r.addEventListener('change', () => { this.pen[key] = read(); this._refineInk({ [key]: this.pen[key] }, true); this._savePrefs(); this._refreshSketchWindow(); });
     });
     bar.querySelector('[data-opt="text-bold"]')?.addEventListener('click', () => this._setInk({ textBold: !this.pen.textBold }));
     bar.querySelectorAll('[data-opt-boxmode]').forEach(b => b.addEventListener('click', (e) => { e.preventDefault(); this._setInk({ textBox: b.dataset.optBoxmode }); }));

@@ -16,6 +16,7 @@ npm test             # unit tests (node:test, no browser)
 npm run test:e2e     # drives the editor in headless Chromium (needs playwright)
 npm run test:ink     # text, text boxes, groups and linked ink, driven like a user
 npm run test:arrow   # arrows (snapping, attached ends, end handles), resize and turn
+node tests/style.e2e.mjs  # restyling arrows / texts after drawing, touch tap-through guard
 npm run test:mobile  # phone / tablet layout and touch input on emulated devices
 npm run test:cloud   # account and cloud projects against a fake Supabase
 npm run lint
@@ -69,6 +70,16 @@ cached modules after a deploy. `npm test` fails if the stamp is out of date.
   light tints, or any colour; the outline is in the text colour.
   Properties edits the text, size, bold, box and box colour of the
   selected texts. Text is ink: the eraser removes it, the solver ignores it.
+- **Style is always editable** (arrows and texts): draw or write first,
+  then pick the style. A new arrow or text is selected as soon as it is
+  made (a text even while you type: Bold, Box or a colour don't close the
+  box), and the style controls (Sketch window, options bar, Colors)
+  restyle the selected arrows and texts with the Select, Arrow or Text
+  tool, and show their style. With the Arrow tool a click (no drag) on an
+  arrow selects it; with the Text tool a click on a text edits it; with
+  Select, the options bar shows the style of selected arrows or texts.
+  A change also sets the style of the next one. Starting the next one or
+  Esc deselects; Delete removes. Each restyle is one undo step.
 - **Arrow (W)**, in the Sketch window: drag from where the arrow starts
   to what it points at (the head goes where you release; a click without
   a drag draws nothing; Shift keeps 15° steps; Esc cancels). Ends: tip
@@ -164,7 +175,11 @@ goes through `app/src/app/touch.js` first:
 - a loupe shows the area under the finger while placing or dragging points;
 - after touch is used, the options bar adds Multi-select, Delete, nudge
   arrows and Done, and dimension values open a keypad (digits, units,
-  operators, dimension names).
+  operators, dimension names);
+- no tap-through: the tap that makes a control appear under the finger
+  (the Delete button after selecting, the keypad after tapping a
+  dimension, a long-press menu) can't press it; only a press that starts
+  on the control counts.
 
 On a touch screen narrower than 700 px (or shorter than 500 px), the editor
 switches to a phone layout (`compact.js`, styles under `.compact`): top bar

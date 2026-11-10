@@ -1,6 +1,7 @@
 import { Arc, Circle, Line, Point } from '../core/entities.js';
 import { allDimensions } from '../core/equations.js';
 import { DRAW_TOOLS, toolDef } from '../ui/tool-defs.js';
+import { armOnPress } from '../ui/tap-guard.js';
 
 const esc = (t) => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -68,6 +69,7 @@ export class TouchUIMixin {
   _setupFab() {
     const b = document.getElementById('fab-delete');
     if (!b) return;
+    armOnPress(b);          // the tap that selected (and showed the button) must not delete
     b.addEventListener('click', () => { this.deleteSelection(); this.refreshUI(); this.requestRender(); });
   }
 
@@ -82,6 +84,7 @@ export class TouchUIMixin {
     const menu = document.createElement('div');
     menu.id = 'context-menu';
     menu.addEventListener('pointerdown', e => e.stopPropagation());
+    armOnPress(menu);       // the long press that opened it must not pick an item
     const isDim = c.value != null && c.kind !== 'offset';
     const title = isDim ? `Dimension ${c.name || ''}`.trim() : 'Relation';
     const row = (action, glyph, label) => `<button type="button" class="context-menu-item action" data-action="${action}"><span class="glyph">${glyph}</span><span>${label}</span></button>`;
@@ -158,6 +161,7 @@ export class TouchUIMixin {
         ${key('0')}${key('.')}${key('=', '=', 'op')}${key('+', '+', 'op')}${key('enter', '↵', 'go')}
       </div>
       <div class="pad-foot">${key('kbd', '⌨ Keyboard', 'small')}${key('clear', 'Clear', 'small')}${key('cancel', 'Cancel', 'small')}</div>`;
+    armOnPress(pad);        // the tap that opened the keypad must not type a key
     pad.addEventListener('pointerdown', (e) => { e.preventDefault(); vi.hold(); });
     pad.addEventListener('click', (e) => {
       const b = e.target.closest('[data-k]'); if (!b) return;

@@ -7,6 +7,7 @@ import { View } from '../render/view.js';
 import { Renderer } from '../render/renderer.js';
 import { SnapEngine } from '../editor/snap.js';
 import { SelectTool } from '../tools/select.js';
+import { armOnPress } from '../ui/tap-guard.js';
 import { DimensionLabelsMixin } from './dimensions.js';
 import { SelectionMixin } from './selection.js';
 import { DragMixin } from './drag.js';
@@ -517,6 +518,7 @@ export class App {
       }
     }
 
+    armOnPress(menu);          // a long press that opens it under the finger must not pick an item
     document.body.appendChild(menu);
     const margin = 8;
     const rect = menu.getBoundingClientRect();
