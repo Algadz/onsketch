@@ -17,7 +17,10 @@ export class SelectTool extends Tool {
     const r = this.app.canvas.getBoundingClientRect();
     const sx = ev.clientX - r.left, sy = ev.clientY - r.top;
     // Relation badges: click to select (Delete removes the relation).
-    const rel = this.app.hitRelationAtScreen(sx, sy);
+    // A tap on a selected dimension edits it, even when a relation badge
+    // is within reach (finger hit areas are larger and overlap).
+    const selDim = this.app.hitDimAtScreen(sx, sy);
+    const rel = selDim?.selected ? null : this.app.hitRelationAtScreen(sx, sy);
     if (rel) {
       const isToggle = ev.ctrlKey || ev.metaKey || this.app.multiSelect;
       if (isToggle) this.app.setSelected(rel, !rel.selected);
@@ -29,7 +32,7 @@ export class SelectTool extends Tool {
       this.app.requestRender();
       return;
     }
-    const dim = this.app.hitDimAtScreen(sx, sy);
+    const dim = selDim;
     if (dim) {
       const wasSelected = !!dim.selected;
       const isToggle = ev.ctrlKey || ev.metaKey || this.app.multiSelect;

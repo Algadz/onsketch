@@ -141,7 +141,11 @@ const lineMidOnScreen = (page, t = 0.5) => app(page, (t) => {
   check(await app(page, () => document.querySelector('.fwin[data-win="colors"]').hidden), 'phone: swiping a sheet down closes it');
 
   // ⋯ menu toggles.
+  // (Right after the sheet swipe the first tap can land while the sheet is
+  // still closing; tap again if the menu didn't open.)
+  await page.waitForTimeout(250);
   await page.tap('#more-btn');
+  if (!(await page.locator('[data-more="grid"]').isVisible())) { await page.waitForTimeout(250); await page.tap('#more-btn'); }
   await page.tap('[data-more="grid"]');
   check(await app(page, () => window._app.gridOn) === false, 'phone: ⋯ menu toggles the grid');
 
@@ -154,6 +158,33 @@ const lineMidOnScreen = (page, t = 0.5) => app(page, (t) => {
   await page.waitForTimeout(200);
   const d1 = await app(page, () => window._app.activeSketch().constraints.find(c => c.name === 'D1').value);
   check(d1 === 1600 && !(await page.isVisible('#dimpad')), `phone: dimension keypad types 1.6m (D1 = ${d1})`);
+
+  // Tap a dimension, tap it again: the value box opens and stays open, even
+  // when the phone's late compatibility mousedown takes the focus away (it
+  // used to close at once: a flicker), and even with a relation badge in
+  // finger reach of the label.
+  await app(page, () => { const a = window._app; a.clearSelection(); a.refreshUI(); a.requestRender(); });
+  await page.waitForTimeout(150);
+  const lbl = await app(page, () => {
+    const a = window._app, c = a.canvas.getBoundingClientRect();
+    const r = a.renderer.lastDimRects.find(x => !x.constraint.driven && !a.hitRelationAtScreen(x.x + x.w / 2, x.y + x.h / 2)
+      && a.hitDimAtScreen(x.x + x.w / 2, x.y + x.h / 2) === x.constraint);
+    return { x: c.left + r.x + r.w / 2, y: c.top + r.y + r.h / 2, name: r.constraint.name };
+  });
+  await page.touchscreen.tap(lbl.x, lbl.y);
+  await page.waitForTimeout(400);
+  const picked = await app(page, () => window._app.activeSketch().constraints.filter(c => c.selected).map(c => c.name).join());
+  check(picked === lbl.name, `phone: a tap selects dimension ${lbl.name} (${picked})`);
+  await page.touchscreen.tap(lbl.x, lbl.y);
+  await page.waitForSelector('.dim-input');
+  await page.waitForTimeout(30);
+  await app(page, () => document.activeElement?.blur());       // what the late mousedown does
+  await page.waitForTimeout(300);
+  check(await page.isVisible('.dim-input') && await app(page, () => document.activeElement?.classList.contains('dim-input')),
+    `phone: tapping a selected dimension (${lbl.name}) opens its value box and it stays open`);
+  await page.tap('#dimpad [data-k="cancel"]');
+  await page.waitForTimeout(150);
+  check(!(await page.isVisible('.dim-input')), 'phone: Cancel closes the value box');
 
   check(errors.length === 0, `phone: no page errors${errors.length ? ': ' + errors.join(' / ') : ''}`);
   await ctx.close();

@@ -161,9 +161,15 @@ export class EquationsMixin {
       if (e.key === 'Enter') { e.preventDefault(); tryCommit(); }
       else if (e.key === 'Escape') { e.preventDefault(); close(); cancel(); }
     });
+    // On a phone the tap that opened the box is followed by the browser's
+    // compatibility mouse events, whose mousedown lands on the canvas and
+    // takes the focus away: the box would open and close at once (a
+    // flicker). A blur that soon after opening refocuses instead.
+    const opened = performance.now();
     input.addEventListener('blur', () => {
       if (done) return;
       if (hold) { hold = false; return; }           // a canvas pick: stay open
+      if (this.touchUI && performance.now() - opened < 600) { refocus(); return; }
       if (!tryCommit()) { close(); cancel(); }      // leaving with bad text cancels
     });
     return { el: input, dispose: () => { if (!done) close(); } };
