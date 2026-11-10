@@ -155,10 +155,24 @@ export class Sketch {
   }
 }
 
+/* What the editor shows, saved with the project so it opens the way it
+   was left: { grid, snap, dimensions, relations, dimNames }. Files from
+   before this was saved have none (null): the editor then keeps its
+   current setup and writes it into the project. */
+export const DISPLAY_DEFAULTS = { grid: true, snap: true, dimensions: true, relations: true, dimNames: false };
+
+export function cleanDisplay(d) {
+  if (!d || typeof d !== 'object') return null;
+  const out = {};
+  for (const [k, v] of Object.entries(DISPLAY_DEFAULTS)) out[k] = typeof d[k] === 'boolean' ? d[k] : v;
+  return out;
+}
+
 export class Project {
   constructor() {
     this.name = 'Untitled';
     this.background = null;       // canvas fill colour set by the fill tool, or null
+    this.display = null;          // grid / snap / dimensions / relations shown (cleanDisplay), or null when never set
     this.variables = [];          // global variables: { name, expr } (value/error are computed)
     this.drawStyle = null;        // style given to new entities (set by the editor; not saved)
     this.units = 'mm';
@@ -260,6 +274,7 @@ export class Project {
     return {
       version: 3, name:this.name, units:this.units,
       ...(this.background ? { background: this.background } : {}),
+      ...(this.display ? { display: { ...this.display } } : {}),
       ...(this.variables.length ? { variables: this.variables.map(v => ({ name: v.name, expr: v.expr })) } : {}),
       activeSketchId:this.activeSketchId,
       activeLayerId:this.activeLayerId,
@@ -272,6 +287,7 @@ export class Project {
     p.name  = o.name || 'Untitled';
     p.units = o.units || 'mm';
     p.background = /^#[0-9a-f]{6}$/i.test(o.background || '') ? o.background : null;
+    p.display = cleanDisplay(o.display);
     p.variables = Array.isArray(o.variables)
       ? o.variables.filter(v => v && typeof v.name === 'string' && typeof v.expr === 'string').map(v => ({ name: v.name, expr: v.expr }))
       : [];

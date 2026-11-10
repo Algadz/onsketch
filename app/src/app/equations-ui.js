@@ -212,7 +212,7 @@ export class EquationsMixin {
         this.project.variables.splice(+b.dataset.i, 1);
       } else if (b.dataset.eq === 'names') {
         this.showDimNames = !this.showDimNames;
-        this._savePrefs();
+        this._displayChanged();
         this.requestRender();
         this._refreshEquationsPanel();
         return;

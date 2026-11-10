@@ -1,6 +1,5 @@
 import { Arc, Circle, Line } from '../core/entities.js';
 import { CollinearConstraint, ConcentricConstraint, EqualLengthConstraint, EqualRadiusConstraint, FixConstraint, HorizontalConstraint, ParallelConstraint, PerpendicularConstraint, TangentCircleCircleConstraint, TangentLineCircleConstraint, VerticalConstraint } from '../core/constraints.js';
-import { Project } from '../core/model.js';
 import { classifySelection } from '../editor/relations.js';
 import { confirmDialog } from '../ui/dialogs.js';
 
@@ -187,7 +186,7 @@ export class ConstraintActionsMixin {
           confirmLabel: 'Keep it', cancelLabel: 'Remove it',
         }).then(keep => {
           if (keep) return;
-          this.project = Project.fromJSON(JSON.parse(beforeJSON));
+          this._swapSameDocument(beforeJSON);
           this.selectionOrder = [];
           this.solveAndRender();
           this.refreshUI();

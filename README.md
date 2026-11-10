@@ -16,6 +16,7 @@ npm test             # unit tests (node:test, no browser)
 npm run test:e2e     # drives the editor in headless Chromium (needs playwright)
 npm run test:ink     # text, text boxes, groups and linked ink, driven like a user
 npm run test:arrow   # arrows (snapping, attached ends, end handles), resize and turn
+npm run test:display # grid / snap / dimensions / relations saved with the project
 node tests/style.e2e.mjs  # restyling arrows / texts after drawing, touch tap-through guard
 npm run test:mobile  # phone / tablet layout and touch input on emulated devices
 npm run test:cloud   # account and cloud projects against a fake Supabase
@@ -39,7 +40,13 @@ cached modules after a deploy. `npm test` fails if the stamp is out of date.
 ## Interface
 
 - **Menu bar**: New / Open / Save with the save status, edit actions, project name, view toggles (grid, snap,
-  dimensions `M`, zoom, theme) and toggles for each window.
+  dimensions `M`, relations `K`, zoom, theme) and toggles for each window.
+  Grid, snap, dimensions, relations and dimension names are **saved with
+  the project**: a drawing opens the way it was left, in this browser, from
+  the account on another device, or as an example. Toggling isn't an undo
+  step and undo never flips them back. A new sketch, or a file saved before
+  this existed, starts from the current setup. The light / dark theme is a
+  per-device preference.
 - **Options bar** (second row): settings for the active tool, as in Paint.NET.
   Line weight, line type and construction while drawing; a short hint with
   Select (Mirror and Offset are in the Tools window); step-by-step help for
@@ -285,6 +292,7 @@ variable changed it).
 Project
 ├─ layers[]        bottom → top: name, opacity, visible (no colours)
 ├─ background      canvas colour from the fill tool, or null
+├─ display         { grid, snap, dimensions, relations, dimNames } shown, or absent (older files)
 └─ sketches[0]     the single parametric sketch
    ├─ entities[]   Point / Line / Circle / Arc, each with layerId and style
    │               (line weight, line type)

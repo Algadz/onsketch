@@ -65,10 +65,12 @@ export class LayersPanelMixin {
     this.setDimensionsVisible(prefs.showDimensions !== false, false);
     this.showDimNames = !!prefs.showDimNames;
     this.setRelationsVisible(prefs.showRelations !== false, false);
+    this.setGridVisible(prefs.grid !== false, false);
+    this.setSnapOn(prefs.snap !== false, false);
   }
   _savePrefs() {
     try {
-      localStorage.setItem(PREFS_KEY, JSON.stringify({ theme: this.themeName, pen: this.pen, showDimensions: this.showDimensions, showDimNames: !!this.showDimNames, showRelations: this.showRelations !== false }));
+      localStorage.setItem(PREFS_KEY, JSON.stringify({ theme: this.themeName, pen: this.pen, showDimensions: this.showDimensions, showDimNames: !!this.showDimNames, showRelations: this.showRelations !== false, grid: this.gridOn !== false, snap: this.snapOn !== false }));
     } catch { /* storage unavailable */ }
   }
   setTheme(name, save = true) {

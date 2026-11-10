@@ -121,15 +121,22 @@ export class PersistenceMixin {
     const cur = this.undoStack.pop();
     this.redoStack.push(cur);
     const prev = this.undoStack[this.undoStack.length - 1];
-    this.project = Project.fromJSON(JSON.parse(prev));
+    this._swapSameDocument(prev);
     this._afterStateSwap();
   }
   redo() {
     if (!this.redoStack.length) return;
     const next = this.redoStack.pop();
     this.undoStack.push(next);
-    this.project = Project.fromJSON(JSON.parse(next));
+    this._swapSameDocument(next);
     this._afterStateSwap();
+  }
+  /** Undo / redo / abort: an earlier state of the same drawing. The
+   *  display (grid, snap…) stays as it is now: toggling isn't undone. */
+  _swapSameDocument(json) {
+    this._keepDisplay = true;
+    try { this.project = Project.fromJSON(JSON.parse(json)); }
+    finally { this._keepDisplay = false; }
   }
   /** After replacing this.project with a freshly revived version, the
    *  current tool may be holding references to entities that no longer

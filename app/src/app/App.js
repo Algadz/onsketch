@@ -86,6 +86,8 @@ export class App {
     this._setupCompact();
     this._setupFab();
     this._setupResize();
+    this._displayReady = true;                   // from here, projects carry their display
+    this.project.display = this.displaySettings();
     const restored = this.loadLocalIfAny();
     this._setupAutosave();
     this._setupCloud();
@@ -102,6 +104,13 @@ export class App {
   set project(p) {
     this._project = p;
     if (p) p.drawStyle = this.pen ? this._penStyle() : null;
+    // A project opened from storage brings its display (grid, snap,
+    // dimensions, relations); undo / redo keep the current one (toggling
+    // isn't an undo step); a project without one takes the current setup.
+    if (p && this._displayReady) {
+      if (this._keepDisplay || !p.display) p.display = this.displaySettings();
+      else this.applyDisplay(p.display);
+    }
   }
 
   /* ---- Sketch helpers ---- */

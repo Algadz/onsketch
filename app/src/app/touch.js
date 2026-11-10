@@ -1,4 +1,3 @@
-import { Project } from '../core/model.js';
 
 /* =============== TOUCH AND STYLUS INPUT ========================
    Mouse input never comes through here (render-events.js sends mouse
@@ -170,7 +169,7 @@ export class TouchMixin {
     const t = this.tool;
     const changed = t && (t.dragging || (t.inkDrag && t.inkDrag.moved) || (t.erasing && t.removed));
     if (changed && this.undoStack.length) {
-      this.project = Project.fromJSON(JSON.parse(this.undoStack[this.undoStack.length - 1]));
+      this._swapSameDocument(this.undoStack[this.undoStack.length - 1]);
       this._afterStateSwap();
     }
     this.lastDragSnaps = [];

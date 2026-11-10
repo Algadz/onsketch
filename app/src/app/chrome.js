@@ -58,8 +58,8 @@ export class ChromeMixin {
       case 'mirror':       this.startMirrorOperation(); break;
       case 'offset':       this.startOffsetOperation(); break;
       case 'construction': this.constructionMode = !this.constructionMode; this._refreshOptionsBar(); break;
-      case 'grid':         this.gridOn = !this.gridOn; b?.classList.toggle('on', this.gridOn); this.requestRender(); break;
-      case 'snap':         this.snapOn = !this.snapOn; b?.classList.toggle('on', this.snapOn); this.requestRender(); break;
+      case 'grid':         this.setGridVisible(!this.gridOn); break;
+      case 'snap':         this.setSnapOn(!this.snapOn); break;
       case 'dimensions':   this.setDimensionsVisible(!this.showDimensions); break;
       case 'relations':    this.setRelationsVisible(!this.showRelations); break;
       case 'zoom-fit':     this.zoomFit(); break;
@@ -81,21 +81,67 @@ export class ChromeMixin {
       b.classList.toggle('on', this.windows.isOpen(b.dataset.window)));
   }
 
-  /* ---- Relations visibility ---- */
+  /* ---- Display: grid, snap, dimensions, relations, dimension names ----
+     Saved with the project (project.display), so a drawing opens the way
+     it was left, on any device. Also remembered in the browser as the
+     setup for new drawings and for files saved before this existed.
+     `save` false: applying a setup (loading), nothing to store. */
+  displaySettings() {
+    return {
+      grid: !!this.gridOn, snap: !!this.snapOn,
+      dimensions: this.showDimensions !== false, relations: this.showRelations !== false,
+      dimNames: !!this.showDimNames,
+    };
+  }
+
+  applyDisplay(d) {
+    this.setGridVisible(d.grid, false);
+    this.setSnapOn(d.snap, false);
+    this.setDimensionsVisible(d.dimensions, false);
+    this.setRelationsVisible(d.relations, false);
+    this.showDimNames = !!d.dimNames;
+    this._refreshEquationsPanel?.();
+    this._refreshMoreMenu?.();
+  }
+
+  /** A display toggle changed: into the project (saved like an edit, but
+   *  not an undo step) and into the browser preferences. */
+  _displayChanged() {
+    if (this._displayReady && this.project) {
+      this.project.display = this.displaySettings();
+      this.scheduleAutosave();
+    }
+    this._savePrefs();
+  }
+
+  setGridVisible(on, save = true) {
+    this.gridOn = !!on;
+    document.querySelector('#menubar [data-action="grid"]')?.classList.toggle('on', this.gridOn);
+    if (save) this._displayChanged();
+    this.requestRender();
+  }
+
+  setSnapOn(on, save = true) {
+    this.snapOn = !!on;
+    document.querySelector('#menubar [data-action="snap"]')?.classList.toggle('on', this.snapOn);
+    if (!this.snapOn) { this.lastSnap = null; this.lastDragSnaps = []; }
+    if (save) this._displayChanged();
+    this.requestRender();
+  }
+
   setRelationsVisible(on, save = true) {
     this.showRelations = !!on;
     document.querySelector('#menubar [data-action="relations"]')?.classList.toggle('on', this.showRelations);
     if (!this.showRelations) this.renderer.lastRelRects = [];
-    if (save) this._savePrefs();
+    if (save) this._displayChanged();
     this.requestRender();
   }
 
-  /* ---- Dimensions visibility ---- */
   setDimensionsVisible(on, save = true) {
     this.showDimensions = !!on;
     document.querySelector('#menubar [data-action="dimensions"]')?.classList.toggle('on', this.showDimensions);
     if (!this.showDimensions) this.renderer.lastDimRects = [];
-    if (save) this._savePrefs();
+    if (save) this._displayChanged();
     this.requestRender();
   }
 
