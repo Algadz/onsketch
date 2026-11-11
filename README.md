@@ -19,6 +19,7 @@ npm run test:arrow   # arrows (snapping, attached ends, end handles), resize and
 npm run test:display # grid / snap / dimensions / relations saved with the project
 npm run test:image   # imported images: picker, 3 MB limit, drop, paste, transparency, resize / turn, link
 npm run test:clipboard # Ctrl+C / X / V for ink, across tabs and from other apps (text, images)
+npm run test:linedim # Smart Dimension between two parallel lines
 node tests/style.e2e.mjs  # restyling arrows / texts after drawing, touch tap-through guard
 npm run test:mobile  # phone / tablet layout and touch input on emulated devices
 npm run test:cloud   # account and cloud projects against a fake Supabase
@@ -246,6 +247,14 @@ touch input. Plan and audit: `docs/mobile-plan.md`.
   distance (X), left or right → vertical distance (Y), beside the slant or off
   a corner → the true length. Horizontal and vertical lines always get their
   length. Saved as `distance` with `axis: 'x' | 'y'` (absent = aligned).
+
+- Two **parallel lines** picked with Smart Dimension give the distance
+  between them (two lines that cross give the angle). The dimension holds
+  both ends of the second line at that distance from the first, so it also
+  keeps them parallel; when they already are (horizontal sides, a
+  rectangle, a Parallel relation) it holds one end only, so nothing is
+  over-defined. Saved as `offsetDistance` with `sourceEntityId` /
+  `targetEntityId`, like an Offset's distance.
 
 - Typed dimension values take units: `4in`, `1.5"`, `2ft`, `35cm`, `25mm`,
   `30deg`, `0.5rad` (stored in mm and degrees). Arithmetic works: `1in + 4mm`.

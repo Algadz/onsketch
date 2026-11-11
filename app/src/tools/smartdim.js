@@ -1,6 +1,6 @@
 import { EPS, angleArcFromPoints, angleSectorForCursor, dist, lineIntersection, normalizeAngleValue } from '../core/math.js';
 import { Arc, Circle, Line, Point } from '../core/entities.js';
-import { AngleConstraint, CurveDistanceConstraint, DistanceConstraint, PointLineDistanceConstraint, RadiusConstraint, distanceFrame } from '../core/constraints.js';
+import { AngleConstraint, CurveDistanceConstraint, DistanceConstraint, OffsetDistanceConstraint, PointLineDistanceConstraint, RadiusConstraint, distanceFrame } from '../core/constraints.js';
 import { Tool } from './tool.js';
 
 export class SmartDimensionTool extends Tool {
@@ -129,6 +129,15 @@ export class SmartDimensionTool extends Tool {
       }
       if (lines.length === 2) {
         const [a, b] = lines;
+        // Parallel lines: the distance between them (measured from the
+        // middle of the second line to the first), as in SolidWorks.
+        if (linesParallel(a, b)) {
+          const mid = { get x() { return (b.p1.x + b.p2.x) / 2; }, get y() { return (b.p1.y + b.p2.y) / 2; } };
+          this.preview = { kind:'pointLineDistance', p: mid, line: a, l2: b,
+                            value: pointLineDist(mid, a),
+                            offset: oldOffset, parallel: oldParallel };
+          return true;
+        }
         const sector = angleSectorForCursor(a, b, this.cursor);
         if (!sector) { this.preview = null; return false; }
         this.preview = {
@@ -404,6 +413,9 @@ export class SmartDimensionTool extends Tool {
         made.labelAngle = p.angle;
         made.labelDist = p.dist;
       }
+    } else if (p.kind === 'pointLineDistance' && p.l2) {
+      this._commitLineDistance(sketch, p, value, expr);
+      return;
     } else if (p.kind === 'pointLineDistance') {
       made = new PointLineDistanceConstraint(p.p.id, { a: p.line.p1.id, b: p.line.p2.id }, value);
       made.labelOffset   = p.offset;
@@ -446,5 +458,70 @@ export class SmartDimensionTool extends Tool {
     }
   }
 
+  /** Distance between two parallel lines: one shared dimension holding
+   *  both ends of the second line at the same distance from the first
+   *  (so it also keeps them parallel). When the lines are already held
+   *  parallel (relations, a rectangle…), one end is enough: two would
+   *  over-define the sketch. Driven when even that over-defines it. */
+  _commitLineDistance(sketch, p, value, expr) {
+    const a = p.line, b = p.l2;
+    const ref = { a: a.p1.id, b: a.p2.id };
+    const side = (pt) => {
+      const dx = a.p2.x - a.p1.x, dy = a.p2.y - a.p1.y;
+      return dx * (pt.y - a.p1.y) - dy * (pt.x - a.p1.x) < 0 ? -1 : 1;
+    };
+    const pair = (pt) => ({ kind: 'line', pointId: pt.id, l: { ...ref }, sourceEntityId: a.id, targetEntityId: b.id, value: side(pt) * Math.abs(value) });
+    const make = (pts) => {
+      const c = new OffsetDistanceConstraint(pts.map(pair), Math.abs(value));
+      c.labelOffset = p.offset;
+      c.labelParallel = p.parallel || 0;
+      if (expr) c.expr = expr;
+      return c;
+    };
+    // The probe solves move geometry: each attempt starts from the same state.
+    const before = this.app._captureSketchParams(sketch);
+    const restore = () => this.app._restoreSketchParams(before);
+    const probe = () => this.app.solver.solve(sketch, this.app.project.sketches, [], { diagnostics: true });
+    const base = probe();
+    const baseOver = base.state === 'over', baseRedundant = base.redundantIds || new Set();
+    restore();
+    // The solver may blame the existing relations for a redundancy the new
+    // dimension brings (two horizontal sides + both ends held): any newly
+    // redundant constraint means "too many".
+    const solveWith = (c) => {
+      sketch.constraints.push(c);
+      const r = probe();
+      const extra = [...(r.redundantIds || [])].some(id => !baseRedundant.has(id));
+      const ok = !extra && (baseOver || r.state !== 'over');
+      if (!ok) { sketch.constraints.pop(); restore(); }
+      return ok;
+    };
+    let made = make([b.p1, b.p2]);
+    if (!solveWith(made)) {
+      made = make([b.p1]);
+      if (!solveWith(made)) {
+        made.driven = true;
+        made.expr = null;
+        sketch.constraints.push(made);
+      }
+    }
+    this.app.commit({ activeIds: made.refs() });
+    this.app.refreshUI();
+  }
+
   getPreview() { return { dimPicks: this.picks, dimPreview: this.preview, dimPhase: this.phase }; }
+}
+
+/** True when two lines run the same way (within about 0.06°). */
+function linesParallel(a, b) {
+  const ax = a.p2.x - a.p1.x, ay = a.p2.y - a.p1.y, bx = b.p2.x - b.p1.x, by = b.p2.y - b.p1.y;
+  const la = Math.hypot(ax, ay), lb = Math.hypot(bx, by);
+  if (la < EPS || lb < EPS) return false;
+  return Math.abs(ax * by - ay * bx) / (la * lb) < 1e-3;
+}
+
+/** Distance from p to the infinite line through l. */
+function pointLineDist(p, l) {
+  const dx = l.p2.x - l.p1.x, dy = l.p2.y - l.p1.y, len = Math.hypot(dx, dy);
+  return len < EPS ? Math.hypot(p.x - l.p1.x, p.y - l.p1.y) : Math.abs(dx * (p.y - l.p1.y) - dy * (p.x - l.p1.x)) / len;
 }
