@@ -18,6 +18,7 @@ npm run test:ink     # text, text boxes, groups and linked ink, driven like a us
 npm run test:arrow   # arrows (snapping, attached ends, end handles), resize and turn
 npm run test:display # grid / snap / dimensions / relations saved with the project
 npm run test:image   # imported images: picker, 3 MB limit, drop, paste, transparency, resize / turn, link
+npm run test:clipboard # Ctrl+C / X / V for ink, across tabs and from other apps (text, images)
 node tests/style.e2e.mjs  # restyling arrows / texts after drawing, touch tap-through guard
 npm run test:mobile  # phone / tablet layout and touch input on emulated devices
 npm run test:cloud   # account and cloud projects against a fake Supabase
@@ -148,6 +149,20 @@ cached modules after a deploy. `npm test` fails if the stamp is out of date.
   (`core/images.js`); undo snapshots don't copy the data. If the
   browser's storage is full, the browser copy keeps the drawing without
   the pictures and says so: save the sketch to keep them.
+- **Copy, cut and paste** (Ctrl+C / Ctrl+X / Ctrl+V, ⌘ on a Mac; also
+  Copy / Cut on right-clicked ink and Paste on empty canvas): selected ink
+  (texts, images, strokes, arrows, groups) is copied with its pictures, so
+  it pastes in this sketch, another tab or another window, a little down
+  and to the right of the original (further on each paste), or in the
+  middle of the view when the original is out of sight. Pasted ink is
+  selected, on the active layer, keeps its links to this drawing's shapes
+  (arrow ends come detached) and is one undo step. Other apps get the
+  texts' words as plain text, and a single copied image as a PNG. From
+  other apps, Ctrl+V takes an image (same limits as importing) or plain
+  text, which becomes a text label under the cursor in the current text
+  style. Fields keep their usual copy and paste, and Ctrl with a letter
+  never switches tools any more (Ctrl+C used to pick the Circle tool).
+  Format: `core/ink-clipboard.js`.
 - **Colors** window: one colour for Fill, Pen and Marker. Pick a swatch or
   click the chip for any colour. The opacity slider is the current tool's
   (Pen and Marker keep their own; other tools show the fill opacity). Shapes

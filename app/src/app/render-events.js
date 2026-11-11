@@ -278,6 +278,8 @@ export class RenderEventsMixin {
       if ((ev.ctrlKey || ev.metaKey) && k === 'o' && this.cloudEnabled) { ev.preventDefault(); this.openSketch(); return; }
       if ((ev.ctrlKey || ev.metaKey) && k === 'z') { ev.preventDefault(); this.undo(); return; }
       if ((ev.ctrlKey || ev.metaKey) && (k === 'y' || (ev.shiftKey && k === 'z'))) { ev.preventDefault(); this.redo(); return; }
+      // Ctrl / ⌘ with a letter is a command (copy, paste…), never a tool.
+      if (ev.ctrlKey || ev.metaKey) { this.tool.onKey && this.tool.onKey(ev); return; }
       if (k === 's') this.setTool('select');
       else if (k === 'l') this.setTool(ev.shiftKey ? 'centerLine' : 'line');
       else if (k === 'r') this.setTool(ev.shiftKey ? 'centerRectangle' : 'rectangle');

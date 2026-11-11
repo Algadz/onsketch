@@ -151,6 +151,7 @@ export class InkLinksMixin {
     if (items.length === 1 && isText(items[0])) {
       out.push({ id: 'edit-text', glyph: 'T', label: 'Edit text', run: () => this.editText(items[0]) });
     }
+    out.push(...this.clipboardActions());
     const groups = new Set(items.map(i => i.group || null));
     const oneGroup = groups.size === 1 && !groups.has(null);
     if (items.length > 1 && !oneGroup) out.push({ id: 'group', glyph: '▣', label: `Group (${items.length})`, hint: 'Ctrl+G', run: () => this.groupSelectedInk() });

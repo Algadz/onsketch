@@ -1,5 +1,5 @@
 import { newId } from '../core/entities.js';
-import { IMAGES_TOTAL_MAX, IMAGE_MAX_BYTES, IMAGE_TYPES, imageId, imagePixelSize, imagePoints, imageSource, registerImage, usedImageIds } from '../core/images.js';
+import { IMAGE_MAX_BYTES, IMAGE_TYPES, imageId, imagePixelSize, imagePoints, registerImage, usedImageIds } from '../core/images.js';
 import { alertDialog } from '../ui/dialogs.js';
 
 /* =============== IMPORTING IMAGES ==============================
@@ -7,7 +7,7 @@ import { alertDialog } from '../ui/dialogs.js';
    layer, as ink (core/images.js):
      - Image… in the Sketch window, or I: pick a file;
      - drop a file on the canvas: placed where it is dropped;
-     - paste (Ctrl+V) an image from the clipboard: placed in the middle.
+     - paste (Ctrl+V) an image from the clipboard (app/clipboard.js).
    Each file must be under 3 MB, and a sketch's pictures together under
    about 3.2 MB (a saved sketch stays under the 5 MB cloud limit).
    It fits about half of the view, keeps its proportions and its
@@ -32,15 +32,6 @@ export class ImageImportMixin {
       if (!file) return;
       const r = c.getBoundingClientRect();
       this.importImageFile(file, this.view.screenToWorld({ x: ev.clientX - r.left, y: ev.clientY - r.top }));
-    });
-    window.addEventListener('paste', (ev) => {
-      if (ev.target?.matches?.('input,textarea,[contenteditable="true"]')) return;
-      const item = [...(ev.clipboardData?.items || [])].find(i => i.kind === 'file' && i.type.startsWith('image/'));
-      if (!item) return;
-      const file = item.getAsFile();
-      if (!file) return;
-      ev.preventDefault();
-      this.importImageFile(file);
     });
   }
 
@@ -73,15 +64,7 @@ export class ImageImportMixin {
     }
     let src;
     try { src = await readDataURL(file); } catch { src = null; }
-    if (src && !usedImageIds(this.project).has(imageId(src))) {
-      let total = src.length;
-      for (const used of usedImageIds(this.project)) total += (imageSource(used) || '').length;
-      if (total > IMAGES_TOTAL_MAX) {
-        const mb = (n) => (n * 0.75 / 1024 / 1024).toFixed(1);
-        await alertDialog({ title: 'Too many images', message: `A sketch can hold about ${mb(IMAGES_TOTAL_MAX)} MB of images in total, and this one would bring it to ${mb(total)} MB. Use a smaller image, or remove one first.` });
-        return null;
-      }
-    }
+    if (src && !usedImageIds(this.project).has(imageId(src)) && !(await this._imagesFit([src]))) return null;
     const id = src && registerImage(src);
     const px = id && (imagePixelSize(src) || await decodedSize(src));
     if (!id || !px || !(px.w > 0) || !(px.h > 0)) {

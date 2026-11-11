@@ -33,6 +33,7 @@ import { TouchUIMixin } from './touch-ui.js';
 import { CompactMixin } from './compact.js';
 import { CloudMixin } from './cloud-ui.js';
 import { ImageImportMixin } from './image-import.js';
+import { ClipboardMixin } from './clipboard.js';
 import { onImageLoad } from '../core/images.js';
 
 /* =============== 10. APP ====================================== */
@@ -85,6 +86,7 @@ export class App {
     this.renderer.labelFor = (c, text) => this.dimensionLabel(c, text);
     this._setupReport();
     this._setupImageImport();
+    this._setupClipboard();
     onImageLoad(() => this.requestRender());
     this._loadStylusPref();
     this._setupCompact();
@@ -482,7 +484,7 @@ export class App {
     // Ink under the cursor (no geometry there): select it with its group,
     // as most apps do on right-click, and offer the ink actions.
     const ink = items.length ? null : this.hitStrokeAt(world);
-    if (!items.length && !ink) return false;
+    if (!items.length && !ink) return this._showPasteMenu(ev);
     if (ink && !ink.selected) { this.clearSelection(); this.selectInk(ink, true); this.refreshUI(); this.requestRender(); }
 
     const menu = document.createElement('div');
@@ -508,8 +510,8 @@ export class App {
       const sel = this.selectedStrokes();
       const head = document.createElement('div');
       head.className = 'context-menu-head';
-      const texts = sel.filter(s => s.kind === 'text').length;
-      head.textContent = sel.length === 1 ? (texts ? 'Text' : 'Stroke')
+      const one = { text: 'Text', image: 'Image', arrow: 'Arrow' }[sel[0]?.kind] || 'Stroke';
+      head.textContent = sel.length === 1 ? one
         : `${sel.length} ink items${sel.every(s => s.group && s.group === sel[0].group) ? ' (group)' : ''}`;
       menu.appendChild(head);
     }
@@ -545,6 +547,31 @@ export class App {
     this.contextMenuDocPointerDown = (e) => {
       if (this.contextMenuEl && !this.contextMenuEl.contains(e.target)) this.hideContextMenu();
     };
+    setTimeout(() => document.addEventListener('pointerdown', this.contextMenuDocPointerDown), 0);
+    return true;
+  }
+
+  /** Right-click / long press on empty canvas after copying ink here:
+   *  a menu with Paste. */
+  _showPasteMenu(ev) {
+    if (!this._inkClip) return false;
+    const menu = document.createElement('div');
+    menu.id = 'context-menu';
+    menu.addEventListener('pointerdown', e => e.stopPropagation());
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'context-menu-item action';
+    row.dataset.action = 'paste';
+    row.innerHTML = `<span class="glyph">⎘</span><span>Paste</span><span class="meta">${/Mac|iPhone|iPad/.test(navigator.platform || '') ? '⌘' : 'Ctrl+'}V</span>`;
+    row.addEventListener('click', () => { this.hideContextMenu(); this.pasteFromMenu(); });
+    menu.appendChild(row);
+    armOnPress(menu);
+    document.body.appendChild(menu);
+    const rect = menu.getBoundingClientRect();
+    menu.style.left = Math.max(8, Math.min(ev.clientX, window.innerWidth - rect.width - 8)) + 'px';
+    menu.style.top = Math.max(8, Math.min(ev.clientY, window.innerHeight - rect.height - 8)) + 'px';
+    this.contextMenuEl = menu;
+    this.contextMenuDocPointerDown = (e) => { if (this.contextMenuEl && !this.contextMenuEl.contains(e.target)) this.hideContextMenu(); };
     setTimeout(() => document.addEventListener('pointerdown', this.contextMenuDocPointerDown), 0);
     return true;
   }
@@ -688,7 +715,7 @@ export class App {
 }
 
 /* Methods are grouped into mixins by concern; see src/app/*.js. */
-for (const Mixin of [ChromeMixin, EquationsMixin, LayersPanelMixin, FillsMixin, DimensionLabelsMixin, SelectionMixin, DragMixin, SolveMixin, OperationsMixin, ConstraintActionsMixin, RenderEventsMixin, PanelsMixin, PersistenceMixin, SketchWindowMixin, ReportMixin, DimLinksMixin, InkSelectMixin, InkLinksMixin, TextEditMixin, InkTransformMixin, TouchMixin, TouchUIMixin, CompactMixin, CloudMixin, ImageImportMixin]) {
+for (const Mixin of [ChromeMixin, EquationsMixin, LayersPanelMixin, FillsMixin, DimensionLabelsMixin, SelectionMixin, DragMixin, SolveMixin, OperationsMixin, ConstraintActionsMixin, RenderEventsMixin, PanelsMixin, PersistenceMixin, SketchWindowMixin, ReportMixin, DimLinksMixin, InkSelectMixin, InkLinksMixin, TextEditMixin, InkTransformMixin, TouchMixin, TouchUIMixin, CompactMixin, CloudMixin, ImageImportMixin, ClipboardMixin]) {
   for (const key of Object.getOwnPropertyNames(Mixin.prototype)) {
     if (key === 'constructor') continue;
     Object.defineProperty(App.prototype, key, Object.getOwnPropertyDescriptor(Mixin.prototype, key));
