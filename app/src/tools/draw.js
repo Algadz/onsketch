@@ -15,7 +15,7 @@ export class LineTool extends Tool {
   hint() { return 'Click to place start, click again for end. Esc to finish.'; }
   activate() { this.startPt = null; this.axisIntent = null; this.invalidEnd = false; this._lastPlaced = null; }
   _axisSnapFor(target, snap) {
-    if (!this.startPt || snap) return { point: target, kind: null };
+    if (!this.startPt || snap || this.app.snapSuppressed()) return { point: target, kind: null };
     const dx = (target.x - this.startPt.x) * this.app.view.zoom;
     const dy = (target.y - this.startPt.y) * this.app.view.zoom;
     const adx = Math.abs(dx), ady = Math.abs(dy);
@@ -142,7 +142,7 @@ export class CenterLineTool extends Tool {
     this.axisIntent = null;
   }
   _axisSnapFor(target, snap) {
-    if (!this.center || snap) return { point: target, kind: null };
+    if (!this.center || snap || this.app.snapSuppressed()) return { point: target, kind: null };
     const dx = (target.x - this.center.x) * this.app.view.zoom;
     const dy = (target.y - this.center.y) * this.app.view.zoom;
     const adx = Math.abs(dx), ady = Math.abs(dy);

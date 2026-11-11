@@ -62,7 +62,7 @@ export class RenderEventsMixin {
     }
 
     if (this._drawLoupe) queueMicrotask(() => this._drawLoupe());
-    if (this.snapOn) {
+    if (this.snapActive()) {
       // During a drag, lastDragSnaps holds every active snap (primary +
       // any secondary handles that incidentally landed on snap targets).
       // Otherwise, we just have the single cursor snap to draw.
@@ -164,13 +164,15 @@ export class RenderEventsMixin {
         return;
       }
       this.hideContextMenu();
+      this._noteAlt(ev);
       // A dimension value box is open: clicking a shape inserts its name.
-      if (ev.button === 0 && !ev.altKey && this._valueInput && this._valueInputPick(world)) {
+      if (ev.button === 0 && !this._spaceHeld && this._valueInput && this._valueInputPick(world)) {
         ev.preventDefault();
         return;
       }
       c.setPointerCapture(ev.pointerId);
-      if (ev.button === 1 || (ev.button === 0 && ev.altKey)) {
+      // Pan: middle button, or Space + drag (Alt is "no snap").
+      if (ev.button === 1 || (ev.button === 0 && this._spaceHeld)) {
         panning = true;
         panStart = { x: ev.clientX, y: ev.clientY, panX: this.view.panX, panY: this.view.panY };
         c.style.cursor = 'grabbing';
@@ -184,6 +186,8 @@ export class RenderEventsMixin {
     const move = (ev) => {
       const { screen, world } = getWorld(ev);
       this.lastWorldCursor = world;
+      this._noteAlt(ev);
+      if (ev.pointerType !== 'touch') { this._lastMouseMove = ev; this._pointerOnCanvas = true; }
       document.getElementById('status-coords').textContent = `x: ${world.x.toFixed(3)}  y: ${world.y.toFixed(3)}`;
       if (panning) {
         this.view.panX = panStart.panX + (ev.clientX - panStart.x);
@@ -200,7 +204,13 @@ export class RenderEventsMixin {
       this.lastSnap = snap;
       this.tool.onPointerMove(world, snap, ev);
       const hint = document.getElementById('cursor-hint');
-      if (snap && !snap.rejected) {
+      if (this.snapOn && this.snapSuppressed() && this._placingOrDragging()) {
+        // Alt: say so at the cursor, where snap names usually appear.
+        hint.textContent = 'no snap';
+        hint.style.left = screen.x + 'px';
+        hint.style.top = screen.y + 'px';
+        hint.style.display = 'block';
+      } else if (snap && !snap.rejected) {
         hint.textContent = snap.kind;
         hint.style.left = screen.x + 'px';
         // Above the finger on touch, so the finger doesn't hide it.
@@ -215,6 +225,7 @@ export class RenderEventsMixin {
       if (ev.button === 2) return;
       const { world } = getWorld(ev);
       if (panning) { panning = false; this._updateCanvasCursor(); return; }
+      this._noteAlt(ev);
       const snap = this._snapForCurrentTool(world);
       this.tool.onPointerUp(world, snap, ev);
     };
@@ -252,7 +263,64 @@ export class RenderEventsMixin {
     }, { passive: false });
   }
 
+  /** Alt state from a mouse or pen event (touch has no keyboard). */
+  _noteAlt(ev) {
+    if (!ev || ev.pointerType === 'touch') return;
+    this._setAltNoSnap(!!ev.altKey);
+  }
+
+  _setAltNoSnap(on) {
+    if (!!this._altNoSnap === on) return;
+    this._altNoSnap = on;
+    document.querySelector('#menubar [data-action="snap"]')?.classList.toggle('held-off', on && this.snapOn);
+    if (on) { this.lastSnap = null; this.lastDragSnaps = []; }
+  }
+
+  /** A drawing tool is placing, or something is being dragged: the moments
+   *  snapping matters. */
+  _placingOrDragging() {
+    const t = this.tool;
+    return ['line', 'centerLine', 'rectangle', 'centerRectangle', 'circle', 'threePointCircle', 'hexagon', 'arc', 'point', 'arrow'].includes(this.toolName)
+      || !!(t && (t.dragging || t.arrowEnd));
+  }
+
+  /** Alt pressed or released without moving: replay the last mouse move
+   *  so the preview, the snap marker and the drag follow at once. */
+  _replayMove(alt) {
+    const ev = this._lastMouseMove;
+    if (!ev || !this._canvasHandlers || !this._pointerOnCanvas && !this.tool?.dragging) return;
+    this._canvasHandlers.move({
+      clientX: ev.clientX, clientY: ev.clientY, pointerType: ev.pointerType, pointerId: ev.pointerId,
+      button: ev.button, buttons: ev.buttons, shiftKey: ev.shiftKey, ctrlKey: ev.ctrlKey, metaKey: ev.metaKey, altKey: alt,
+    });
+  }
+
   _setupKeyboard() {
+    // Alt: no snap while placing or dragging. Space held: drag pans.
+    const altKey = (ev) => {
+      if (ev.key !== 'Alt') return;
+      const on = ev.type === 'keydown';
+      // Keep the browser's menu from taking Alt over the canvas.
+      if (this._pointerOnCanvas || this.tool?.dragging) ev.preventDefault();
+      if (!!this._altNoSnap === on) return;
+      this._setAltNoSnap(on);
+      this._replayMove(on);
+      this.requestRender();
+    };
+    window.addEventListener('keydown', altKey);
+    window.addEventListener('keyup', altKey);
+    window.addEventListener('blur', () => { this._setAltNoSnap(false); this._spaceHeld = false; this._updateCanvasCursor(); });
+    window.addEventListener('keydown', (ev) => {
+      if (ev.code !== 'Space' || ev.target.matches('input,textarea,select,button,[contenteditable="true"]')) return;
+      if (!this._pointerOnCanvas) return;
+      ev.preventDefault();                        // no page scroll
+      if (!this._spaceHeld) { this._spaceHeld = true; this.canvas.style.cursor = 'grab'; }
+    });
+    window.addEventListener('keyup', (ev) => {
+      if (ev.code !== 'Space' || !this._spaceHeld) return;
+      this._spaceHeld = false;
+      this._updateCanvasCursor();
+    });
     window.addEventListener('keydown', (ev) => {
       if (ev.target.matches('input,textarea,[contenteditable="true"]')) return;
       if (ev.key === 'Escape' && this.contextMenuEl) {

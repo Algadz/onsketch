@@ -618,13 +618,20 @@ export class App {
     this._setHoverTarget(null);
   }
 
+  /** Alt held (keyboard and mouse or pen: desktop) turns snapping off
+   *  while placing or dragging: no snap to points, lines, the grid or the
+   *  horizontal / vertical axes, and no relation added from a snap; the
+   *  point goes exactly where the cursor is. */
+  snapSuppressed() { return !!this._altNoSnap; }
+  snapActive() { return this.snapOn && !this._altNoSnap; }
+
   /** Snap is only meaningful while you're actively placing or moving
    *  geometry. In plain Select mode (no drag in progress) and while using
    *  Smart Dim (which hit-tests entities, not snap points), we suppress
    *  snap detection so no markers or "endpoint / on-line / on-circle"
    *  hints flash at the cursor. */
   _snapForCurrentTool(world) {
-    if (!this.snapOn) return null;
+    if (!this.snapActive()) return null;
     // Arrow ends snap like line ends (and attach to what they land on),
     // when drawing an arrow or dragging the end of a selected one.
     const drawing = ['line','centerLine','rectangle','centerRectangle','circle','threePointCircle','hexagon','arc','point','arrow'].includes(this.toolName)
@@ -684,7 +691,7 @@ export class App {
   }
 
   collectDragSnaps(drag, primary) {
-    if (!drag || !this.snapOn) return [];
+    if (!drag || !this.snapActive()) return [];
     const out = [];
     const usedHandles = new Set();
     if (primary) {

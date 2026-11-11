@@ -1653,3 +1653,11 @@
   }
   .compact-land .fwin .fwin-head::before { display: none; }
   .compact-land #mb-flyout { grid-template-columns: repeat(3, 84px); }
+
+/* Snap button while Alt is held: snapping is off for now. */
+#menubar .tbtn[data-action="snap"].held-off { opacity: 0.45; text-decoration: line-through; }
+
+.opt-hint kbd {
+  font: inherit; font-size: 10.5px; padding: 0 4px; margin-right: 2px;
+  border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px; background: var(--field); color: var(--text);
+}

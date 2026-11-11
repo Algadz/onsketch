@@ -21,6 +21,7 @@ npm run test:image   # imported images: picker, 3 MB limit, drop, paste, transpa
 npm run test:clipboard # Ctrl+C / X / V for ink, across tabs and from other apps (text, images)
 npm run test:linedim # Smart Dimension between two parallel lines
 npm run test:layers  # layers as display only: editing, relations and dimensions across layers, hiding
+npm run test:nosnap  # Alt = no snap while placing or dragging; Space-drag pans
 node tests/style.e2e.mjs  # restyling arrows / texts after drawing, touch tap-through guard
 npm run test:mobile  # phone / tablet layout and touch input on emulated devices
 npm run test:cloud   # account and cloud projects against a fake Supabase
@@ -279,6 +280,23 @@ touch input. Plan and audit: `docs/mobile-plan.md`.
   Usual precedence: `^`, then `*` `/`, then `+` `-`, left to right. A bad
   entry turns red; editing it clears the red, and once applied the window
   shows the new value at once (it rebuilds even while a field has focus).
+
+## Snapping and navigation (desktop)
+
+- With **Snap** on, points snap to ends, midpoints, centres, lines,
+  circles and the grid while you draw or drag, and a snap becomes a
+  relation (coincident, on line…); the Line tool also makes a nearly flat
+  or upright line horizontal / vertical.
+- **Hold Alt (⌥ Option on a Mac) to place without snapping**, while
+  drawing or dragging: no snap marker, no relation from a snap, no
+  horizontal / vertical guess; the point goes exactly under the cursor.
+  It takes effect the moment you press or release it, even without moving
+  the mouse: the cursor says *no snap* and the Snap button dims. The
+  options bar of the drawing tools and of Select says so. Arrow ends
+  dropped with Alt stay unattached.
+- **Pan**: hold **Space** and drag (grab cursor), or drag with the middle
+  button. **Zoom**: the wheel. (Alt-drag used to pan; Alt now means no
+  snap.) On touch screens: two fingers, see below.
 
 ## Solving and conflicts
 

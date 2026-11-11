@@ -351,8 +351,8 @@ export class SketchWindowMixin {
     const hint = restyle ? `Restyles the selected ${id === 'arrow' ? 'arrows' : 'texts'}; it also sets the style of the next one.`
       : id === 'eraser' ? 'Drag over strokes and texts to erase them (active layer only).'
       : id === 'text' ? 'Click to place text, Enter to finish, Shift+Enter for a new line. Click a text to edit it.'
-      : id === 'arrow' ? 'Drag to what you point at. Ends snap to shapes and stay attached. Shift: 15° steps.'
-        : 'Drag to draw. Esc cancels the stroke. Alt-drag pans.';
+      : id === 'arrow' ? `Drag to what you point at. Ends snap to shapes and stay attached. Shift: 15° steps.${this.touchUI ? '' : ` ${/Mac|iPhone|iPad/.test(navigator.platform || '') ? '⌥ Option' : 'Alt'}: no snap.`}`
+        : 'Drag to draw. Esc cancels the stroke. Space-drag pans.';
     html += sep + `<span class="opt-hint">${hint}</span>`;
     return html;
   }

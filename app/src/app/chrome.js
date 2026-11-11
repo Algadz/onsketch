@@ -3,6 +3,9 @@ import { clamp } from '../core/math.js';
 import { ACTION_ICONS, DRAW_TOOLS, TOOLS, TOOL_ICONS, WINDOW_ICONS, toolDef } from '../ui/tool-defs.js';
 import { WindowManager } from '../ui/windows.js';
 
+/** Name of the Alt key on this platform (Option on a Mac). */
+export const ALT_KEY = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || '') ? '⌥ Option' : 'Alt';
+
 /* =============== APP CHROME ====================================
    Menu bar, tool options bar, and the floating Tools and Colors
    windows (Layers and Properties content live in layers-panel.js
@@ -194,10 +197,11 @@ export class ChromeMixin {
       if (t.id === 'hexagon') {
         html += sep + `<label class="opt">Sides <input type="number" min="3" max="64" step="1" value="${this.polygonSides}" data-opt="sides"></label>`;
       }
+      if (!this.touchUI) html += sep + `<span class="opt-hint"><kbd>${ALT_KEY}</kbd> place without snapping</span>`;
     } else if (t.id === 'select') {
       const kind = this._selectedStyleKind?.();          // selected arrows or texts: their style, editable here
       html += kind ? this._sketchOptionsHTML(kind, true)
-        : sep + '<span class="opt-hint">Click to select, Ctrl-click to add, drag a box to select many, drag geometry to move it.</span>';
+        : sep + `<span class="opt-hint">Click to select, Ctrl-click to add, drag a box to select many, drag geometry to move it${this.touchUI ? '' : ` (<kbd>${ALT_KEY}</kbd> without snapping)`}.</span>`;
     } else if (t.id === 'smartdim') {
       html += sep + '<span class="opt-hint"><b>1.</b> Click one or two entities &nbsp; <b>2.</b> Click to place the dimension &nbsp; <b>3.</b> Type a value, Enter. Click an existing dimension to edit it.</span>';
     } else if (t.group === 'freehand') {
