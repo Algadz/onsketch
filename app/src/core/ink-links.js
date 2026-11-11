@@ -1,5 +1,6 @@
 import { Arc, Circle, Line, Point } from './entities.js';
 import { isText, placeTextCenter, textCenter, unionBounds } from './strokes.js';
+import { isImage } from './images.js';
 
 /* =============== LINKED INK ====================================
    A stroke or a text can be linked to a point, a line, a circle or an
@@ -20,6 +21,11 @@ import { isText, placeTextCenter, textCenter, unionBounds } from './strokes.js';
    the item is carried from the old frame to the new one. Text turns its
    position with a line but its letters stay upright.
 
+   A picture (core/images.js) is mapped whole: it turns with a line and
+   scales with a circle like a stroke, and on a line it also scales with
+   the line's length (its frame's scale is the length), so a picture
+   fitted along a wall stays fitted when the wall's dimension changes.
+
    Saved: link { to: entity id, t?: fraction along a line, f: frame }.
    Deleting the anchor drops the link and leaves the ink where it is.
    ============================================================ */
@@ -39,14 +45,16 @@ export function lineFraction(line, p) {
   return Math.min(1, Math.max(0, ((p.x - a.x) * dx + (p.y - a.y) * dy) / L2));
 }
 
-/** Current frame [ox, oy, ux, uy, s] of an anchor, or null. */
-export function anchorFrame(e, t = 0.5) {
+/** Current frame [ox, oy, ux, uy, s] of an anchor, or null. With
+ *  `stretch`, a line's frame scales with its length (pictures). */
+export function anchorFrame(e, t = 0.5, stretch = false) {
   if (e instanceof Point) return [e.x, e.y, 1, 0, 1];
   if (e instanceof Line) {
     const a = e.p1, b = e.p2;
     const dx = b.x - a.x, dy = b.y - a.y, L = Math.hypot(dx, dy);
     const ox = a.x + dx * t, oy = a.y + dy * t;
-    return L < 1e-12 ? [ox, oy, 1, 0, 1] : [ox, oy, dx / L, dy / L, 1];
+    const s = stretch ? Math.max(L, 1e-9) : 1;
+    return L < 1e-12 ? [ox, oy, 1, 0, s] : [ox, oy, dx / L, dy / L, s];
   }
   if (e instanceof Circle || e instanceof Arc) return [e.center.x, e.center.y, 1, 0, Math.max(e.r, 1e-9)];
   return null;
@@ -91,9 +99,8 @@ export function linkItems(items, anchor) {
     const b = unionBounds(items);
     t = lineFraction(anchor, { x: (b.minX + b.maxX) / 2, y: (b.minY + b.maxY) / 2 });
   }
-  const f = anchorFrame(anchor, t);
   for (const it of items) {
-    it.link = { to: anchor.id, f: f.slice() };
+    it.link = { to: anchor.id, f: anchorFrame(anchor, t, isImage(it)) };
     if (t != null) it.link.t = t;
   }
   return true;
@@ -126,7 +133,7 @@ export function syncLinks(items, lookup, skip = null) {
   for (const it of items) {
     if (!it.link || (skip && skip.has(it))) continue;
     const anchor = lookup.get(it.link.to);
-    const frame = anchor ? anchorFrame(anchor, it.link.t) : null;
+    const frame = anchor ? anchorFrame(anchor, it.link.t, isImage(it)) : null;
     if (!frame) { delete it.link; changed = true; continue; }
     if (sameFrame(frame, it.link.f)) continue;
     carry(it, frame);

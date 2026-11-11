@@ -4,7 +4,7 @@ import { App } from './app/App.js';
 const root = document.documentElement;
 try {
   const app = new App();
-  app.undoStack.push(JSON.stringify(app.project.toJSON()));
+  app.undoStack.push(JSON.stringify(app.project.toJSON({ images: false })));
   window._app = app;
   app.openExampleFromURL();
   // Reveal the interface once the windows have been placed (WindowManager

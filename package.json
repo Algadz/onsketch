@@ -13,7 +13,8 @@
     "test:cloud": "node tests/cloud.e2e.mjs",
     "test:ink": "node tests/ink.e2e.mjs",
     "test:arrow": "node tests/arrow.e2e.mjs",
-    "test:display": "node tests/display.e2e.mjs"
+    "test:display": "node tests/display.e2e.mjs",
+    "test:image": "node tests/image.e2e.mjs"
   },
   "devDependencies": {
     "eslint": "^9.39.0",

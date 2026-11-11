@@ -24,6 +24,7 @@ function convertLegacyFills(items, sketch) {
 }
 import { ensureDimensionNames } from './equations.js';
 import { reviveStroke, strokeToJSON } from './strokes.js';
+import { imageSource, registerImage, usedImageIds } from './images.js';
 
 /** Point a constraint's references from one point id to another (the
  *  fields that hold point ids, including nested line / arc references). */
@@ -269,8 +270,12 @@ export class Project {
     }
     return null;
   }
-  toJSON() {
+  /** Saved form. `images: false` leaves out the pictures' data (undo
+   *  snapshots: the data stays in the session's registry). */
+  toJSON({ images = true } = {}) {
     this.assignConstraintLayers();      // every constraint saved with its layer
+    const pics = {};
+    if (images) for (const id of usedImageIds(this)) { const src = imageSource(id); if (src) pics[id] = src; }
     return {
       version: 3, name:this.name, units:this.units,
       ...(this.background ? { background: this.background } : {}),
@@ -279,11 +284,13 @@ export class Project {
       activeSketchId:this.activeSketchId,
       activeLayerId:this.activeLayerId,
       layers:this.layers.map(l => l.toJSON()),
-      sketches:this.sketches.map(s => s.toJSON())
+      sketches:this.sketches.map(s => s.toJSON()),
+      ...(Object.keys(pics).length ? { images: pics } : {}),
     };
   }
   static fromJSON(o) {
     const p = new Project();
+    if (o.images && typeof o.images === 'object') for (const [id, src] of Object.entries(o.images)) registerImage(src, id);
     p.name  = o.name || 'Untitled';
     p.units = o.units || 'mm';
     p.background = /^#[0-9a-f]{6}$/i.test(o.background || '') ? o.background : null;

@@ -1,5 +1,5 @@
 import { Project } from '../core/model.js';
-import { choose } from '../ui/dialogs.js';
+import { choose, notice } from '../ui/dialogs.js';
 
 const STORE_KEY = 'sketchcad:last';
 
@@ -27,7 +27,22 @@ export class PersistenceMixin {
   _writeLocal() {
     clearTimeout(this._autosaveTimer);
     try { localStorage.setItem(STORE_KEY, JSON.stringify(this.project.toJSON())); return true; }
-    catch (e) { console.warn('save failed', e); return false; }
+    catch (e) {
+      // Usually the browser's storage is full (imported pictures are big):
+      // keep the drawing without the pictures' data rather than nothing.
+      const hasImages = this.project.sketches.some(s => s.strokes.some(st => st.kind === 'image'));
+      if (hasImages) {
+        try {
+          localStorage.setItem(STORE_KEY, JSON.stringify(this.project.toJSON({ images: false })));
+          if (!this._imageQuotaNoted) {
+            this._imageQuotaNoted = true;
+            notice('The pictures are too large for the browser copy. Save the sketch to keep them.', { ms: 6000 });
+          }
+          return true;
+        } catch { /* fall through */ }
+      }
+      console.warn('save failed', e); return false;
+    }
   }
   /** Saves a moment after the last change, so a burst of edits is one write. */
   scheduleAutosave() {

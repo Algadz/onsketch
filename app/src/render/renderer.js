@@ -5,6 +5,7 @@ import { resolveStyle, dashFor, withAlpha } from '../core/style.js';
 import { getTheme, INK } from './theme.js';
 import { BOX_PAD, PAPER, TEXT_LINE, isText, textBox, textCorners, textFont, textLines } from '../core/strokes.js';
 import { headSize, headedEnds, isArrow } from '../core/arrows.js';
+import { imageCorners, imageElement, isImage } from '../core/images.js';
 
 function roundRect(ctx, x, y, w, h, r) {
   r = Math.max(0, Math.min(r, w / 2, h / 2));
@@ -164,6 +165,7 @@ export class Renderer {
   drawStroke(st) {
     if (isText(st)) { this.drawTextItem(st); return; }
     if (isArrow(st)) { this.drawArrow(st); return; }
+    if (isImage(st)) { this.drawImageItem(st); return; }
     const ctx = this.ctx, v = this.view;
     const pts = st.points.map(p => v.worldToScreen(p));
     if (!pts.length) return;
@@ -230,6 +232,39 @@ export class Renderer {
     }
     ctx.restore();
     if (st.selected) this._drawInkSelection(textCorners(st).map(q => v.worldToScreen(q)), 0);
+  }
+
+  /** An imported picture, mapped onto its three corner points (so it
+   *  turns, stretches and mirrors with them), with its transparency.
+   *  A dashed frame stands in while it loads or when its data is missing. */
+  drawImageItem(st) {
+    const ctx = this.ctx, v = this.view;
+    const [a, b, c] = st.points.map(p => v.worldToScreen(p));
+    const img = imageElement(st.image);
+    ctx.save();
+    ctx.globalAlpha *= st.opacity ?? 1;
+    if (img) {
+      const W = img.naturalWidth, H = img.naturalHeight;
+      ctx.transform((b.x - a.x) / W, (b.y - a.y) / W, (c.x - a.x) / H, (c.y - a.y) / H, a.x, a.y);
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(img, 0, 0);
+    } else {
+      const q = imageCorners(st).map(p => v.worldToScreen(p));
+      ctx.beginPath();
+      q.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
+      ctx.closePath();
+      ctx.fillStyle = withAlpha(this.theme.ink, 0.06);
+      ctx.fill();
+      ctx.setLineDash([5, 4]);
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = withAlpha(this.theme.ink, 0.45);
+      ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(q[0].x, q[0].y); ctx.lineTo(q[2].x, q[2].y); ctx.moveTo(q[1].x, q[1].y); ctx.lineTo(q[3].x, q[3].y);
+      ctx.stroke();
+    }
+    ctx.restore();
+    if (st.selected) this._drawInkSelection(imageCorners(st).map(p => v.worldToScreen(p)), 0);
   }
 
   /** An arrow: a straight line from tail to tip with a head at the

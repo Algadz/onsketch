@@ -654,7 +654,7 @@ export class CloudMixin {
     p.name = row.name || p.name;
     this.project = p;
     if (!keepUndo) { this.undoStack.length = 0; this.redoStack.length = 0; }
-    this.undoStack.push(JSON.stringify(p.toJSON()));
+    this.undoStack.push(JSON.stringify(p.toJSON({ images: false })));
     this.redoStack.length = 0;
     this.selectionOrder = [];
     if (this.tool && this.tool.activate) this.tool.activate();

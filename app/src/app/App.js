@@ -32,6 +32,8 @@ import { TouchMixin } from './touch.js';
 import { TouchUIMixin } from './touch-ui.js';
 import { CompactMixin } from './compact.js';
 import { CloudMixin } from './cloud-ui.js';
+import { ImageImportMixin } from './image-import.js';
+import { onImageLoad } from '../core/images.js';
 
 /* =============== 10. APP ====================================== */
 export class App {
@@ -82,6 +84,8 @@ export class App {
     this._setupEquationsPanel();
     this.renderer.labelFor = (c, text) => this.dimensionLabel(c, text);
     this._setupReport();
+    this._setupImageImport();
+    onImageLoad(() => this.requestRender());
     this._loadStylusPref();
     this._setupCompact();
     this._setupFab();
@@ -684,7 +688,7 @@ export class App {
 }
 
 /* Methods are grouped into mixins by concern; see src/app/*.js. */
-for (const Mixin of [ChromeMixin, EquationsMixin, LayersPanelMixin, FillsMixin, DimensionLabelsMixin, SelectionMixin, DragMixin, SolveMixin, OperationsMixin, ConstraintActionsMixin, RenderEventsMixin, PanelsMixin, PersistenceMixin, SketchWindowMixin, ReportMixin, DimLinksMixin, InkSelectMixin, InkLinksMixin, TextEditMixin, InkTransformMixin, TouchMixin, TouchUIMixin, CompactMixin, CloudMixin]) {
+for (const Mixin of [ChromeMixin, EquationsMixin, LayersPanelMixin, FillsMixin, DimensionLabelsMixin, SelectionMixin, DragMixin, SolveMixin, OperationsMixin, ConstraintActionsMixin, RenderEventsMixin, PanelsMixin, PersistenceMixin, SketchWindowMixin, ReportMixin, DimLinksMixin, InkSelectMixin, InkLinksMixin, TextEditMixin, InkTransformMixin, TouchMixin, TouchUIMixin, CompactMixin, CloudMixin, ImageImportMixin]) {
   for (const key of Object.getOwnPropertyNames(Mixin.prototype)) {
     if (key === 'constructor') continue;
     Object.defineProperty(App.prototype, key, Object.getOwnPropertyDescriptor(Mixin.prototype, key));

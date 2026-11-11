@@ -26,7 +26,7 @@ export class SolveMixin {
     // Linked ink follows the settled geometry before the snapshot.
     this.syncInkLinks();
     // The undo step holds the settled, recoloured state.
-    this.undoStack.push(JSON.stringify(this.project.toJSON()));
+    this.undoStack.push(JSON.stringify(this.project.toJSON({ images: false })));
     if (this.undoStack.length > 100) this.undoStack.shift();
     this.redoStack.length = 0;
     if (this._refreshLayerPanel) this._refreshLayerPanel();   // entity counts

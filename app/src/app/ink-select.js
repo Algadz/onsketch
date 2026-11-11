@@ -1,5 +1,6 @@
 import { PAPER, cleanBox, inkHit, inkInBox, isText, placeTextCenter, textCenter } from '../core/strokes.js';
 import { isArrow, setArrowEnd } from '../core/arrows.js';
+import { imageCorners, imageSize, isImage } from '../core/images.js';
 import { arrowStyleHTML, bindArrowStyle, bindBoxSwatches, boxModeHTML, boxSwatchesHTML } from './sketch-window.js';
 import { groupOf, withGroups } from '../core/ink-links.js';
 import { INK } from '../render/theme.js';
@@ -99,9 +100,11 @@ export class InkSelectMixin {
   _inkSectionHTML(items) {
     if (!items.length) return '';
     const first = items[0];
-    const texts = items.filter(isText), strokes = items.filter(s => !isText(s));
+    const texts = items.filter(isText), images = items.filter(isImage);
+    const strokes = items.filter(s => !isText(s) && !isImage(s));
+    const coloured = items.filter(s => !isImage(s));
     const same = (list, k) => list.every(s => s[k] === list[0][k]);
-    const color = same(items, 'color') ? first.color : null;
+    const color = coloured.length && same(coloured, 'color') ? coloured[0].color : null;
     const shown = (c) => c === INK ? '#111418' : c;
     const opacity = same(items, 'opacity') ? first.opacity : null;
     const units = esc(this.project.units);
@@ -111,12 +114,13 @@ export class InkSelectMixin {
       lines ? `${lines} stroke${lines === 1 ? '' : 's'}` : '',
       arrows.length ? `${arrows.length} arrow${arrows.length === 1 ? '' : 's'}` : '',
       texts.length ? `${texts.length} text${texts.length === 1 ? '' : 's'}` : '',
+      images.length ? `${images.length} image${images.length === 1 ? '' : 's'}` : '',
     ].filter(Boolean).join(', ');
     let html = `<div class="sb-subhead">Ink (${what})</div>`;
     if (texts.length === 1 && items.length === 1) {
       html += `<div class="prop-row prop-text"><label>text</label><textarea rows="2" data-ink-k="text" spellcheck="false">${esc(first.text)}</textarea></div>`;
     }
-    html += `<div class="prop-row"><label>colour</label><input type="color" data-ink-k="color" value="${shown(color || first.color)}"${color ? '' : ' title="Mixed colours"'}></div>`;
+    if (coloured.length) html += `<div class="prop-row"><label>colour</label><input type="color" data-ink-k="color" value="${shown(color || coloured[0].color)}"${color ? '' : ' title="Mixed colours"'}></div>`;
     html += `<div class="prop-row"><label>opacity</label><div class="range-row"><input type="range" min="0.05" max="1" step="0.05" data-ink-k="opacity" value="${opacity ?? first.opacity}"><span>${opacity == null ? 'mixed' : Math.round(opacity * 100) + '%'}</span></div></div>`;
     if (strokes.length) {
       const width = same(strokes, 'width') ? strokes[0].width : null;
@@ -148,13 +152,20 @@ export class InkSelectMixin {
         html += `<div class="prop-row"><label>box colour</label>${boxSwatchesHTML(c, 'data-ink-boxcolor')}</div>`;
       }
     }
+    if (images.length === 1) {
+      const { w, h } = imageSize(images[0]);
+      const num = (v) => Number(v.toPrecision(5));
+      html += `<div class="prop-row"><label>image width</label><div class="unit-row"><input type="number" min="0.001" step="any" data-ink-k="imgW" value="${num(w)}"><span>${units}</span></div></div>`;
+      html += `<div class="prop-row"><label>image height</label><div class="unit-row"><input type="number" min="0.001" step="any" data-ink-k="imgH" value="${num(h)}"><span>${units}</span></div></div>`;
+      html += `<div class="prop-row"><label>keep ratio</label><input type="checkbox" data-ink-k="imgRatio"${this._imgKeepRatio === false ? '' : ' checked'}></div>`;
+    }
     if (this.project.layers.length > 1) {
       html += `<div class="prop-row"><label>layer</label><select data-ink-k="layer">
         ${[...this.project.layers].reverse().map(l => `<option value="${l.id}"${l.id === first.layerId ? ' selected' : ''}>${esc(l.name)}</option>`).join('')}
       </select></div>`;
     }
     html += this._inkGroupLinkHTML(items);
-    html += `<div class="hint">Drag to move${texts.length ? ', double-click a text to edit it' : ''}. Delete removes. Ink is not solved or dimensioned.</div>`;
+    html += `<div class="hint">Drag to move${texts.length ? ', double-click a text to edit it' : ''}${images.length ? '; the box handles resize and turn' : ''}. Delete removes. Ink is not solved or dimensioned.</div>`;
     return html;
   }
 
@@ -184,11 +195,13 @@ export class InkSelectMixin {
   _bindInkSection(body) {
     const items = this.selectedStrokes();
     if (!items.length) return;
-    const texts = items.filter(isText), strokes = items.filter(s => !isText(s));
+    const texts = items.filter(isText), images = items.filter(isImage);
+    const strokes = items.filter(s => !isText(s) && !isImage(s));
     body.querySelectorAll('[data-ink-k]').forEach(inp => {
       const k = inp.dataset.inkK;
+      if (k === 'imgRatio') { inp.addEventListener('change', () => { this._imgKeepRatio = inp.checked; }); return; }
       const live = () => {
-        if (k === 'color') for (const s of items) s.color = inp.value;
+        if (k === 'color') { for (const s of items) if (!isImage(s)) s.color = inp.value; }
         else if (k === 'opacity') { const v = parseFloat(inp.value); for (const s of items) s.opacity = v; inp.nextElementSibling.textContent = Math.round(v * 100) + '%'; }
         this.requestRender();
       };
@@ -202,6 +215,11 @@ export class InkSelectMixin {
           const v = parseFloat(inp.value);
           if (!(v > 0)) { inp.classList.add('bad'); return; }
           for (const s of (k === 'width' ? strokes : texts)) s[k] = v;
+        } else if (k === 'imgW' || k === 'imgH') {
+          const v = parseFloat(inp.value);
+          if (!(v > 0)) { inp.classList.add('bad'); return; }
+          resizeImage(images[0], k === 'imgW' ? 'w' : 'h', v, this._imgKeepRatio !== false);
+          this.rebaseInk(images);
         } else if (k === 'bold') {
           for (const t of texts) t.bold = inp.checked;
         } else if (k === 'angle') {
@@ -249,4 +267,19 @@ export class InkSelectMixin {
       else if (act === 'detach') { for (const a of items.filter(isArrow)) { setArrowEnd(a, 0, null); setArrowEnd(a, 1, null); } done(); }
     }));
   }
+}
+
+/** Sets a picture's width or height (world units) about its middle,
+ *  along its own sides, so a turned picture stays turned. */
+function resizeImage(item, side, value, keepRatio) {
+  const [a, b, c] = item.points;
+  const { w, h } = imageSize(item);
+  if (!(w > 0) || !(h > 0)) return;
+  let kw = side === 'w' ? value / w : 1, kh = side === 'h' ? value / h : 1;
+  if (keepRatio) { if (side === 'w') kh = kw; else kw = kh; }
+  const q = imageCorners(item);
+  const m = { x: (q[0].x + q[2].x) / 2, y: (q[0].y + q[2].y) / 2 };
+  const u = { x: (b.x - a.x) * kw, y: (b.y - a.y) * kw }, d = { x: (c.x - a.x) * kh, y: (c.y - a.y) * kh };
+  const p0 = { x: m.x - u.x / 2 - d.x / 2, y: m.y - u.y / 2 - d.y / 2 };
+  item.points = [p0, { x: p0.x + u.x, y: p0.y + u.y }, { x: p0.x + d.x, y: p0.y + d.y }];
 }

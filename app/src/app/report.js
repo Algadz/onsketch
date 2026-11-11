@@ -45,7 +45,7 @@ export class ReportMixin {
       data.append('context', this._reportContext());
       if (form.elements.attach.checked) {
         let json = '';
-        try { json = JSON.stringify(this.project.toJSON()); } catch (e) { json = 'could not serialise: ' + e.message; }
+        try { json = JSON.stringify(this.project.toJSON({ images: false })); } catch (e) { json = 'could not serialise: ' + e.message; }
         data.append('project', json.length > MAX_PROJECT_CHARS ? json.slice(0, MAX_PROJECT_CHARS) + '…[truncated]' : json);
       }
       send.disabled = true;

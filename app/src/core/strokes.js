@@ -12,6 +12,8 @@
      text   { id, layerId, kind: 'text', color, opacity, size, text, bold?, box?, angle?, pts: [x, y] }
      arrow  { id, layerId, kind: 'arrow', color, opacity, width, tips?, head?, dash?, at?, pts: [tail, tip] }
             (core/arrows.js)
+     image  { id, layerId, kind: 'image', image, opacity, pts: [topLeft, topRight, bottomLeft] }
+            (core/images.js; the picture's data is in project.images)
    plus, on any item:
      group  'g12'          items with the same group select and move together
      link   { to, t?, f }  follows a point / line / circle / arc (core/ink-links.js)
@@ -29,9 +31,10 @@
    ============================================================ */
 
 import { ARROW_HEADS, ARROW_TIPS, cleanAttach } from './arrows.js';
+import { imageCorners, imageHit, isImage } from './images.js';
 
 export const STROKE_KINDS = ['pen', 'marker'];
-export const INK_KINDS = ['pen', 'marker', 'arrow', 'text'];
+export const INK_KINDS = ['pen', 'marker', 'arrow', 'text', 'image'];
 
 /** Font used for text, on the canvas and in the inline editor. */
 export const TEXT_FONT = 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
@@ -64,7 +67,8 @@ export function strokeToJSON(s) {
     if (s.bold) o.bold = true;
     if (s.angle) o.angle = s.angle;
     if (s.box) o.box = s.box.border ? { color: s.box.color, border: true } : { color: s.box.color };
-  } else o.width = s.width;
+  } else if (isImage(s)) o.image = s.image;
+  else o.width = s.width;
   if (s.kind === 'arrow') {
     if (s.tips && s.tips !== 'end') o.tips = s.tips;
     if (s.head && s.head !== 'filled') o.head = s.head;
@@ -72,7 +76,9 @@ export function strokeToJSON(s) {
     // Attached ends are saved at full precision: they sit exactly on the shape.
     if (s.at && (s.at[0] || s.at[1])) o.at = [cleanAttach(s.at[0]), cleanAttach(s.at[1])];
   }
-  o.pts = s.points.flatMap(p => (s.at ? [p.x, p.y] : [round(p.x), round(p.y)]));
+  // Attached arrow ends and pictures (whose corners must stay square
+  // through many turns) are saved at full precision.
+  o.pts = s.points.flatMap(p => (s.at || isImage(s) ? [p.x, p.y] : [round(p.x), round(p.y)]));
   if (s.group) o.group = s.group;
   if (s.link) o.link = linkToJSON(s.link);
   return o;
@@ -124,6 +130,10 @@ export function reviveStroke(o) {
     const angle = Number(o.angle);
     if (Number.isFinite(angle) && angle) t.angle = angle;
     return t;
+  }
+  if (o.kind === 'image') {
+    if (points.length < 3 || typeof o.image !== 'string' || !/^im[a-z0-9]+$/.test(o.image)) return null;
+    return { ...base, kind: 'image', image: o.image, points: points.slice(0, 3) };
   }
   const width = Number(o.width);
   if (o.kind === 'arrow') {
@@ -200,6 +210,7 @@ export function distanceToStroke(stroke, p) {
 
 /** True when a circle of radius r at p touches the stroke's ink. */
 export function strokeHit(stroke, p, r) {
+  if (isImage(stroke)) return imageHit(stroke, p, r);
   // An arrow's head is wider than its line.
   const reach = stroke.kind === 'arrow' ? stroke.width * 1.8 : stroke.width / 2;
   return distanceToStroke(stroke, p) <= r + reach;
@@ -288,6 +299,7 @@ export function textBounds(item) { return aabb(textCorners(item, false)); }
  *  box, when it has one). */
 export function inkBounds(item) {
   if (isText(item)) return aabb(textCorners(item, true));
+  if (isImage(item)) return aabb(imageCorners(item));
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   for (const p of item.points) {
     if (p.x < minX) minX = p.x; if (p.y < minY) minY = p.y;
@@ -323,5 +335,6 @@ export function inkHit(item, p, r) {
 /** True when the item lies entirely inside the world box. */
 export function inkInBox(item, x0, y0, x1, y1) {
   if (isText(item)) return textCorners(item).every(p => p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1);
+  if (isImage(item)) return imageCorners(item).every(p => p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1);
   return item.points.every(p => p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1);
 }

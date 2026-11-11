@@ -292,6 +292,7 @@ export class RenderEventsMixin {
       else if (k === 'e') this.setTool('eraser');
       else if (k === 't') this.setTool('text');
       else if (k === 'w') this.setTool('arrow');
+      else if (k === 'i' && !ev.ctrlKey && !ev.metaKey && !ev.altKey) this.openImagePicker();
       else if (k === 'm') this.setDimensionsVisible(!this.showDimensions);
       else if (k === 'k') this.setRelationsVisible(!this.showRelations);
       else if (k === 'f') this.zoomFit();

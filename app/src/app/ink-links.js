@@ -1,6 +1,9 @@
 import { Arc, Circle, Line, Point, newId } from '../core/entities.js';
 import { anchorFrame, anchorLookup, canAnchor, groupItems, linkItems, rebaseLinks, syncLinks, ungroupItems, unlinkItems } from '../core/ink-links.js';
 import { inkBounds, isText, unionBounds } from '../core/strokes.js';
+import { isImage } from '../core/images.js';
+
+const inkWord = (it) => (isText(it) ? 'text' : isImage(it) ? 'image' : it.kind === 'arrow' ? 'arrow' : 'stroke');
 import { detachMovedEnds, syncArrowEnds } from '../core/arrows.js';
 
 /* =============== GROUP AND LINK INK ============================
@@ -73,7 +76,7 @@ export class InkLinksMixin {
     if (!items.length || !canAnchor(anchor)) return false;
     linkItems(items, anchor);
     this.commit(); this.refreshUI(); this.requestRender();
-    const what = items.length === 1 ? (isText(items[0]) ? 'The text' : 'The stroke') : `${items.length} items`;
+    const what = items.length === 1 ? `The ${inkWord(items[0])}` : `${items.length} items`;
     this._inkHint(`${what} now follow${items.length === 1 ? 's' : ''} ${this._entityLabel(anchor)}. Drag to re-place; right-click → Unlink to free.`);
     return true;
   }
@@ -166,7 +169,7 @@ export class InkLinksMixin {
   linkHereActions(target) {
     const items = this.selectedStrokes();
     if (!items.length || !canAnchor(target)) return [];
-    const what = items.length === 1 ? (isText(items[0]) ? 'text' : 'stroke') : `ink (${items.length})`;
+    const what = items.length === 1 ? inkWord(items[0]) : `ink (${items.length})`;
     return [{ id: 'link-here', glyph: '⇢', label: `Link selected ${what} to this ${this._entityLabel(target).split(' ')[0].toLowerCase()}`, run: () => this.linkInkTo(items, target) }];
   }
 

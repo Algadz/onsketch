@@ -19,7 +19,7 @@ the tool.
 | Text labels ("Kitchen", "Ø 40 bore", titles) | none | **Shipped** (Text tool, boxes) |
 | Arrows, leaders and callouts | none | **Shipped** (Arrow tool, attached ends); callout text still to do |
 | Annotation that follows the geometry when a dimension changes | none | **Shipped** (Link to…), plus Group |
-| Reference image (photo, plan, screenshot) scaled to real size | none | Phase 3 |
+| Reference image (photo, plan, screenshot) scaled to real size | none | **Import shipped** (PNG / JPEG / WebP / GIF < 3 MB, linkable, resize / turn); calibrate still to do |
 | Presentation view: clean lines without vertices, state colours or grid | none | Phase 4 |
 | Image export (PNG / SVG / PDF) | JSON only | Phase 4 |
 | Hatches, patterns, gradients (grass, wood, concrete, copper) | flat colour only | Phase 4 |
@@ -137,7 +137,12 @@ feature no drawing app has.
 2. **Linked labels.** Text can contain a field: `{D3}`, `{area}`,
    `{width}`, so a label like "Kitchen {area}" updates when the room
    changes. Reuses the equation names and parser (`core/expr.js`).
-3. **Reference image.** Import a PNG or JPG (or paste) onto a layer.
+3. **Reference image.** *Shipped:* import (Sketch window, `I`, drop or
+   paste) a PNG, JPEG, WebP or GIF under 3 MB, transparency kept, as an
+   ink item `{ kind: 'image', image, pts: [topLeft, topRight, bottomLeft] }`
+   that resizes, turns, flips and links like other ink (on a line it also
+   scales with the length); data in `project.images` (`core/images.js`).
+   *Still to do:* calibrate, crop, lock. Original plan: Import a PNG or JPG (or paste) onto a layer.
    *Calibrate*: click two points on the image and type the real distance;
    the image is scaled to world units. Options: opacity, lock, crop.
    Useful to trace a floor plan, a photo of a part, or a hand sketch.

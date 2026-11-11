@@ -244,7 +244,7 @@ export class ConstraintActionsMixin {
       return;
     }
 
-    const beforeJSON = JSON.stringify(this.project.toJSON());
+    const beforeJSON = JSON.stringify(this.project.toJSON({ images: false }));
     const beforeState = this._captureSketchParams(sketch);
     const beforeGraph = this._buildConstraintGraph(sketch, { skipKinds: this._dragJointConstraintKinds() });
     sketch.constraints.push(...add);

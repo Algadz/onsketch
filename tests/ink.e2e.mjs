@@ -153,8 +153,8 @@ check(dragged.link === lineId && Math.abs(after.x - dragged.x - 5) < 1e-6, 'drag
 // ---- Group with Ctrl+G: one click selects both, they move together ----
 await page.mouse.click(cx + 400, cy + 300);                   // clear
 await page.keyboard.press('n');
-await page.mouse.move(cx - 300, cy - 200); await page.mouse.down();
-await page.mouse.move(cx - 250, cy - 150, { steps: 5 }); await page.mouse.up();
+await page.mouse.move(cx - 300, cy - 130); await page.mouse.down();
+await page.mouse.move(cx - 250, cy - 80, { steps: 5 }); await page.mouse.up();
 await page.keyboard.press('s');
 await page.evaluate(() => { const a = window._app; a.clearSelection(); for (const s of a.activeSketch().strokes) if (s.kind === 'pen' || s.text === 'Note') s.selected = true; a.refreshUI(); });
 await page.keyboard.press('Control+g');

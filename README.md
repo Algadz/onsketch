@@ -17,6 +17,7 @@ npm run test:e2e     # drives the editor in headless Chromium (needs playwright)
 npm run test:ink     # text, text boxes, groups and linked ink, driven like a user
 npm run test:arrow   # arrows (snapping, attached ends, end handles), resize and turn
 npm run test:display # grid / snap / dimensions / relations saved with the project
+npm run test:image   # imported images: picker, 3 MB limit, drop, paste, transparency, resize / turn, link
 node tests/style.e2e.mjs  # restyling arrows / texts after drawing, touch tap-through guard
 npm run test:mobile  # phone / tablet layout and touch input on emulated devices
 npm run test:cloud   # account and cloud projects against a fake Supabase
@@ -130,6 +131,23 @@ cached modules after a deploy. `npm test` fails if the stamp is out of date.
   item shows a dotted leader to the spot it follows; deleting the shape
   unlinks the ink and leaves it in place. Grouping ink where the linked
   members share one anchor links the whole group to it.
+- **Images**: *Image…* in the Sketch window (or `I`), drop a file on the
+  canvas, or paste one (Ctrl+V). PNG, JPEG, WebP or GIF, **less than 3 MB**
+  (bigger files are refused with a message), and about 3.2 MB of pictures
+  per sketch in total (a saved sketch stays under the 5 MB cloud limit);
+  transparency is kept, the
+  file is stored as imported, never re-encoded. The picture lands on the
+  active layer at about half the view (where it was dropped, else in the
+  middle), selected, so the transform box **resizes and turns** it right
+  away (Shift on a corner stretches; Flip mirrors it). It is ink: select,
+  move, group, opacity, layer, eraser and undo work as for strokes, and
+  Properties edits its width and height (keep ratio). **Link to a shape…**
+  makes it follow a point, a line (it slides, **turns and scales with the
+  line's length**) or a circle / arc (scales with the radius). Saved in
+  the project as `images: { id: data URL }`, once per picture
+  (`core/images.js`); undo snapshots don't copy the data. If the
+  browser's storage is full, the browser copy keeps the drawing without
+  the pictures and says so: save the sketch to keep them.
 - **Colors** window: one colour for Fill, Pen and Marker. Pick a swatch or
   click the chip for any colour. The opacity slider is the current tool's
   (Pen and Marker keep their own; other tools show the fill opacity). Shapes

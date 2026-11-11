@@ -237,7 +237,10 @@ export class SketchWindowMixin {
             ? 'Click to type a label; click a text to edit it. Right-click ink to group it or link it to a shape so it follows the geometry.'
             : 'Freehand ink on the active layer. Not solved or dimensioned, and it doesn\'t close areas for the Fill tool.'}</div>`;
     }
-    body.innerHTML = `<div class="tool-grid sketch-grid">${SKETCH_TOOLS.map(btn).join('')}</div><div class="tool-sep"></div>${opts}`;
+    body.innerHTML = `<div class="tool-grid sketch-grid">${SKETCH_TOOLS.map(btn).join('')}</div>
+      <button class="mini-btn image-import-btn" data-import-image title="Import a PNG, JPEG, WebP or GIF (less than 3 MB), or drop / paste one on the canvas (I)">${IMAGE_ICON}<span>Image…</span></button>
+      <div class="tool-sep"></div>${opts}`;
+    body.querySelector('[data-import-image]')?.addEventListener('click', () => this.openImagePicker());
 
     body.querySelectorAll('[data-tool]').forEach(b => b.addEventListener('click', () => this.setTool(b.dataset.tool)));
     body.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => this.setFillErase(b.dataset.mode === 'erase')));
@@ -370,6 +373,8 @@ export class SketchWindowMixin {
     bindArrowStyle(bar, 'data-opt-arrow', (k, v) => this._setInk({ [ARROW_PREF[k]]: v }));
   }
 }
+
+const IMAGE_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="9" cy="10" r="1.8" fill="currentColor"/><path d="M4.5 18l5-5 3.5 3.5 2.5-2.5 4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>';
 
 /* ---- Arrow style controls (Sketch window, options bar, Properties) ----
    Three small segmented rows with drawn glyphs: which ends have a head

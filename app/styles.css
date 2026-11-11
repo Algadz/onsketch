@@ -1381,6 +1381,8 @@
   /* Sketch window: Fill, Pen, Marker, Arrow, Text, Eraser in one row */
   .fwin[data-win="sketch"] .fwin-body { width: 260px; }
   .sketch-grid { grid-template-columns: repeat(6, 36px); }
+  .image-import-btn { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; margin-top: 6px; padding: 5px 8px; font-size: 12px; }
+  .image-import-btn svg { flex: none; }
   .arrow-seg button, #sketch-body .seg.arrow-seg button { padding: 3px 6px; line-height: 0; }
   .arrow-seg svg { display: block; }
   /* Text settings in the Sketch window: narrow label column, segments fit */
