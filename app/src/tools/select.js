@@ -58,11 +58,8 @@ export class SelectTool extends Tool {
       this.app.requestRender();
       return;
     }
-    // The active layer's shapes first, then its ink, then a shape on
-    // another visible layer (picked as a reference for relations and
-    // dimensions; it isn't moved from here).
-    const hit = this.app.hitTestActiveSketch(world)
-      || (!this.app.operationName && !this.app.hitStrokeAt(world) ? this.app.hitTestPickable(world) : null);
+    // Any visible shape (the active layer's win where they overlap).
+    const hit = this.app.hitTestActiveSketch(world);
     const isToggle = ev.ctrlKey || ev.metaKey || this.app.multiSelect;
     const isAdd    = ev.shiftKey;
     if (this.app.operationName === 'mirror') {
@@ -100,14 +97,12 @@ export class SelectTool extends Tool {
       else if (isAdd) this.app.setSelected(hit, true);
       else if (!hit.selected) { this.app.clearSelection(); this.app.setSelected(hit, true); }
       else this.app.setSelected(hit, true);
-      // collect drag points (only those on the active layer)
+      // collect drag points (selected shapes on visible layers)
       const activeId = this.app.project.activeSketchId;
       const pts = [];
       const seen = new Set();
-      const onActive = this.app.isEntityInteractive(this.app.project.ownerOf(hit) || hit);
-      if (!onActive) this.app.noteOtherLayerPick(hit);
       for (const s of this.app.project.sketches) {
-        if (s.id !== activeId || !onActive) continue;
+        if (s.id !== activeId) continue;
         for (const e of s.entities) {
           if (!this.app.isEntityInteractive(e)) continue;
           const walk = (x, inheritSel) => {
@@ -122,7 +117,7 @@ export class SelectTool extends Tool {
         ? [{ lineId: hit.id, p1: hit.p1.id, p2: hit.p2.id, dx: hit.p2.x - hit.p1.x, dy: hit.p2.y - hit.p1.y }]
         : [];
       const sketch = this.app.activeSketch();
-      const hitIsResizableCircle = onActive && hit instanceof Circle &&
+      const hitIsResizableCircle = hit instanceof Circle &&
         !sketch?.constraints.some(c => c.kind === 'radius' && c.circleId === hit.id);
       const canDrag = pts.length || hitIsResizableCircle;
       this.dragging = canDrag ? this.app.beginLocalizedDrag(world, pts, hit, rigidLines) : null;
@@ -215,12 +210,9 @@ export class SelectTool extends Tool {
       this.box.x1 = world.x; this.box.y1 = world.y;
       this.app.requestRender();
     } else {
-      // Hover: the active layer's shapes, else (when no ink of the active
-      // layer is there) a shape on another visible layer, which can be
-      // picked for relations and dimensions.
+      // Hover: any visible shape.
       let changed = false;
-      const hit = this.app.hitTestActiveSketch(world)
-        || (!this.app.operationName && !this.app.hitStrokeAt(world) ? this.app.hitTestPickable(world) : null);
+      const hit = this.app.hitTestActiveSketch(world);
       for (const s of this.app.project.visibleSketches()) {
         for (const e of s.entities) {
           const hov = e === hit;

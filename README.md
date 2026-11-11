@@ -20,7 +20,7 @@ npm run test:display # grid / snap / dimensions / relations saved with the proje
 npm run test:image   # imported images: picker, 3 MB limit, drop, paste, transparency, resize / turn, link
 npm run test:clipboard # Ctrl+C / X / V for ink, across tabs and from other apps (text, images)
 npm run test:linedim # Smart Dimension between two parallel lines
-npm run test:layers  # relations and dimensions between layers, hiding a layer
+npm run test:layers  # layers as display only: editing, relations and dimensions across layers, hiding
 node tests/style.e2e.mjs  # restyling arrows / texts after drawing, touch tap-through guard
 npm run test:mobile  # phone / tablet layout and touch input on emulated devices
 npm run test:cloud   # account and cloud projects against a fake Supabase
@@ -263,8 +263,7 @@ touch input. Plan and audit: `docs/mobile-plan.md`.
   keep an equation, as in SolidWorks: `=D1/2 + 5mm`, `=width*2`,
   `=sqrt(D3^2 + D4^2)`. Equations are re-evaluated before every solve, in
   dependency order; cycles and unknown names are flagged, not applied.
-  Equations are global: when they change a value, every layer is solved, not
-  just the active one.
+  Equations are global, like everything else the solver does.
 - Editing a dimension shows its equation (Σ marks equation-driven labels).
 - While a dimension's value box is open, click a line, circle or arc to
   insert its dimension name (`=D5`, or at the caret inside an equation). A
@@ -294,46 +293,36 @@ touch input. Plan and audit: `docs/mobile-plan.md`.
   actually land on it. A point that is held by its constraints (say, the end
   of a fixed-length arm) keeps following the cursor along the path it is
   allowed to take.
-- Constraints that only involve geometry on layers not linked to the active
-  one are left out of the solve until one of their layers is edited (a
-  relation added from here between two other layers' shapes is applied to
-  them right away).
 
 ## Layers
 
-The active layer (highlighted in the Layers window) is the one you draw on,
-drag and delete in. **Relations and dimensions work between layers exactly
-as inside one layer:**
+**Layers are for display only.** They group shapes, ink and fills for
+visibility, opacity and drawing order, and the active layer (highlighted
+in the Layers window) is where new shapes, ink and fills go. Relations,
+dimensions, the solver and editing ignore them: the drawing behaves
+exactly as if it were one layer.
 
-- **Pick across layers.** With Select, click a shape on any visible layer
-  (the active layer's shapes and ink win when they overlap); Ctrl / Shift
-  add to the selection, so a line on "Walls" and a line on "Furniture" can
-  be made parallel, equal, coincident… from Properties. Smart Dimension
-  picks shapes on any visible layer too. A shape of another layer is a
-  reference here: Properties says which layer it is on, dragging or Delete
-  don't touch it, and the status bar says so. **Double-click** it (or
-  right-click → *Edit layer "…"*) to make its layer the active one.
-- **Linked layers solve as one.** Layers tied by a relation or dimension
-  (directly or through other layers) are solved together with the active
-  one, so a dimension between them moves whichever side is free, as it
-  would inside one layer; hold a side still with Fix or dimensions, as
-  usual. The Layers window marks the layers linked to the active one (⛓,
-  dashed outline). Layers not linked to it never move while you edit.
-- **Hiding a layer hides its drawing, not its relations.** Its shapes,
-  and every relation or dimension that touches it, are hidden and can't be
-  picked, but they keep holding: change a dimension and the hidden layer
-  still follows. Show it again and everything is where the constraints put
-  it.
-- A relation or dimension belongs to the active layer when it touches it,
-  else to the layer of its shapes. It is drawn (and editable) from any
-  layer it ties, grey from the others; Properties tags it "Base ↔ Work".
-  Deleting a layer deletes its shapes and every relation on them.
+- **Any visible shape** can be hovered, clicked, box-selected, dragged,
+  deleted, related and dimensioned, whatever the active layer; where
+  shapes overlap, the active layer's win. Properties shows a shape's layer
+  and moves it to another (*Layer*).
+- **Relations and dimensions between layers** are like any other: a line
+  on "Walls" and a line on "Furniture" can be parallel, equal or 2 m apart,
+  and changing that dimension moves whichever side is free. They are shown
+  and editable whatever the active layer; Properties tags them
+  "Walls ↔ Furniture".
+- **Shapes on different layers can share a corner**: drawing from another
+  layer's corner joins it, as on one layer. Deleting a shape keeps a corner
+  another shape still uses.
+- **Hiding a layer hides its drawing, not its relations.** Its shapes, and
+  every relation or dimension on them, are hidden and can't be picked or
+  snapped to, but they keep holding: change a dimension and the hidden
+  layer still follows.
+- Deleting a layer deletes its shapes, ink and fills, and the relations
+  and dimensions on those shapes.
+- Ink (pen, marker, text, arrows, images) and the Fill tool still work on
+  the active layer, like painting in Paint.NET.
 
-Layers never share a point. Drawing from another layer's corner makes a new
-point tied to it by a coincident relation (on the new layer), which links
-the two layers; moving shapes to another layer (Properties → layer) takes
-their own relations along and splits shared corners the same way; older
-files are split on load. Deleting either side leaves the other where it was.
 Layers have a name, visibility, opacity and order.
 
 Right-click a line, circle or arc for **Set as construction** (or back to
@@ -345,9 +334,8 @@ Relations (coincident, horizontal, parallel, tangent, …) are shown as small
 badges where they act (toggle: Relations / `K`); click one to select it and
 Delete to remove it.
 
-Status colours are per layer: each layer is checked as if it were the
-active one (with its linked layers), so a fully defined layer stays black
-while you work on another (for example after a global variable changed it).
+Status colours (under, fully, over-defined) are for the whole drawing:
+layers don't change them.
 
 ## Source layout
 
@@ -416,9 +404,9 @@ The UI exposes layers only. `sketches` stays an array in the file format, but
 files with several sketches are merged into one on load (pre-layer files get
 one layer per former sketch).
 
-Layers only affect display and editing. Constraints can link entities on
-different layers (those layers then solve together), and hidden layers are
-still solved. Project files are JSON
+Layers only affect display (and where new shapes go). Constraints link
+entities on any layers, shapes on different layers can share points, and
+hidden layers are still solved. Project files are JSON
 (`version: 3`); older files load onto a single default layer.
 
 ## Accounts and cloud projects

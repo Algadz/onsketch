@@ -26,22 +26,6 @@ import { ensureDimensionNames } from './equations.js';
 import { reviveStroke, strokeToJSON } from './strokes.js';
 import { imageSource, registerImage, usedImageIds } from './images.js';
 
-/** Point a constraint's references from one point id to another (the
- *  fields that hold point ids, including nested line / arc references). */
-function retargetPoint(c, from, to) {
-  const skip = new Set(['id', 'kind', 'name', 'expr', 'layerId', 'value', 'driven', 'selected']);
-  const visit = (o) => {
-    for (const k of Object.keys(o)) {
-      if (skip.has(k)) continue;
-      const v = o[k];
-      if (v === from) o[k] = to;
-      else if (Array.isArray(v)) v.forEach(x => { if (x && typeof x === 'object') visit(x); });
-      else if (v && typeof v === 'object') visit(v);
-    }
-  };
-  visit(c);
-}
-
 /** Constraints that tie a point to itself or to a line it is an end of:
  *  always true, never useful, dropped on load. */
 function isSelfReferential(c) {
@@ -221,10 +205,13 @@ export class Project {
     if (i < 0) return false;
     for (const s of this.sketches) s.fills = s.fills.filter(f => f.layerId !== id);
     for (const s of this.sketches) s.strokes = s.strokes.filter(st => st.layerId !== id);
-    for (const s of this.sketches) s.constraints = s.constraints.filter(c => c.layerId !== id);
+    // Its shapes go, with the relations and dimensions on them (a point
+    // shared with a shape on another layer stays, with its relations).
     for (const s of this.sketches) {
       for (const e of s.entities.filter(e => e.layerId === id)) s.removeEntity(e);
     }
+    const other = this.layers.find(l => l.id !== id);
+    for (const s of this.sketches) for (const c of s.constraints) if (c.layerId === id) c.layerId = other.id;
     this.layers.splice(i, 1);
     if (this.activeLayerId === id) this.activeLayerId = this.layers[Math.max(0, i - 1)].id;
     return true;
@@ -238,48 +225,16 @@ export class Project {
     this.layers.splice(j, 0, l);
     return true;
   }
-  /** Layers that move together with `layerId` when it is edited: the
-   *  layer itself and every layer joined to it, directly or through
-   *  others, by a relation or dimension between their shapes.
-   *  @returns {Set<string>} */
-  linkedLayers(layerId = this.activeLayerId) {
-    const out = new Set([layerId]);
-    const graph = this.layerLinks();
-    const queue = [layerId];
-    while (queue.length) {
-      const id = queue.pop();
-      for (const next of graph.get(id) || []) {
-        if (out.has(next)) continue;
-        out.add(next); queue.push(next);
-      }
-    }
-    return out;
+  /** Layers are for display only: relations, dimensions and the solver
+   *  ignore them, so nothing is ever held still because of its layer.
+   *  Clears the transient `locked` flag the solver honours (kept for
+   *  callers that sync before solving). */
+  syncLocks() {
+    const mark = (e) => { e.locked = false; for (const c of e.children()) mark(c); };
+    for (const s of this.sketches) for (const e of s.entities) mark(e);
   }
 
-  /** layerId → Set of layers its shapes share a relation or dimension with. */
-  layerLinks() {
-    const graph = new Map();
-    for (const s of this.sketches) {
-      const layerById = new Map();
-      for (const e of s.entities) {
-        const id = this.layerOf(e).id;
-        layerById.set(e.id, id);
-        for (const c of e.children()) if (!layerById.has(c.id)) layerById.set(c.id, id);
-      }
-      for (const c of s.constraints) {
-        const layers = new Set();
-        for (const r of c.refs()) { const l = r && layerById.get(r); if (l) layers.add(l); }
-        if (layers.size < 2) continue;
-        for (const a of layers) {
-          if (!graph.has(a)) graph.set(a, new Set());
-          for (const b of layers) if (a !== b) graph.get(a).add(b);
-        }
-      }
-    }
-    return graph;
-  }
-
-  /** Layers a constraint's geometry is on. */
+  /** Layers of the shapes a constraint ties. */
   constraintLayerIds(c) {
     const ids = new Set(c.refs().filter(Boolean));
     const out = new Set();
@@ -287,26 +242,6 @@ export class Project {
       if (ids.has(e.id) || e.children().some(ch => ids.has(ch.id))) out.add(this.layerOf(e).id);
     }
     return out;
-  }
-
-  /** Which geometry the solver may move. Sets the transient `locked` flag
-   *  on every entity (and its points) it must hold still: everything
-   *  outside the edited layer and the layers linked to it (see
-   *  linkedLayers), so a relation or dimension between layers works as it
-   *  does inside one layer, while unrelated layers never move. Solvers
-   *  treat locked parameters as constants. Not serialised. */
-  syncLocks() {
-    const mark = (e, v) => { e.locked = v; for (const c of e.children()) mark(c, v); };
-    // editLayerId: set briefly to compute another layer's status as if it
-    // were the active one.
-    const editable = this.editLayerId || this.activeLayerId;
-    // editAllLayers: set briefly while equations update every layer.
-    const free = this.editAllLayers ? new Set(this.layers.map(l => l.id)) : this.linkedLayers(editable);
-    for (const s of this.sketches) for (const e of s.entities) mark(e, false);
-    // A point shared with held geometry is held too.
-    for (const s of this.sketches) {
-      for (const e of s.entities) if (!free.has(this.layerOf(e).id)) mark(e, true);
-    }
   }
   entitiesOnLayer(id) {
     const out = [];
@@ -495,7 +430,6 @@ export class Project {
     }
     ensureDimensionNames(p);
     p.assignConstraintLayers();
-    p.separateLayerPoints();               // older files could share points across layers
     return p;
   }
 
@@ -527,55 +461,6 @@ export class Project {
     }
     base.visible = true;          // sketch visibility has no UI any more
     this.activeSketchId = base.id;
-  }
-
-  /**
-   * Layers never share a point. A point used by shapes on several layers
-   * (drawn from another layer's corner, a shape moved to another layer,
-   * older files) is split: the first layer keeps it, every other layer
-   * gets its own copy at the same place, joined by a coincident
-   * constraint on that layer, and that layer's own constraints are pointed
-   * at its copy. Deleting either side then leaves the other in place.
-   * @returns {number} how many copies were made
-   */
-  separateLayerPoints() {
-    let made = 0;
-    for (const s of this.sketches) {
-      const users = new Map();               // Point → [{ e, layerId }]
-      const use = (pt, e) => {
-        if (!users.has(pt)) users.set(pt, []);
-        users.get(pt).push({ e, layerId: this.layerOf(e).id });
-      };
-      for (const e of s.entities) {
-        if (e instanceof Point) use(e, e);
-        else if (e instanceof Line) { use(e.p1, e); use(e.p2, e); }
-        else if (e instanceof Circle || e instanceof Arc) use(e.center, e);
-      }
-      for (const [pt, list] of users) {
-        const layers = [...new Set(list.map(u => u.layerId))];
-        if (layers.length < 2) continue;
-        // The active layer keeps the point (shapes moved away get copies);
-        // else a standalone point keeps its own layer; else the first user.
-        const keeper = layers.includes(this.activeLayerId) ? this.activeLayerId
-          : (list.find(u => u.e === pt) || list[0]).layerId;
-        for (const layerId of layers) {
-          if (layerId === keeper) continue;
-          const copy = new Point(pt.x, pt.y);
-          copy.sketchId = s.id;
-          for (const { e, layerId: l } of list) {
-            if (l !== layerId) continue;
-            if (e instanceof Line) { if (e.p1 === pt) e.p1 = copy; if (e.p2 === pt) e.p2 = copy; }
-            else if (e instanceof Circle || e instanceof Arc) { if (e.center === pt) e.center = copy; }
-          }
-          for (const c of s.constraints) if (c.layerId === layerId) retargetPoint(c, pt.id, copy.id);
-          const link = new CoincidentConstraint(copy.id, pt.id);
-          link.layerId = layerId;
-          s.constraints.push(link);
-          made++;
-        }
-      }
-    }
-    return made;
   }
 
   /** Give every constraint without a layer one: the layer of the first

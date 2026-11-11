@@ -5,10 +5,11 @@
    construction, selection), as in SolidWorks. An entity's own style is
    only its line weight and line type, taken from the drawing style when
    it was drawn. Colour is added by the Fill tool. Layers are display
-   groups only: visibility, lock, opacity, order.
+   groups only: visibility, opacity, order (and the active layer is where
+   new shapes go).
 
-   Layers never affect solving, except that only the active layer is
-   editable: geometry on every other layer is held still: constraints may freely link entities on different layers.
+   Layers never affect solving or editing: constraints freely link
+   entities on different layers, which can share points.
    ============================================================ */
 import { newId } from './entities.js';
 

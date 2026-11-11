@@ -4,21 +4,12 @@ export class SolveMixin {
 
   /* ---- Solving ---- */
   commit(options = {}) {
-    // New constraints and dimensions belong to the active layer when they
-    // touch it, else to the layer of their geometry (a relation added
-    // from here between shapes of other layers lives with those shapes).
+    // New constraints and dimensions are filed under the active layer
+    // (layers are display only: this only decides where they're listed).
     const activeLayer = this.project.activeLayerId;
-    const fresh = [];
-    for (const s of this.project.sketches) for (const c of s.constraints) {
-      if (c.layerId) continue;
-      const geo = this.project.constraintLayerIds(c);
-      c.layerId = geo.has(activeLayer) || !geo.size ? activeLayer : [...geo][0];
-      fresh.push(c);
-    }
+    for (const s of this.project.sketches) for (const c of s.constraints) if (!c.layerId) c.layerId = activeLayer;
     this._refLayers = null;
-    // Layers never share a point (e.g. after moving a shape to another layer).
-    this.project.separateLayerPoints();
-    // Equation changes (variables, formulas) reach every layer.
+    // Equation changes (variables, formulas) are applied before the solve.
     if (this._applyEquations().changed) this._solveAllLayers();
     const diagnostics = options.diagnostics || 'defer';
     const sketch = this.activeSketch();
@@ -26,10 +17,6 @@ export class SolveMixin {
       ? new Set(options.activeIds)
       : (sketch && sketch.dirtyIds && sketch.dirtyIds.size ? new Set(sketch.dirtyIds) : null);
     if (sketch?.dirtyIds) sketch.dirtyIds.clear();
-    // A new relation or dimension on layers that don't move with the
-    // active one: solve once with those layers editable, so it takes
-    // effect now (as it would on their own layer).
-    this._solveOtherLayersOf(fresh);
     if (diagnostics === 'sync') this.solveAndRender();
     else this.solveFastAndRender({ diagnostics, activeIds });
     // Carry fill colours over to the areas the settled shapes form (split /
@@ -46,27 +33,6 @@ export class SolveMixin {
     this.scheduleAutosave();
   }
 
-
-  _solveOtherLayersOf(constraints) {
-    if (!constraints.length) return;
-    const project = this.project, sketch = this.activeSketch();
-    if (!sketch) return;
-    const moving = project.linkedLayers(project.activeLayerId);
-    const todo = new Set();
-    for (const c of constraints) for (const id of project.constraintLayerIds(c)) {
-      if (!moving.has(id)) todo.add(id);
-    }
-    try {
-      for (const id of todo) {
-        project.editLayerId = id;
-        this.solver.solve(sketch, project.sketches, [], { diagnostics: false, revertOnFailure: true });
-      }
-    } finally {
-      project.editLayerId = null;
-      project.syncLocks();
-      for (const e of sketch.entities) if (e instanceof Arc) e.syncEnds();
-    }
-  }
 
   solveSoft() {
     const sketch = this.activeSketch(); if (!sketch) return;
@@ -202,48 +168,17 @@ export class SolveMixin {
     });
   }
 
-  /** Colour every entity by how defined it is on its own layer. The
-   *  active layer uses `result`; every other layer with geometry is
-   *  checked as if it were the active one (its geometry editable, the
-   *  rest held), so a fully defined layer stays black while you work on
-   *  another. Geometry is put back exactly after each check. */
+  /** Colour every entity by how defined it is. Layers don't matter: the
+   *  whole drawing is solved as one. */
   _updateConstraintStatus(result) {
     const sketch = this.activeSketch(); if (!sketch) return;
-    const project = this.project;
-    const apply = (r, layerId) => {
-      const over = r.state === 'over';
-      for (const e of sketch.entities) {
-        if (project.layerOf(e).id !== layerId) continue;
-        const s = r.entityStatus?.get(e.id) || 'under';
-        e.status = over ? 'over' : s;
-        for (const c of e.children()) {
-          const cs = r.entityStatus?.get(c.id) || s;
-          c.status = over ? 'over' : cs;
-        }
-      }
-    };
-    // The active layer and the layers linked to it were solved together.
-    const together = project.linkedLayers(project.activeLayerId);
-    for (const id of together) apply(result, id);
-
-    const others = new Set();
-    for (const e of sketch.entities) { const id = project.layerOf(e).id; if (!together.has(id)) others.add(id); }
-    if (others.size) {
-      const saved = [];
-      const walk = (e) => { for (const k of e.paramKeys()) saved.push([e, k, e[k]]); for (const c of e.children()) walk(c); };
-      for (const e of sketch.entities) walk(e);
-      try {
-        for (const layerId of others) {
-          project.editLayerId = layerId;
-          const r = this.solver.solve(sketch, project.sketches, [], { diagnostics: true, revertOnFailure: true });
-          for (const [e, k, v] of saved) e[k] = v;
-          apply(r, layerId);
-        }
-      } finally {
-        project.editLayerId = null;
-        project.syncLocks();
-        for (const [e, k, v] of saved) e[k] = v;
-        for (const e of sketch.entities) if (e instanceof Arc) e.syncEnds();
+    const over = result.state === 'over';
+    for (const e of sketch.entities) {
+      const s = result.entityStatus?.get(e.id) || 'under';
+      e.status = over ? 'over' : s;
+      for (const c of e.children()) {
+        const cs = result.entityStatus?.get(c.id) || s;
+        c.status = over ? 'over' : cs;
       }
     }
   }

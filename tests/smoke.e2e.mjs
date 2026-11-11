@@ -193,21 +193,15 @@ const selBar = await page.evaluate(() => ({ buttons: document.querySelectorAll('
 check(selBar.buttons === 0 && selBar.hint, `Select options bar: just the hint (${JSON.stringify(selBar)})`);
 await page.evaluate(() => window._app._setPen('lineStyle', 'solid', true));
 
-// Editing is limited to the active layer; other visible layers can be
-// picked as references (relations, dimensions).
-const activeOnly = await page.evaluate(() => {
+// Layers are display only: a shape on another visible layer is picked and
+// edited like one on the active layer.
+const anyLayer = await page.evaluate(() => {
   const a = window._app, other = a.project.layers[0];
   const c = a.project.entitiesOnLayer(other.id).find(e => e.constructor.kind === 'circle');
   const at = { x: c.center.x + c.r, y: c.center.y };
-  const editWhileOther = a.hitTestActiveSketch(at);
-  const pickWhileOther = a.hitTestAcrossLayers(at);
-  const keep = a.project.activeLayerId;
-  a.project.activeLayerId = other.id;
-  const whileOwn = a.hitTestActiveSketch(at);
-  a.project.activeLayerId = keep;
-  return { edit: editWhileOther === null, pick: pickWhileOther === c, own: whileOwn === c };
+  return { edit: a.hitTestActiveSketch(at) === c, interactive: a.isEntityInteractive(c) };
 });
-check(activeOnly.edit && activeOnly.pick && activeOnly.own, `editing limited to the active layer, other layers pickable as references (${JSON.stringify(activeOnly)})`);
+check(anyLayer.edit && anyLayer.interactive, `shapes on any visible layer are picked and edited (${JSON.stringify(anyLayer)})`);
 
 // Hidden layers can't be picked or snapped to.
 const hideHit = await page.evaluate(() => {
@@ -223,7 +217,8 @@ const hideHit = await page.evaluate(() => {
 });
 check(hideHit.before && hideHit.hidden && hideHit.snapHidden, `hidden layers excluded from picking and snapping (${JSON.stringify(hideHit)})`);
 
-// Inactive layers stay put while a connected line on the active layer is dragged.
+// Layers don't matter to editing: a line drawn on Layer 2 from Layer 1's
+// corner shares that corner, as on one layer.
 const lockDrag = await page.evaluate(() => {
   const a = window._app, base = a.project.layers[0];
   const rectLine = a.project.entitiesOnLayer(base.id).find(e => e.constructor.kind === 'line');
@@ -250,7 +245,9 @@ const after2 = await page.evaluate((id) => {
   const last = a.activeSketch().entities[a.activeSketch().entities.length - 1];
   return { p: [l.p2.x, l.p2.y], shared: last.p1 === l.p2 || a.activeSketch().constraints.some(c => c.kind === 'coincident') };
 }, lockDrag.id);
-check(after2.p[0] === lockDrag.p[0] && after2.p[1] === lockDrag.p[1], `inactive layer did not move during drag (${JSON.stringify({ before: lockDrag.p, after: after2 })})`);
+check(after2.shared, `a line drawn from another layer's corner stays on it while dragged (${JSON.stringify({ before: lockDrag.p, after: after2 })})`);
+// put the rectangle back for the steps below (the drag may have pulled it)
+await page.evaluate(() => window._app.undo());
 
 // Fill tool is blind to other layers: with Layer 2 active, clicking inside
 // Layer 1's rectangle finds no region there, so it fills the background.
@@ -482,10 +479,10 @@ check(prefs.theme === 'dark', `theme toggle (${JSON.stringify(prefs)})`);
 // Editing a dimension in dark mode: the input text must be readable.
 await page.keyboard.press('s');
 await page.evaluate(async () => { const a = window._app; a.windows.toggle('equations', false); a.requestRender(); await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))); });
-const dimRect = await page.evaluate(() => { const r = window._app.renderer.lastDimRects[0]; return r && { x: r.x + r.w / 2, y: r.y + r.h / 2 }; });
+const dimRect = await page.evaluate(() => { const r = window._app.renderer.lastDimRects.find(r => !r.constraint.driven); return r && r.constraint.id; });
 let dimInput = null;
 if (dimRect) {
-  await page.mouse.dblclick(box.x + dimRect.x, box.y + dimRect.y);
+  await page.evaluate((id) => { const a = window._app; a.editDimValue(a.activeSketch().constraints.find(c => c.id === id)); }, dimRect);
   const inp = page.locator('#workspace > input');
   if (await inp.count()) {
     dimInput = await inp.evaluate(el => { const cs = getComputedStyle(el); return { color: cs.color, bg: cs.backgroundColor }; });
@@ -613,7 +610,7 @@ const dimsFor = () => page.evaluate(async () => {
 const onBase = await dimsFor();
 await page.evaluate(() => { const a = window._app; a.project.activeLayerId = 'ly2'; a.project.syncLocks(); a.clearSelection(); a.solveAndRender(); });
 const onTop = await dimsFor();
-check(onBase === 'D1,D2' && onTop === 'D3', `only the active layer's dimensions can be picked (Base: ${onBase} / Top: ${onTop})`);
+check(onBase === 'D1,D2,D3' && onTop === 'D1,D2,D3', `every visible layer's dimensions can be picked, whatever the active layer (Base: ${onBase} / Top: ${onTop})`);
 await page.evaluate(() => { const a = window._app; a.project.variables[0].expr = '60'; a.commit({ diagnostics: 'sync' }); });
 const layerStatus = await page.evaluate(() => {
   const s = window._app.activeSketch(), st = (id) => s.entities.find(e => e.id === id);
@@ -755,11 +752,8 @@ await page.evaluate(() => { const a = window._app; a.project.layer('ly1').visibl
     const link = s.constraints.find(c => c.kind === 'coincident' && [c.p1, c.p2].includes(top.p1.id));
     return { shared: top.p1 === base.p2, sameId: top.p1.id === base.p2.id, link: link && { other: link.p1 === top.p1.id ? link.p2 : link.p1, layer: link.layerId }, cId: 'c' };
   });
-  check(!drawn.shared && drawn.link && drawn.link.other === 'c' && drawn.link.layer === 'ly2',
-    `line drawn on Top from Base's corner gets its own point + coincident on Top (${JSON.stringify(drawn)})`);
-  await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
-  const badges = await page.evaluate(() => window._app.renderer.lastRelRects.map(r => r.constraint.kind).sort().join(','));
-  check(/coincident/.test(badges), `the coincident is shown as a badge (${badges})`);
+  check(drawn.shared && !drawn.link,
+    `line drawn on Top from Base's corner shares that corner, as on one layer (${JSON.stringify(drawn)})`);
 
   // 2. Delete Base's vertical line (switch to Base): Top line stays.
   const topBefore = await page.evaluate(() => { const l = window._app.activeSketch().entities.find(e => e.layerId === 'ly2'); return [l.p1.x, l.p1.y, l.p2.x, l.p2.y]; });
@@ -788,14 +782,14 @@ await page.evaluate(() => { const a = window._app; a.project.layer('ly1').visibl
     const h = s.constraints.find(c => c.id === 'k1');
     return { sharedB: r1.p2 === r2.p1, sharedA: r1.p1 === r4.p2, links, hOnCopy: h.p1 === r1.p1.id && h.p2 === r1.p2.id };
   });
-  check(!moved.sharedA && !moved.sharedB && moved.links === 2 && moved.hOnCopy, `moving a shape to another layer splits its shared corners (${JSON.stringify(moved)})`);
+  check(moved.sharedA && moved.sharedB && moved.links === 0 && moved.hOnCopy, `moving a shape to another layer keeps its corners shared (${JSON.stringify(moved)})`);
 
-  // 5. Older file with a point shared across layers is split on load.
+  // 5. A point shared across layers loads as it is (no split).
   await load({ version: 3, activeLayerId: 'ly1', layers: [{ id: 'ly1', name: 'A' }, { id: 'ly2', name: 'B' }], sketches: [{ id: 's', name: 'S', entities: [
     { type: 'line', id: 'x1', layerId: 'ly1', p1: pt('m', 0, 0), p2: pt('n', 20, 0) },
     { type: 'line', id: 'x2', layerId: 'ly2', p1: pt('n', 20, 0), p2: pt('o', 20, 20) }], constraints: [] }] });
   const legacy = await page.evaluate(() => { const s = window._app.activeSketch(); const [x1, x2] = s.entities; return { shared: x1.p2 === x2.p1, links: s.constraints.filter(c => c.kind === 'coincident').length }; });
-  check(!legacy.shared && legacy.links === 1, `older shared point split on load (${JSON.stringify(legacy)})`);
+  check(legacy.shared && legacy.links === 0, `a point shared across layers stays shared on load (${JSON.stringify(legacy)})`);
 
   // 6. Select a relation badge and delete it.
   await load(rectProj);

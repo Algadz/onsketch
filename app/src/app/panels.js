@@ -169,7 +169,7 @@ export class PanelsMixin {
     const ids = [...this.project.constraintLayerIds(c)];
     if (ids.length < 2) return '';
     const names = ids.map(id => this.project.layer(id)?.name || '?');
-    return `<span class="layer-tag cross" title="Ties shapes on layers ${esc(names.join(', '))}: they are solved together, as one layer">${esc(names.join(' ↔ '))}</span>`;
+    return `<span class="layer-tag cross" title="Ties shapes on layers ${esc(names.join(', '))} (layers don't matter to relations and dimensions)">${esc(names.join(' ↔ '))}</span>`;
   }
 
   _numRow(label, key, value, unit, title = '') {
@@ -183,13 +183,6 @@ export class PanelsMixin {
     const e = geom[0];
     let html = '';
     const curves = geom.filter(x => x instanceof Line || x instanceof Circle || x instanceof Arc);
-    // Shapes of another layer are references here: relations and
-    // dimensions, not editing (double-click one to edit its layer).
-    const elsewhere = geom.filter(x => !this.isEntityInteractive(this.project.ownerOf(x) || x));
-    if (elsewhere.length) {
-      const names = [...new Set(elsewhere.map(x => this.project.layerOf(this.project.ownerOf(x) || x).name))];
-      return `<div class="sb-subhead">Properties</div><div class="hint">${geom.length === elsewhere.length ? 'On' : 'Partly on'} layer ${esc(names.map(n => `"${n}"`).join(', '))}: add relations and dimensions to ${geom.length === 1 ? 'it' : 'them'} from here. Double-click a shape to edit its layer.</div>`;
-    }
     if (geom.length === 1) {
       if (e instanceof Point) {
         html += this._numRow('X', 'x', e.x, u) + this._numRow('Y', 'y', e.y, u);
@@ -212,8 +205,12 @@ export class PanelsMixin {
     }
     const movable = geom.filter(x => sketch.entities.includes(x));
     if (movable.length && this.project.layers.length > 1) {
+      // The shapes' layer (blank when they are on several).
+      const ids = new Set(movable.map(x => this.project.layerOf(x).id));
+      const cur = ids.size === 1 ? [...ids][0] : null;
       html += `<div class="prop-row"><label>Layer</label><select data-move-layer>
-        ${[...this.project.layers].reverse().map(l => `<option value="${l.id}"${l.id === this.project.activeLayerId ? ' selected' : ''}>${esc(l.name)}</option>`).join('')}
+        ${cur ? '' : '<option value="" selected disabled>several</option>'}
+        ${[...this.project.layers].reverse().map(l => `<option value="${l.id}"${l.id === cur ? ' selected' : ''}>${esc(l.name)}</option>`).join('')}
       </select></div>`;
     }
     return html ? `<div class="sb-subhead">Properties</div>${html}` : '';

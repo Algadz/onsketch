@@ -99,18 +99,14 @@ export class LayersPanelMixin {
     this.requestRender();
   }
 
-  /** Makes a layer the active one (the one drawn on and edited). Its
-   *  linked layers move with it from now on, the others are held still.
-   *  With `keep`, the selection stays (double-click on another layer's
-   *  shape). */
-  activateLayer(id, { keep = false } = {}) {
+  /** Makes a layer the active one: new shapes, ink and fills go there.
+   *  The selection stays (any visible shape is editable). */
+  activateLayer(id) {
     const project = this.project;
     if (project.activeLayerId === id || !project.layer(id)) return false;
     project.activeLayerId = id;
-    project.syncLocks();
-    if (!keep) this.clearSelection();
     this.refreshUI();
-    this.solveAndRender();
+    this.requestRender();
     return true;
   }
 
@@ -123,24 +119,15 @@ export class LayersPanelMixin {
     for (const s of project.sketches) for (const e of s.entities) counts.set(e.layerId, (counts.get(e.layerId) || 0) + 1);
     for (const s of project.sketches) for (const st of s.strokes) counts.set(st.layerId, (counts.get(st.layerId) || 0) + 1);
     list.innerHTML = '';
-    // Layers tied to the active one by relations or dimensions are solved
-    // with it, as one layer.
-    const linked = project.linkedLayers(project.activeLayerId);
-    const activeName = project.activeLayer().name;
     for (const layer of [...project.layers].reverse()) {
       const row = document.createElement('div');
       const isActive = layer.id === project.activeLayerId;
-      const isLinked = !isActive && linked.has(layer.id);
-      row.className = 'lyr-row' + (isActive ? ' active' : '') + (layer.visible ? '' : ' hidden-layer') + (isLinked ? ' linked' : '');
-      row.title = isActive ? 'Active layer: the one you draw on and edit' : 'Click to edit this layer';
+      row.className = 'lyr-row' + (isActive ? ' active' : '') + (layer.visible ? '' : ' hidden-layer');
+      row.title = isActive ? 'Active layer: new shapes, ink and fills go here' : 'Click to draw on this layer';
       row.dataset.layerId = layer.id;
-      const linkTitle = isLinked
-        ? `Linked to "${activeName}" by relations or dimensions: solved together, as one layer. Fix its shapes to hold them still.`
-        : '';
       row.innerHTML = `
-        <button class="icon-btn" data-k="vis" title="${layer.visible ? 'Hide' : 'Show'} layer (its relations and dimensions keep working)" aria-label="Toggle visibility">${uiIcon(layer.visible ? 'eye' : 'eyeOff')}</button>
+        <button class="icon-btn" data-k="vis" title="${layer.visible ? 'Hide' : 'Show'} layer (only its display: its relations and dimensions keep working)" aria-label="Toggle visibility">${uiIcon(layer.visible ? 'eye' : 'eyeOff')}</button>
         <span class="name" title="Double-click to rename">${esc(layer.name)}</span>
-        <span class="lyr-link" title="${esc(linkTitle)}"${isLinked ? ` aria-label="${esc(linkTitle)}"` : ''}>${isLinked ? uiIcon('link') : ''}</span>
         <span class="count">${counts.get(layer.id) || 0}</span>`;
 
       row.querySelector('[data-k="vis"]').addEventListener('click', (ev) => {
@@ -198,9 +185,9 @@ export class LayersPanelMixin {
    *  its own point, joined by a coincident). */
   moveSelectionToLayer(layerId) {
     const sketch = this.activeSketch();
-    if (!sketch || !this.project.layer(layerId) || layerId === this.project.activeLayerId) return;
+    if (!sketch || !this.project.layer(layerId)) return;
     const moving = sketch.entities.filter(e => e.selected);
-    if (!moving.length) return;
+    if (!moving.length || moving.every(e => this.project.layerOf(e).id === layerId)) return;
     const ids = new Set();
     for (const e of moving) { ids.add(e.id); for (const c of e.children()) ids.add(c.id); }
     // Points still used by shapes that stay are not "only theirs".

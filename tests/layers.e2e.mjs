@@ -1,5 +1,6 @@
-// End-to-end test of relations and dimensions between layers: picking
-// another layer's shapes, solving linked layers as one, hiding a layer.
+// End-to-end test of layers as display only: shapes on any visible layer are
+// picked, related, dimensioned, dragged and deleted as on one layer; hiding
+// a layer hides it but its relations and dimensions keep holding.
 // Usage: node tests/layers.e2e.mjs [rootDir]
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
@@ -70,19 +71,9 @@ const geo = () => page.evaluate(() => {
 // ---- Pick another layer's shape ----
 await click(0, 0);
 let g = await geo();
-check(g.sel.includes('A') && g.active === 'work', 'clicking a shape on another layer selects it (the layer stays)');
-check(/On layer "Base"/.test(await page.textContent('#sb-body').catch(() => '') || await page.textContent('body')), 'Properties says it is on layer "Base"');
-check(/layer "Base"/.test(await page.textContent('#status-hint')), 'the status bar says how to use it');
-
-// dragging it doesn't move it
+check(g.sel.includes('A') && g.active === 'work', 'clicking a shape on another layer selects it (the active layer stays)');
+check(await page.evaluate(() => document.querySelector('[data-move-layer]')?.value) === 'base', 'Properties shows its layer, "Base"');
 const a0 = (await geo()).A;
-{ const q = await scr(10, 0); await page.mouse.move(q.x, q.y); await page.mouse.down(); await page.mouse.move(q.x + 40, q.y + 30, { steps: 5 }); await page.mouse.up(); }
-check(JSON.stringify((await geo()).A) === JSON.stringify(a0), 'dragging another layer\'s shape doesn\'t move it');
-
-// Delete doesn't remove it
-await click(0, 0);
-await page.keyboard.press('Delete');
-check(await page.evaluate(() => window._app.activeSketch().entities.some(e => e.id === 'A')), 'Delete leaves another layer\'s shape alone');
 
 // ---- A relation between layers, from Properties ----
 await click(0, 0);
@@ -99,8 +90,6 @@ check(Math.abs(lenB - 60) < 1e-3, `Equal between layers makes B as long as A (${
 check(JSON.stringify(g.A) === JSON.stringify(a0), 'A (fixed) did not move');
 if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT });
 check(await page.evaluate(() => !!document.querySelector('.layer-tag.cross')), 'the relation is tagged "Base ↔ Work" in Properties');
-check(await page.evaluate(() => document.querySelector('#layer-list .lyr-row[data-layer-id="base"]').classList.contains('linked')
-  && !document.querySelector('#layer-list .lyr-row[data-layer-id="far"]').classList.contains('linked')), 'the Layers window marks Base as linked to Work, not Far');
 
 // ---- Smart Dimension between layers ----
 await page.keyboard.press('Escape');
@@ -115,7 +104,11 @@ await page.keyboard.press('Enter');
 g = await geo();
 check(Math.abs(g.B[1] - 20) < 1e-6 && Math.abs(g.B[3] - 20) < 1e-6, `a dimension from Work to Base's line sets the distance (B at y=${g.B[1]})`);
 const dim = await page.evaluate(() => { const a = window._app, c = a.activeSketch().constraints.find(k => k.kind === 'offsetDistance'); return { id: c.id, state: a.constraintLayerState(c), driven: !!c.driven }; });
-check(dim.state === 'active' && !dim.driven, 'it is a driving dimension, editable from Work');
+check(dim.state === 'active' && !dim.driven, 'it is a driving dimension');
+// switching the active layer changes nothing about it
+await page.click('#layer-list .lyr-row[data-layer-id="far"]');
+const far = await page.evaluate((id) => { const a = window._app, c = a.activeSketch().constraints.find(k => k.id === id); a._render(); return { active: a.project.activeLayerId, state: a.constraintLayerState(c) }; }, dim.id);
+check(far.active === 'far' && far.state === 'active', 'from an unrelated layer it is still shown and editable');
 
 // ---- Linked layers solve as one: free A, fix B, change the dimension ----
 await page.evaluate(() => {
@@ -130,7 +123,7 @@ await page.evaluate((id) => {
 }, dim.id);
 g = await geo();
 const gap = toA(g, g.B[0], g.B[1]);
-check(Math.abs(gap - 32) < 1e-3, `changing the value keeps the layers 32 apart (gap ${gap.toFixed(4)})`);
+check(Math.abs(gap - 32) < 1e-3, `changing the value (from another layer) moves the free side: 32 apart (gap ${gap.toFixed(4)})`);
 check(JSON.stringify(g.C) === JSON.stringify([-30, -40, 30, -40]), 'the unrelated layer never moved');
 
 // ---- Hiding a layer hides its shapes and the dimension, not the link ----
@@ -146,15 +139,30 @@ check(Math.abs(toA(g, g.B[0], g.B[1]) - 12) < 1e-3, `the hidden layer still foll
 check(await page.evaluate(([x, y]) => window._app.hitTestAcrossLayers({ x, y })?.id !== 'A', midA(g)), 'a hidden layer can\'t be picked');
 await page.evaluate(() => { const a = window._app; a.project.layer('base').visible = true; a.commit({ diagnostics: 'sync' }); a.refreshUI(); });
 
-// ---- Double-click and right-click another layer's shape ----
+// ---- Drag, draw from and delete shapes of other layers ----
 await page.keyboard.press('s');
+await page.evaluate(() => window._app.clearSelection());
+await page.click('#layer-list .lyr-row[data-layer-id="work"]');
 g = await geo();
-await click(...midA(g), { button: 'right' });
-await page.waitForSelector('#context-menu [data-action="edit-layer"]');
-check(/Edit layer "Base"/.test(await page.textContent('#context-menu')), 'right-click offers Edit layer "Base"');
-await page.keyboard.press('Escape');
-{ const q = await scr(...midA(g)); await page.mouse.dblclick(q.x, q.y); }
-check((await geo()).active === 'base', 'double-click another layer\'s shape to edit its layer');
+{ const q = await scr((g.C[0] + g.C[2]) / 2, (g.C[1] + g.C[3]) / 2); await page.mouse.move(q.x, q.y); await page.mouse.down(); await page.mouse.move(q.x - 20, q.y - 20, { steps: 6 }); await page.mouse.up(); }
+const g2 = await geo();
+check(g2.active === 'work' && JSON.stringify(g2.C) !== JSON.stringify(g.C), 'a shape on another layer drags like any shape');
+// draw a line from C's corner (on Far) while Work is active: the corner is shared
+await page.keyboard.press('l');
+await click(g2.C[2], g2.C[3]);
+await click(g2.C[2], g2.C[3] - 25);
+await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
+const shared = await page.evaluate(() => {
+  const s = window._app.activeSketch(), C = s.entities.find(e => e.id === 'C');
+  const n = s.entities.find(e => e.constructor.kind === 'line' && e.id !== 'A' && e.id !== 'B' && e.id !== 'C');
+  return { same: n && (n.p1 === C.p2 || n.p2 === C.p2), layer: n?.layerId };
+});
+check(shared.same && shared.layer === 'work', 'a line drawn from another layer\'s corner shares that corner (as on one layer)');
+await page.keyboard.press('s');
+await page.evaluate(() => window._app.clearSelection());
+await click((g2.C[0] + g2.C[2]) / 2, (g2.C[1] + g2.C[3]) / 2);
+await page.keyboard.press('Delete');
+check(await page.evaluate(() => !window._app.activeSketch().entities.some(e => e.id === 'C')), 'Delete removes a selected shape of another layer');
 
 check(!errors.length, 'no page errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
 await browser.close();

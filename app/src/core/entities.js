@@ -14,7 +14,7 @@ export class Entity {
     this.style = null;            // per-entity style overrides, or null
     this.construction = false;
     this.fixed = false;
-    this.locked = false;          // not on the active layer, held still (transient, see Project.syncLocks)
+    this.locked = false;          // held constant by the solver (transient; layers never set it, see Project.syncLocks)
     this.status = 'under';        // 'under' | 'fully' | 'over'
     this.selected = false;
     this.hover = false;

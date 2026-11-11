@@ -51,17 +51,8 @@ export class SelectionMixin {
 
   deleteSelection() {
     const sketch = this.activeSketch(); if (!sketch) return;
-    // Only shapes on the active layer are deleted. Shapes of other layers
-    // picked as references are just deselected.
-    const picked = (e) => e.selected || e.children().some(c => c.selected);
-    const toDelete = sketch.entities.filter(e => picked(e) && this.isEntityInteractive(e));
-    const others = sketch.entities.filter(e => picked(e) && !this.isEntityInteractive(e));
-    if (others.length && !toDelete.length && !sketch.constraints.some(c => c.selected)) {
-      for (const e of others) { e.selected = false; for (const c of e.children()) c.selected = false; }
-      const el = document.getElementById('status-hint');
-      if (el) el.textContent = 'Shapes on other layers are deleted from their own layer: double-click one to edit its layer.';
-      this.refreshUI(); this.requestRender();
-    }
+    // Selected shapes, whatever their layer.
+    const toDelete = sketch.entities.filter(e => e.selected || e.children().some(c => c.selected));
     const hasSelectedConstraints = sketch.constraints.some(c => c.selected);
     const inkDeleted = this.deleteSelectedStrokes();
     if (!toDelete.length && !hasSelectedConstraints) {

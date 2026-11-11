@@ -127,28 +127,20 @@ export class App {
     return (s && s.visible) ? [s] : [];
   }
 
-  /* ---- Layer visibility / lock ---- */
+  /* ---- Layers: display only ----
+     Layers group shapes for display (visibility, opacity, order) and
+     say where new shapes go (the active layer). They don't matter to
+     relations, dimensions, the solver or editing: any visible shape can
+     be picked, dragged, related, dimensioned and deleted. */
   /** Entity's layer is shown (hidden layers are still solved). */
   isEntityVisible(e) { const l = this.project.layerOf(e); return !l || l.visible; }
-  /** Entity can be hovered, picked and box-selected: only geometry on the
-   *  active layer, and only while that layer is visible.
-   *  (Snapping still uses every visible layer.) */
-  isEntityInteractive(e) {
-    const l = this.project.layerOf(e);
-    return !!l && l.id === this.project.activeLayerId && l.visible;
-  }
-  /** Entity can be picked as a reference: any visible layer. Selection,
-   *  Smart Dimension and relations use it, so relations and dimensions
-   *  can tie layers together; moving and deleting stay on the active
-   *  layer (isEntityInteractive). */
+  /** Entity can be hovered, picked, box-selected, dragged: any visible shape. */
+  isEntityInteractive(e) { return this.isEntityVisible(e); }
   isEntityPickable(e) { return this.isEntityVisible(e); }
-
-  /** Status hint after picking a shape on another layer. */
-  noteOtherLayerPick(e) {
-    const owner = this.project.ownerOf(e) || e;
-    const layer = this.project.layerOf(owner);
-    const el = document.getElementById('status-hint');
-    if (el) el.textContent = `${this._entityLabel(e)} on layer "${layer.name}": add relations and dimensions to it from here. Double-click it to edit that layer.`;
+  /** Visible and on the active layer: preferred when shapes overlap. */
+  _onActiveLayer(e) {
+    const l = this.project.layerOf(e);
+    return !!l && l.visible && l.id === this.project.activeLayerId;
   }
 
   /** Layer a constraint belongs to (its own layerId, set when created). */
@@ -174,17 +166,13 @@ export class App {
     }
     return out;
   }
-  /** 'active' (shown, selectable), 'inactive' (shown grey) or 'hidden'.
-   *  Hidden when its layer or any layer of its geometry is hidden (it
-   *  still holds: hiding only hides); active when it belongs to the
-   *  active layer or ties geometry on it (a dimension between layers is
-   *  edited from either one). */
+  /** 'active' (shown, editable) or 'hidden': hidden when any of the
+   *  shapes it ties is on a hidden layer (it still holds: hiding only
+   *  hides). A relation or dimension without shapes follows its layer. */
   constraintLayerState(c) {
-    const l = this.constraintLayer(c);
     const geo = this.constraintGeometryLayers(c);
-    if (!l.visible || [...geo].some(id => this.project.layer(id)?.visible === false)) return 'hidden';
-    const active = this.project.activeLayerId;
-    return l.id === active || geo.has(active) ? 'active' : 'inactive';
+    if (!geo.size) return this.constraintLayer(c).visible ? 'active' : 'hidden';
+    return [...geo].some(id => this.project.layer(id)?.visible === false) ? 'hidden' : 'active';
   }
 
   makeOrReusePoint(world, snap, sketch) {
@@ -192,12 +180,11 @@ export class App {
     // an existing corner only inside the active sketch. Endpoints from
     // inactive sketches stay reference geometry, so we create a new active
     // point and constrain it to the reference instead of sharing the object.
-    // Only a point of the active layer is shared; on another layer a new
-    // point is made and the caller ties it with a coincident constraint,
-    // so the layers stay independent.
+    // A corner on any layer is shared, as on one layer (layers are display
+    // only).
     if (snap && snap.kind === 'endpoint' && snap.entity instanceof Point && !this.arcEndpointRef(snap.entity)) {
       const owner = this.project.ownerOf(snap.entity);
-      if (owner && sketch.entities.includes(owner) && this.project.layerOf(owner).id === this.project.activeLayerId) {
+      if (owner && sketch.entities.includes(owner)) {
         return { point: snap.entity, reused: true };
       }
     }
@@ -421,21 +408,13 @@ export class App {
   }
 
 
-  /** Hit on any visible layer, active layer first (children win over
-   *  their parents). */
+  /** Hit on any visible layer; the active layer's shapes win where
+   *  shapes overlap (children win over their parents). */
   hitTestAcrossLayers(world) {
-    return this.hitTestSketches(world, this.project.visibleSketches())
-      || this.hitTestSketches(world, this.project.visibleSketches(), (e) => this.isEntityPickable(e));
+    return this.hitTestSketches(world, this.project.visibleSketches(), (e) => this._onActiveLayer(e))
+      || this.hitTestSketches(world, this.project.visibleSketches());
   }
-
-  /** Hit on the active layer only (editing: drag, operations). */
-  hitTestActiveSketch(world) {
-    return this.hitTestSketches(world, this.activeVisibleSketches());
-  }
-
-  /** What a click with Select picks: the active layer first, else a
-   *  shape on another visible layer (as a reference for relations and
-   *  dimensions). */
+  hitTestActiveSketch(world) { return this.hitTestAcrossLayers(world); }
   hitTestPickable(world) { return this.hitTestAcrossLayers(world); }
 
   hitTestSketches(world, sketches, ok = (e) => this.isEntityInteractive(e)) {
@@ -455,8 +434,8 @@ export class App {
     return null;
   }
 
-  /** Every shape under the cursor: the active layer's first, then those
-   *  of other visible layers (pickable references). */
+  /** Every shape under the cursor on visible layers, the active layer's
+   *  first. */
   hitTestAllSketches(world, sketches) {
     const v = this._hitView();
     const out = [];
@@ -480,8 +459,8 @@ export class App {
         }
       }
     };
-    pass((e) => this.isEntityInteractive(e));
-    pass((e) => this.isEntityPickable(e));
+    pass((e) => this._onActiveLayer(e));
+    pass((e) => this.isEntityVisible(e));
     return out;
   }
 
@@ -567,10 +546,7 @@ export class App {
       menu.appendChild(head);
     }
     // Geometry: its own actions, plus "link the selected ink here".
-    const firstOwner = items.length ? (this.project.ownerOf(items[0]) || items[0]) : null;
-    const elsewhere = firstOwner && !this.isEntityInteractive(firstOwner);
     const actions = ink ? this.inkContextActions()
-      : elsewhere ? [this._editLayerAction(firstOwner), ...this.linkHereActions(items[0])]
       : [...this.contextActions(items), ...this.linkHereActions(items[0])];
     if (actions.length) {
       const sep = document.createElement('div');
@@ -603,13 +579,6 @@ export class App {
     };
     setTimeout(() => document.addEventListener('pointerdown', this.contextMenuDocPointerDown), 0);
     return true;
-  }
-
-  /** "Edit layer …" for a shape on another layer. */
-  _editLayerAction(e) {
-    const layer = this.project.layerOf(e);
-    return { id: 'edit-layer', glyph: '✎', label: `Edit layer "${layer.name}"`, hint: 'Double-click',
-      run: () => this.activateLayer(layer.id, { keep: true }) };
   }
 
   /** Right-click / long press on empty canvas after copying ink here:

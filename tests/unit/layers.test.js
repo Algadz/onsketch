@@ -152,58 +152,28 @@ test('ownerOf finds the entity a child point belongs to', () => {
 import * as C from '../../app/src/core/constraints.js';
 import { Solver } from '../../app/src/core/solver.js';
 
-test('geometry on unlinked layers does not move; a constraint only on it waits for its layer', () => {
-  const p = new Project(); const s = p.addSketch('A');
-  const frozen = p.layers[0];
-  const a = new Line(new Point(0, 0), new Point(10, 0)); s.addEntity(a);
-  p.addLayer('Work');                                                  // becomes the active layer
-  const b = new Line(new Point(10, 5), new Point(13, 9)); s.addEntity(b);
-  s.constraints.push(new C.DistanceConstraint(b.p1.id, b.p2.id, 8));
-  s.constraints.push(new C.HorizontalConstraint(a.id, a.p1.id, a.p2.id));
-  new Solver().solve(s, [s], [], { diagnostics: true });
-  assert.deepEqual([a.p1.x, a.p1.y, a.p2.x, a.p2.y], [0, 0, 10, 0]);
-  assert.ok(Math.abs(Math.hypot(b.p2.x - b.p1.x, b.p2.y - b.p1.y) - 8) < 1e-6);
-
-  // A constraint only on held geometry is a constant while its layer is
-  // inactive: ignored, not reported.
-  const onA = new C.DistanceConstraint(a.p1.id, a.p2.id, 20);
-  s.constraints.push(onA);
-  const r2 = new Solver().solve(s, [s], [], { diagnostics: true });
-  assert.equal(a.p2.x, 10);
-  assert.notEqual(r2.state, 'over');
-
-  p.activeLayerId = frozen.id;                                         // now 'a' is editable, 'b' is held
-  const bBefore = [b.p1.x, b.p1.y, b.p2.x, b.p2.y];
-  new Solver().solve(s, [s], [], { diagnostics: true });
-  assert.ok(Math.abs(Math.hypot(a.p2.x - a.p1.x, a.p2.y - a.p1.y) - 20) < 1e-6);
-  assert.deepEqual([b.p1.x, b.p1.y, b.p2.x, b.p2.y], bBefore);
-});
-
-test('layers linked by a relation or dimension solve as one; unrelated layers never move', () => {
+test('layers don\'t matter to the solver: shapes on any layer move, hidden ones too', () => {
   const p = new Project(); const s = p.addSketch('A');
   const base = p.layers[0];
   const a = new Line(new Point(0, 0), new Point(10, 0)); s.addEntity(a);
-  const other = new Line(new Point(0, 50), new Point(10, 50)); s.addEntity(other);  // unrelated, same layer
-  const work = p.addLayer('Work');
-  const far = p.addLayer('Far');
-  const lone = new Line(new Point(100, 0), new Point(110, 0)); s.addEntity(lone);   // on Far, no links
-  p.activeLayerId = work.id;
+  const work = p.addLayer('Work');                                     // becomes the active layer
   const b = new Line(new Point(0, 20), new Point(10, 20)); s.addEntity(b);
+  assert.equal(a.layerId, base.id); assert.equal(b.layerId, work.id);
   s.constraints.push(new C.FixConstraint(b.p1.id, 0, 20), new C.FixConstraint(b.p2.id, 10, 20));
-  // a dimension from the work layer to the base layer's line
-  s.constraints.push(new C.DistanceConstraint(a.p1.id, b.p1.id, 5));
-  s.constraints.push(new C.DistanceConstraint(a.p2.id, b.p2.id, 5));
-  assert.deepEqual([...p.linkedLayers(work.id)].sort(), [base.id, work.id].sort());
-  assert.deepEqual([...p.linkedLayers(far.id)], [far.id]);
-  new Solver().solve(s, [s], [], { diagnostics: true });
-  assert.ok(Math.abs(Math.hypot(a.p1.x - 0, a.p1.y - 20) - 5) < 1e-6, 'the base layer moved to satisfy the dimension');
-  assert.ok(Math.abs(Math.hypot(a.p2.x - 10, a.p2.y - 20) - 5) < 1e-6);
-  assert.deepEqual([lone.p1.x, lone.p1.y, lone.p2.x, lone.p2.y], [100, 0, 110, 0], 'an unrelated layer never moves');
-  // a hidden layer keeps its relations and dimensions: it still follows
+  // a constraint only on the base layer's line applies while Work is active
+  s.constraints.push(new C.DistanceConstraint(a.p1.id, a.p2.id, 20));
+  // and dimensions between the layers move the free side (the base line)
+  s.constraints.push(new C.DistanceConstraint(a.p1.id, b.p1.id, 5), new C.DistanceConstraint(a.p2.id, b.p2.id, 25));
+  const r = new Solver().solve(s, [s], [], { diagnostics: true });
+  assert.ok(r.ok);
+  assert.ok(Math.abs(Math.hypot(a.p2.x - a.p1.x, a.p2.y - a.p1.y) - 20) < 1e-6, 'the inactive layer\'s own dimension holds');
+  assert.ok(Math.abs(Math.hypot(a.p1.x, a.p1.y - 20) - 5) < 1e-6);
+  // hidden: still solved
   base.visible = false;
-  s.constraints.find(c => c.kind === 'distance' && c.p1 === a.p1.id).value = 7;
+  s.constraints.at(-2).value = 7;
   new Solver().solve(s, [s], [], { diagnostics: true });
-  assert.ok(Math.abs(Math.hypot(a.p1.x - 0, a.p1.y - 20) - 7) < 1e-6, 'hidden, still solved');
+  assert.ok(Math.abs(Math.hypot(a.p1.x, a.p1.y - 20) - 7) < 1e-6, 'a hidden layer still follows its dimensions');
+  for (const e of s.entities) for (const x of [e, ...e.children()]) assert.equal(x.locked, false, 'nothing is held for its layer');
 });
 
 test('new entities take the drawing style; loaded ones keep their own', () => {
@@ -261,77 +231,25 @@ test('constraints belong to a layer: saved, inferred for older files, removed wi
   const q = Project.fromJSON(JSON.parse(JSON.stringify(p.toJSON())));
   assert.equal(q.sketches[0].constraints.find(c => c.id === 'c6').layerId, 'ly1');
   q.removeLayer('ly2');
-  assert.deepEqual(q.sketches[0].constraints.map(c => c.id), ['c6']);
+  // the circle and its radius go; the relation filed on ly2 about the
+  // line on ly1 stays (filed under a remaining layer)
+  assert.deepEqual(q.sketches[0].constraints.map(c => c.id), ['c6', 'c8']);
+  assert.equal(q.sketches[0].constraints.find(c => c.id === 'c8').layerId, 'ly1');
 });
 
-test('editLayerId lets another layer be checked as if active', () => {
-  const p = new Project(); const s = p.addSketch('A');
-  const a = new Line(new Point(0, 0), new Point(1, 0)); s.addEntity(a);
-  const top = p.addLayer('Top');
-  const b = new Line(new Point(0, 5), new Point(1, 5)); s.addEntity(b);
-  p.syncLocks();
-  assert.equal(a.locked, true); assert.equal(b.locked, false);
-  p.editLayerId = p.layers[0].id; p.syncLocks();
-  assert.equal(a.locked, false); assert.equal(b.locked, true);
-  p.editLayerId = null; p.syncLocks();
-  assert.equal(p.activeLayerId, top.id); assert.equal(a.locked, true);
-});
-
-/* ---- Layers never share a point ---- */
-function twoLayerCorner() {
+test('shapes on different layers can share a corner; deleting one layer keeps the other shape', () => {
   const p = new Project(); const s = p.addSketch('A');
   const base = p.layers[0];
-  const a = new Line(new Point(0, 0), new Point(10, 0)); s.addEntity(a);           // base
-  const top = p.addLayer('Top');
-  const b = new Line(a.p2, new Point(10, 10)); s.addEntity(b);                      // top, shares a.p2
-  const h = new C.VerticalConstraint(b.id, b.p1.id, b.p2.id); h.layerId = top.id;
-  s.constraints.push(h);
-  return { p, s, base, top, a, b, h };
-}
-
-test('a point shared by two layers is split, joined by a coincident on the other layer', () => {
-  const { p, s, base, top, a, b, h } = twoLayerCorner();
-  p.activeLayerId = base.id;
-  assert.equal(p.separateLayerPoints(), 1);
-  assert.notEqual(a.p2, b.p1, 'separate points');
-  assert.equal(b.p1.x, 10); assert.equal(b.p1.y, 0);
-  const link = s.constraints.find(c => c.kind === 'coincident');
-  assert.equal(link.layerId, top.id);
-  assert.deepEqual([link.p1, link.p2].sort(), [a.p2.id, b.p1.id].sort());
-  assert.equal(h.p1, b.p1.id, "Top's own constraint now uses Top's copy");
-  assert.equal(p.separateLayerPoints(), 0, 'idempotent');
-});
-
-test('the active layer keeps the original point', () => {
-  const { p, top, a, b } = twoLayerCorner();
-  const shared = a.p2;
-  p.activeLayerId = top.id;
-  p.separateLayerPoints();
-  assert.equal(b.p1, shared); assert.notEqual(a.p2, shared);
-});
-
-test('after the split, deleting either side leaves the other where it was', () => {
-  const one = twoLayerCorner();
-  one.p.activeLayerId = one.base.id; one.p.separateLayerPoints();
-  one.s.removeEntity(one.a);
-  assert.deepEqual([one.b.p1.x, one.b.p1.y, one.b.p2.x, one.b.p2.y], [10, 0, 10, 10]);
-  assert.ok(!one.s.constraints.some(c => c.kind === 'coincident'), 'the link goes with the deleted point');
-  const two = twoLayerCorner();
-  two.p.activeLayerId = two.base.id; two.p.separateLayerPoints();
-  two.s.removeEntity(two.b);
-  assert.deepEqual([two.a.p1.x, two.a.p2.x, two.a.p2.y], [0, 10, 0]);
-  assert.ok(two.s.entities.includes(two.a));
-});
-
-test('older files with a point shared across layers are split on load', () => {
-  const pt = (id, x, y) => ({ type: 'point', id, x, y });
-  const p = Project.fromJSON({ version: 3, activeLayerId: 'ly1', layers: [{ id: 'ly1', name: 'A' }, { id: 'ly2', name: 'B' }],
-    sketches: [{ id: 's1', name: 'S', entities: [
-      { type: 'line', id: 'e3', layerId: 'ly1', p1: pt('e1', 0, 0), p2: pt('e2', 10, 0) },
-      { type: 'line', id: 'e5', layerId: 'ly2', p1: pt('e2', 10, 0), p2: pt('e4', 10, 10) }], constraints: [] }] });
-  const [x, y] = p.sketches[0].entities;
-  assert.notEqual(x.p2, y.p1);
-  const ids = new Set([x.p1.id, x.p2.id, y.p1.id, y.p2.id]);
-  assert.equal(ids.size, 4, 'the copy has a fresh id');
-  assert.equal(p.sketches[0].constraints.filter(c => c.kind === 'coincident').length, 1);
+  const x = new Line(new Point(0, 0), new Point(10, 0)); s.addEntity(x);
+  p.addLayer('Work');
+  const y = new Line(x.p2, new Point(10, 10)); s.addEntity(y);          // drawn from x's corner
+  s.constraints.push(new C.HorizontalConstraint(x.id, x.p1.id, x.p2.id), new C.VerticalConstraint(y.id, y.p1.id, y.p2.id));
+  const back = Project.fromJSON(JSON.parse(JSON.stringify(p.toJSON())));
+  const [bx, by] = back.sketches[0].entities;
+  assert.equal(bx.p2, by.p1, 'still one shared point after a reload (no split)');
+  back.removeLayer(back.layers.find(l => l.id !== base.id).id);
+  const left = back.sketches[0];
+  assert.equal(left.entities.length, 1);
+  assert.equal(left.entities[0].p2.id, x.p2.id, 'the corner stays with the remaining line');
+  assert.deepEqual(left.constraints.map(c => c.kind), ['horizontal']);
 });

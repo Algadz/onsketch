@@ -31,21 +31,14 @@ export class EquationsMixin {
     return { errors, changed };
   }
 
-  /** Equations are global: when they change dimension values, solve once
-   *  with every layer editable so the change reaches geometry on all
-   *  layers, not just the active one. Groups that can't be solved stay as
-   *  they were. */
+  /** Equations changed dimension values: solve the whole drawing (every
+   *  layer: layers don't matter to the solver). Groups that can't be
+   *  solved stay as they were. */
   _solveAllLayers() {
     const sketch = this.activeSketch();
     if (!sketch) return;
-    this.project.editAllLayers = true;
-    try {
-      this.solver.solve(sketch, this.project.sketches, [], { diagnostics: false, revertOnFailure: true });
-      for (const e of sketch.entities) if (e.syncEnds) e.syncEnds();
-    } finally {
-      this.project.editAllLayers = false;
-      this.project.syncLocks();
-    }
+    this.solver.solve(sketch, this.project.sketches, [], { diagnostics: false, revertOnFailure: true });
+    for (const e of sketch.entities) if (e.syncEnds) e.syncEnds();
   }
 
   /**
