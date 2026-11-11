@@ -20,6 +20,7 @@ npm run test:display # grid / snap / dimensions / relations saved with the proje
 npm run test:image   # imported images: picker, 3 MB limit, drop, paste, transparency, resize / turn, link
 npm run test:clipboard # Ctrl+C / X / V for ink, across tabs and from other apps (text, images)
 npm run test:linedim # Smart Dimension between two parallel lines
+npm run test:layers  # relations and dimensions between layers, hiding a layer
 node tests/style.e2e.mjs  # restyling arrows / texts after drawing, touch tap-through guard
 npm run test:mobile  # phone / tablet layout and touch input on emulated devices
 npm run test:cloud   # account and cloud projects against a fake Supabase
@@ -293,22 +294,47 @@ touch input. Plan and audit: `docs/mobile-plan.md`.
   actually land on it. A point that is held by its constraints (say, the end
   of a fixed-length arm) keeps following the cursor along the path it is
   allowed to take.
-- Constraints that only involve geometry on inactive layers are left out of
-  the solve while those layers are inactive.
+- Constraints that only involve geometry on layers not linked to the active
+  one are left out of the solve until one of their layers is edited (a
+  relation added from here between two other layers' shapes is applied to
+  them right away).
 
 ## Layers
 
-Only the active layer is editable, and it is highlighted in the Layers
-window. Geometry on every other layer is held still by the solver (points
-shared with it too), can't be picked, and shows grey vertices; snapping still
-uses all visible layers, so new geometry can attach to it. Switch layers to
-edit them. Layers have a name, visibility, opacity and order.
+The active layer (highlighted in the Layers window) is the one you draw on,
+drag and delete in. **Relations and dimensions work between layers exactly
+as inside one layer:**
+
+- **Pick across layers.** With Select, click a shape on any visible layer
+  (the active layer's shapes and ink win when they overlap); Ctrl / Shift
+  add to the selection, so a line on "Walls" and a line on "Furniture" can
+  be made parallel, equal, coincident… from Properties. Smart Dimension
+  picks shapes on any visible layer too. A shape of another layer is a
+  reference here: Properties says which layer it is on, dragging or Delete
+  don't touch it, and the status bar says so. **Double-click** it (or
+  right-click → *Edit layer "…"*) to make its layer the active one.
+- **Linked layers solve as one.** Layers tied by a relation or dimension
+  (directly or through other layers) are solved together with the active
+  one, so a dimension between them moves whichever side is free, as it
+  would inside one layer; hold a side still with Fix or dimensions, as
+  usual. The Layers window marks the layers linked to the active one (⛓,
+  dashed outline). Layers not linked to it never move while you edit.
+- **Hiding a layer hides its drawing, not its relations.** Its shapes,
+  and every relation or dimension that touches it, are hidden and can't be
+  picked, but they keep holding: change a dimension and the hidden layer
+  still follows. Show it again and everything is where the constraints put
+  it.
+- A relation or dimension belongs to the active layer when it touches it,
+  else to the layer of its shapes. It is drawn (and editable) from any
+  layer it ties, grey from the others; Properties tags it "Base ↔ Work".
+  Deleting a layer deletes its shapes and every relation on them.
 
 Layers never share a point. Drawing from another layer's corner makes a new
-point tied to it by a coincident relation (on the new layer); moving shapes to
-another layer (Properties → layer) takes their own relations along and splits
-shared corners the same way; older files are split on load. Deleting either
-side leaves the other where it was.
+point tied to it by a coincident relation (on the new layer), which links
+the two layers; moving shapes to another layer (Properties → layer) takes
+their own relations along and splits shared corners the same way; older
+files are split on load. Deleting either side leaves the other where it was.
+Layers have a name, visibility, opacity and order.
 
 Right-click a line, circle or arc for **Set as construction** (or back to
 normal geometry) and, on lines, **Create midpoint** (a point held at the
@@ -319,12 +345,9 @@ Relations (coincident, horizontal, parallel, tangent, …) are shown as small
 badges where they act (toggle: Relations / `K`); click one to select it and
 Delete to remove it.
 
-Constraints and dimensions belong to the layer they were created on: a hidden
-layer hides its dimensions, an inactive layer's dimensions are drawn grey and
-can't be picked, and deleting a layer deletes them. Status colours are per
-layer: each layer is checked as if it were the active one, so a fully defined
-layer stays black while you work on another (for example after a global
-variable changed it).
+Status colours are per layer: each layer is checked as if it were the
+active one (with its linked layers), so a fully defined layer stays black
+while you work on another (for example after a global variable changed it).
 
 ## Source layout
 
@@ -393,8 +416,9 @@ The UI exposes layers only. `sketches` stays an array in the file format, but
 files with several sketches are merged into one on load (pre-layer files get
 one layer per former sketch).
 
-Layers only affect display and picking. Constraints can link entities on
-different layers, and hidden layers are still solved. Project files are JSON
+Layers only affect display and editing. Constraints can link entities on
+different layers (those layers then solve together), and hidden layers are
+still solved. Project files are JSON
 (`version: 3`); older files load onto a single default layer.
 
 ## Accounts and cloud projects

@@ -163,6 +163,15 @@ export class PanelsMixin {
     </details>`;
   }
 
+  /** "A ↔ B" tag for a relation or dimension tying shapes of several
+   *  layers (empty otherwise). */
+  _crossLayerTag(c) {
+    const ids = [...this.project.constraintLayerIds(c)];
+    if (ids.length < 2) return '';
+    const names = ids.map(id => this.project.layer(id)?.name || '?');
+    return `<span class="layer-tag cross" title="Ties shapes on layers ${esc(names.join(', '))}: they are solved together, as one layer">${esc(names.join(' ↔ '))}</span>`;
+  }
+
   _numRow(label, key, value, unit, title = '') {
     return `<div class="prop-row"><label>${label}</label><div class="unit-row">
       <input type="text" inputmode="decimal" data-edit="${key}" value="${Number(value.toFixed(4))}"${title ? ` title="${esc(title)}"` : ''} spellcheck="false">
@@ -174,6 +183,13 @@ export class PanelsMixin {
     const e = geom[0];
     let html = '';
     const curves = geom.filter(x => x instanceof Line || x instanceof Circle || x instanceof Arc);
+    // Shapes of another layer are references here: relations and
+    // dimensions, not editing (double-click one to edit its layer).
+    const elsewhere = geom.filter(x => !this.isEntityInteractive(this.project.ownerOf(x) || x));
+    if (elsewhere.length) {
+      const names = [...new Set(elsewhere.map(x => this.project.layerOf(this.project.ownerOf(x) || x).name))];
+      return `<div class="sb-subhead">Properties</div><div class="hint">${geom.length === elsewhere.length ? 'On' : 'Partly on'} layer ${esc(names.map(n => `"${n}"`).join(', '))}: add relations and dimensions to ${geom.length === 1 ? 'it' : 'them'} from here. Double-click a shape to edit its layer.</div>`;
+    }
     if (geom.length === 1) {
       if (e instanceof Point) {
         html += this._numRow('X', 'x', e.x, u) + this._numRow('Y', 'y', e.y, u);
@@ -238,7 +254,7 @@ export class PanelsMixin {
         const what = others.length ? `<span class="rel-with">with ${others.map(name).join(', ')}</span>`
           : (geom.length > 1 || parts.some(x => !selIds.has(x.id))) && parts.length ? `<span class="rel-with">on ${parts.map(name).join(', ')}</span>` : '';
         html += `<div class="rel-row" data-cid="${c.id}" ${this._hoverAttr(parts)} title="Click to select this relation">
-          <span class="glyph">${CONSTRAINT_GLYPHS[c.kind] || '•'}</span><span class="rel-text">${esc(constraintLabel(c))}${what}</span>
+ <span class="glyph">${CONSTRAINT_GLYPHS[c.kind] || '•'}</span><span class="rel-text">${esc(constraintLabel(c))}${what}</span>${this._crossLayerTag(c)}
           <button class="rel-del" data-del="${c.id}" title="Remove this relation" aria-label="Remove ${esc(constraintLabel(c))}">×</button></div>`;
       }
       html += '</div>';
@@ -255,7 +271,7 @@ export class PanelsMixin {
       : `<input type="text" class="dim-val${c.exprError ? ' bad' : ''}" data-dim-edit="${c.id}" value="${esc(this.dimensionEditText(c))}" spellcheck="false" title="${esc(c.exprError || 'Type a value or =equation')}">`;
     return `<div class="dim-row" data-cid="${c.id}" ${this._hoverAttr([c])}>
       <span class="glyph">${glyph}</span>
-      <span class="dim-name" title="${esc(label)}">${esc(c.name || label)}</span>
+      <span class="dim-name" title="${esc(label)}">${esc(c.name || label)}${this._crossLayerTag(c) ? ' ⇄' : ''}</span>
       ${value}<span class="dim-unit">${ang ? '°' : esc(this.project.units)}</span>
       ${removable ? `<button class="rel-del" data-del="${c.id}" title="Delete this dimension" aria-label="Delete dimension">×</button>` : ''}
     </div>`;
@@ -295,7 +311,7 @@ export class PanelsMixin {
     let html = `<div class="ps-head">
       <span class="ps-glyph">${CONSTRAINT_GLYPHS[c.kind] || '•'}</span>
       <span class="ps-title"><strong>${esc(constraintLabel(c))}</strong><span class="ps-id">${esc(c.name || c.id)}</span></span>
-      <span class="ps-tag">${dim ? 'dimension' : 'relation'}</span>
+      <span class="ps-tag">${dim ? 'dimension' : 'relation'}</span>${this._crossLayerTag(c)}
     </div>`;
     if (parts.length) {
       html += '<div class="sb-subhead">Ties</div><div class="stack-list">';

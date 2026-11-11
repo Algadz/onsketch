@@ -193,19 +193,21 @@ const selBar = await page.evaluate(() => ({ buttons: document.querySelectorAll('
 check(selBar.buttons === 0 && selBar.hint, `Select options bar: just the hint (${JSON.stringify(selBar)})`);
 await page.evaluate(() => window._app._setPen('lineStyle', 'solid', true));
 
-// Only the active layer is pickable.
+// Editing is limited to the active layer; other visible layers can be
+// picked as references (relations, dimensions).
 const activeOnly = await page.evaluate(() => {
   const a = window._app, other = a.project.layers[0];
   const c = a.project.entitiesOnLayer(other.id).find(e => e.constructor.kind === 'circle');
   const at = { x: c.center.x + c.r, y: c.center.y };
-  const whileOther = a.hitTestAcrossLayers(at);
+  const editWhileOther = a.hitTestActiveSketch(at);
+  const pickWhileOther = a.hitTestAcrossLayers(at);
   const keep = a.project.activeLayerId;
   a.project.activeLayerId = other.id;
-  const whileOwn = a.hitTestAcrossLayers(at);
+  const whileOwn = a.hitTestActiveSketch(at);
   a.project.activeLayerId = keep;
-  return { other: whileOther === null, own: whileOwn === c };
+  return { edit: editWhileOther === null, pick: pickWhileOther === c, own: whileOwn === c };
 });
-check(activeOnly.other && activeOnly.own, `picking limited to the active layer (${JSON.stringify(activeOnly)})`);
+check(activeOnly.edit && activeOnly.pick && activeOnly.own, `editing limited to the active layer, other layers pickable as references (${JSON.stringify(activeOnly)})`);
 
 // Hidden layers can't be picked or snapped to.
 const hideHit = await page.evaluate(() => {

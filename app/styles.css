@@ -522,6 +522,7 @@
   .rel-row:hover, .dim-row:hover { background: var(--hover); border-color: var(--border-soft); }
   .rel-row .glyph, .dim-row .glyph { width: 14px; flex: 0 0 14px; text-align: center; color: var(--accent); font-weight: 600; }
   .rel-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .layer-tag.cross { flex: none; font-size: 10px; color: var(--accent); padding: 0 5px; margin-left: 4px; border: 1px dashed var(--accent-border); border-radius: 999px; white-space: nowrap; }
   .rel-with { color: var(--text-muted); margin-left: 5px; }
   .rel-del {
     width: 20px; height: 20px; flex: 0 0 20px; border: 0; background: none; border-radius: 4px;
@@ -1149,7 +1150,7 @@
   #layer-list { flex: 1; overflow-y: auto; padding: 4px 0; }
   .lyr-row {
     display: grid;
-    grid-template-columns: 24px minmax(0, 1fr) auto;
+    grid-template-columns: 24px minmax(0, 1fr) 16px auto;
     align-items: center;
     gap: 3px;
     padding: 3px 8px 3px 4px;
@@ -1162,6 +1163,9 @@
   .lyr-row.active { background: var(--accent-softer); border-color: var(--accent-border); }
   .lyr-row.hidden-layer .name, .lyr-row.hidden-layer .count { opacity: 0.5; }
   .lyr-row .icon-btn.on { color: var(--accent); }
+  .lyr-row .lyr-link { display: inline-flex; color: var(--accent); }
+  .lyr-row .lyr-link svg { width: 13px; height: 13px; }
+  .lyr-row.linked { border-color: var(--accent-border); border-style: dashed; }
   .lyr-row .name {
     font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     padding: 3px 2px; min-width: 0;

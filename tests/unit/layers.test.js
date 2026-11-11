@@ -152,18 +152,17 @@ test('ownerOf finds the entity a child point belongs to', () => {
 import * as C from '../../app/src/core/constraints.js';
 import { Solver } from '../../app/src/core/solver.js';
 
-test('geometry on layers other than the active one does not move', () => {
+test('geometry on unlinked layers does not move; a constraint only on it waits for its layer', () => {
   const p = new Project(); const s = p.addSketch('A');
   const frozen = p.layers[0];
   const a = new Line(new Point(0, 0), new Point(10, 0)); s.addEntity(a);
   p.addLayer('Work');                                                  // becomes the active layer
-  const b = new Line(a.p2, new Point(13, 4)); s.addEntity(b);          // shares a corner with a
-  s.constraints.push(new C.DistanceConstraint(b.p1.id, b.p2.id, 8));   // only b's free end can move
+  const b = new Line(new Point(10, 5), new Point(13, 9)); s.addEntity(b);
+  s.constraints.push(new C.DistanceConstraint(b.p1.id, b.p2.id, 8));
   s.constraints.push(new C.HorizontalConstraint(a.id, a.p1.id, a.p2.id));
-  const r = new Solver().solve(s, [s], [], { diagnostics: true });
+  new Solver().solve(s, [s], [], { diagnostics: true });
   assert.deepEqual([a.p1.x, a.p1.y, a.p2.x, a.p2.y], [0, 0, 10, 0]);
-  assert.ok(Math.abs(Math.hypot(b.p2.x - 10, b.p2.y) - 8) < 1e-6);
-  assert.equal(r.entityStatus.get(a.id), 'fully');
+  assert.ok(Math.abs(Math.hypot(b.p2.x - b.p1.x, b.p2.y - b.p1.y) - 8) < 1e-6);
 
   // A constraint only on held geometry is a constant while its layer is
   // inactive: ignored, not reported.
@@ -173,21 +172,38 @@ test('geometry on layers other than the active one does not move', () => {
   assert.equal(a.p2.x, 10);
   assert.notEqual(r2.state, 'over');
 
-  // A conflict involving active geometry is reported; with revertOnFailure
-  // nothing moves.
-  const clash = new C.CoincidentConstraint(b.p2.id, a.p1.id);   // b would need length 10, not 8
-  s.constraints.push(clash);
-  const bEnd = [b.p2.x, b.p2.y];
-  const r3 = new Solver().solve(s, [s], [], { diagnostics: true, revertOnFailure: true });
-  assert.equal(r3.state, 'over'); assert.ok(r3.reverted);
-  assert.deepEqual([b.p2.x, b.p2.y], bEnd);
-  assert.deepEqual([a.p1.x, a.p1.y, a.p2.x, a.p2.y], [0, 0, 10, 0]);
-  s.constraints.pop();
-
   p.activeLayerId = frozen.id;                                         // now 'a' is editable, 'b' is held
+  const bBefore = [b.p1.x, b.p1.y, b.p2.x, b.p2.y];
   new Solver().solve(s, [s], [], { diagnostics: true });
-  assert.ok(Math.abs(Math.hypot(b.p2.x - b.p1.x, b.p2.y - b.p1.y) - 8) < 1e-6);
   assert.ok(Math.abs(Math.hypot(a.p2.x - a.p1.x, a.p2.y - a.p1.y) - 20) < 1e-6);
+  assert.deepEqual([b.p1.x, b.p1.y, b.p2.x, b.p2.y], bBefore);
+});
+
+test('layers linked by a relation or dimension solve as one; unrelated layers never move', () => {
+  const p = new Project(); const s = p.addSketch('A');
+  const base = p.layers[0];
+  const a = new Line(new Point(0, 0), new Point(10, 0)); s.addEntity(a);
+  const other = new Line(new Point(0, 50), new Point(10, 50)); s.addEntity(other);  // unrelated, same layer
+  const work = p.addLayer('Work');
+  const far = p.addLayer('Far');
+  const lone = new Line(new Point(100, 0), new Point(110, 0)); s.addEntity(lone);   // on Far, no links
+  p.activeLayerId = work.id;
+  const b = new Line(new Point(0, 20), new Point(10, 20)); s.addEntity(b);
+  s.constraints.push(new C.FixConstraint(b.p1.id, 0, 20), new C.FixConstraint(b.p2.id, 10, 20));
+  // a dimension from the work layer to the base layer's line
+  s.constraints.push(new C.DistanceConstraint(a.p1.id, b.p1.id, 5));
+  s.constraints.push(new C.DistanceConstraint(a.p2.id, b.p2.id, 5));
+  assert.deepEqual([...p.linkedLayers(work.id)].sort(), [base.id, work.id].sort());
+  assert.deepEqual([...p.linkedLayers(far.id)], [far.id]);
+  new Solver().solve(s, [s], [], { diagnostics: true });
+  assert.ok(Math.abs(Math.hypot(a.p1.x - 0, a.p1.y - 20) - 5) < 1e-6, 'the base layer moved to satisfy the dimension');
+  assert.ok(Math.abs(Math.hypot(a.p2.x - 10, a.p2.y - 20) - 5) < 1e-6);
+  assert.deepEqual([lone.p1.x, lone.p1.y, lone.p2.x, lone.p2.y], [100, 0, 110, 0], 'an unrelated layer never moves');
+  // a hidden layer keeps its relations and dimensions: it still follows
+  base.visible = false;
+  s.constraints.find(c => c.kind === 'distance' && c.p1 === a.p1.id).value = 7;
+  new Solver().solve(s, [s], [], { diagnostics: true });
+  assert.ok(Math.abs(Math.hypot(a.p1.x - 0, a.p1.y - 20) - 7) < 1e-6, 'hidden, still solved');
 });
 
 test('new entities take the drawing style; loaded ones keep their own', () => {

@@ -30,6 +30,7 @@ export class RenderEventsMixin {
     const entMap = new Map();
     const walk = (e) => { entMap.set(e.id, e); for (const c of e.children()) walk(c); };
     for (const s of this.project.visibleSketches()) for (const e of s.entities) walk(e);
+    this._refLayers = null;                   // constraint → layers, rebuilt for this frame
     const sketch = this.activeSketch();
     if (sketch && this.showDimensions) {
       this.renderer.drawDimensions(sketch, entMap, this._lastSolve?.redundantIds, (c) => this.constraintLayerState(c));
@@ -148,7 +149,16 @@ export class RenderEventsMixin {
       if (this.toolName === 'select' && !this.linkPick) {
         const { world } = getWorld(ev);
         const t = !this.hitTestActiveSketch(world) && this.hitStrokeAt(world, { textOnly: true });
-        if (t) { ev.preventDefault(); this.editText(t); }
+        if (t) { ev.preventDefault(); this.editText(t); return; }
+        // Double-click a shape on another layer to edit that layer.
+        const other = !this.hitTestActiveSketch(world) && !this.hitStrokeAt(world) && this.hitTestPickable(world);
+        const owner = other && (this.project.ownerOf(other) || other);
+        if (owner && !this.isEntityInteractive(owner)) {
+          ev.preventDefault();
+          const layer = this.project.layerOf(owner);
+          this.activateLayer(layer.id, { keep: true });
+          this._inkHint?.(`Now editing layer "${layer.name}".`);
+        }
       }
     });
 

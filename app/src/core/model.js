@@ -238,20 +238,74 @@ export class Project {
     this.layers.splice(j, 0, l);
     return true;
   }
-  /** Only the active layer is editable. Sets the transient `locked` flag
-   *  on every entity (and its points) on any other layer; solvers treat
-   *  locked parameters as constants, so that geometry never moves while
-   *  the active layer is edited. A point shared with it is held too.
-   *  Not serialised. */
+  /** Layers that move together with `layerId` when it is edited: the
+   *  layer itself and every layer joined to it, directly or through
+   *  others, by a relation or dimension between their shapes.
+   *  @returns {Set<string>} */
+  linkedLayers(layerId = this.activeLayerId) {
+    const out = new Set([layerId]);
+    const graph = this.layerLinks();
+    const queue = [layerId];
+    while (queue.length) {
+      const id = queue.pop();
+      for (const next of graph.get(id) || []) {
+        if (out.has(next)) continue;
+        out.add(next); queue.push(next);
+      }
+    }
+    return out;
+  }
+
+  /** layerId → Set of layers its shapes share a relation or dimension with. */
+  layerLinks() {
+    const graph = new Map();
+    for (const s of this.sketches) {
+      const layerById = new Map();
+      for (const e of s.entities) {
+        const id = this.layerOf(e).id;
+        layerById.set(e.id, id);
+        for (const c of e.children()) if (!layerById.has(c.id)) layerById.set(c.id, id);
+      }
+      for (const c of s.constraints) {
+        const layers = new Set();
+        for (const r of c.refs()) { const l = r && layerById.get(r); if (l) layers.add(l); }
+        if (layers.size < 2) continue;
+        for (const a of layers) {
+          if (!graph.has(a)) graph.set(a, new Set());
+          for (const b of layers) if (a !== b) graph.get(a).add(b);
+        }
+      }
+    }
+    return graph;
+  }
+
+  /** Layers a constraint's geometry is on. */
+  constraintLayerIds(c) {
+    const ids = new Set(c.refs().filter(Boolean));
+    const out = new Set();
+    for (const s of this.sketches) for (const e of s.entities) {
+      if (ids.has(e.id) || e.children().some(ch => ids.has(ch.id))) out.add(this.layerOf(e).id);
+    }
+    return out;
+  }
+
+  /** Which geometry the solver may move. Sets the transient `locked` flag
+   *  on every entity (and its points) it must hold still: everything
+   *  outside the edited layer and the layers linked to it (see
+   *  linkedLayers), so a relation or dimension between layers works as it
+   *  does inside one layer, while unrelated layers never move. Solvers
+   *  treat locked parameters as constants. Not serialised. */
   syncLocks() {
     const mark = (e, v) => { e.locked = v; for (const c of e.children()) mark(c, v); };
-    for (const s of this.sketches) for (const e of s.entities) mark(e, false);
-    if (this.editAllLayers) return;     // set briefly while equations update every layer
     // editLayerId: set briefly to compute another layer's status as if it
     // were the active one.
     const editable = this.editLayerId || this.activeLayerId;
+    // editAllLayers: set briefly while equations update every layer.
+    const free = this.editAllLayers ? new Set(this.layers.map(l => l.id)) : this.linkedLayers(editable);
+    for (const s of this.sketches) for (const e of s.entities) mark(e, false);
+    // A point shared with held geometry is held too.
     for (const s of this.sketches) {
-      for (const e of s.entities) if (this.layerOf(e).id !== editable) mark(e, true);
+      for (const e of s.entities) if (!free.has(this.layerOf(e).id)) mark(e, true);
     }
   }
   entitiesOnLayer(id) {
