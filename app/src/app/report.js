@@ -1,3 +1,4 @@
+import { track } from '../ui/analytics.js';
 /* =============== REPORT A PROBLEM ==============================
    A small link at the right end of the status bar opens a form that
    posts to Formspree. Sent: the description, an optional reply email,
@@ -28,7 +29,7 @@ export class ReportMixin {
       form.elements.message.focus();
     };
     const close = () => back.classList.remove('show');
-    document.getElementById('report-open').addEventListener('click', open);
+    document.getElementById('report-open').addEventListener('click', () => { track('report-open'); open(); });
     document.getElementById('report-cancel').addEventListener('click', close);
     back.addEventListener('pointerdown', (e) => { if (e.target === back) close(); });
     back.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.stopPropagation(); close(); } });
@@ -56,6 +57,7 @@ export class ReportMixin {
         if (!res.ok) throw new Error('HTTP ' + res.status);
         status.className = 'report-status ok';
         status.textContent = 'Sent. Thank you!';
+        track('report-sent', { attached: !!form.elements.attach.checked, with_email: !!email });
         form.reset();
         setTimeout(close, 1400);
       } catch {

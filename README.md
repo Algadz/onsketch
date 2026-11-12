@@ -23,6 +23,7 @@ npm run test:linedim # Smart Dimension between two parallel lines
 npm run test:layers  # layers as display only: editing, relations and dimensions across layers, hiding
 npm run test:nosnap  # Alt = no snap while placing or dragging; Space-drag pans
 node tests/style.e2e.mjs  # restyling arrows / texts after drawing, touch tap-through guard
+node tests/analytics.e2e.mjs  # Umami events: what is counted, once per visit, nothing sent from tests
 npm run test:mobile  # phone / tablet layout and touch input on emulated devices
 npm run test:cloud   # account and cloud projects against a fake Supabase
 npm run lint
@@ -204,6 +205,47 @@ browser (`localStorage`), written shortly after every change and when the
 page is hidden or closed, and reopened on load, so a refresh never loses
 work, signed in or not. Nothing in the UI calls this a save. With accounts disabled
 (empty `app/src/cloud/config.js`), Save is the browser save as before.
+
+## Analytics (Umami)
+
+Every page loads Umami (no cookies). Besides page views, `src/ui/analytics.js`
+sends anonymous events: an event name and a few short labels, never drawing
+content, typed text or emails. "Once" = at most once per page load, so heavy
+use doesn't flood the counts. Nothing is sent from localhost or automated
+browsers.
+
+| Where | Event | Data |
+|---|---|---|
+| Editor | `sketch-new` | |
+| | `sketch-save` | `to` (account / browser), `signed_in`, `linked` |
+| | `sketch-saved-account` | `first`, `plan`, `visibility` (first save to the account) |
+| | `sketch-open` | `from` (account / library / example), `example` |
+| | `open-dialog` | |
+| | `signin-prompt` | `reason` (save / open / like / pricing) |
+| | `signin-start`, `signin-done`, `signin-failed` | `method` (google / email / email-code / link) |
+| | `signout`, `profile-saved` (`first`) | |
+| | `tool` (once) | `name` |
+| | `window` (once) | `name` (equations, layers, props…) |
+| | `dimension`, `relation` (once) | `kind` |
+| | `equation-used`, `undo`, `copy`, `cut` (once) | |
+| | `relation-refused` (once) | `kind`, `reason` (conflict / implied) |
+| | `paste` (once) | `what` (ink / image / text) |
+| | `image-import` (once) | `via` (picker / drop) |
+| | `theme` | `to` |
+| | `touch-used` | `input` (touch / pen), `layout` (phone / large) |
+| | `report-open`, `report-sent` | `attached`, `with_email` |
+| | `nav` | `to` (library / my-sketches) |
+| | `upgrade-click`, `billing-open` | `from` |
+| Library | `library-view`, `library-open-copy` | `id` (public sketch) |
+| | `library-like` | `on` |
+| | `library-search`, `library-more` (once), `library-sort` (`sort`), `library-copy-link`, `library-report`, `library-profile` | |
+| My sketches | `project-action` | `action` (open, details, duplicate, download, delete, public, private…) |
+| Pricing | `pricing-interval` | `interval` |
+| | `checkout-start` | `interval`, `resumed` |
+| | `pro-activated` | |
+| Landing | `landing-cta` | `where` (header / hero / demo-desk / bottom) |
+| | `landing-nav` | `to`; `landing-see-examples` |
+| All pages | `error` (≤ 5) | `page`, `message`, `where` (file:line) |
 
 ## Dialogs and notices
 

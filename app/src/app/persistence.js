@@ -1,5 +1,6 @@
 import { Project } from '../core/model.js';
 import { choose, notice } from '../ui/dialogs.js';
+import { track, trackOnce } from '../ui/analytics.js';
 
 const STORE_KEY = 'sketchcad:last';
 
@@ -14,6 +15,7 @@ export class PersistenceMixin {
    *  silently either way. Without accounts it is the browser save. */
   save() {
     this._writeLocal();
+    track('sketch-save', { to: this.cloudEnabled ? 'account' : 'browser', signed_in: !!this.cloudUser, linked: !!this.cloudLink });
     if (this.cloudEnabled) { this.cloudSave(); return; }
     this.saveLocal();
   }
@@ -87,6 +89,7 @@ export class PersistenceMixin {
       this.refreshUI();
       this.zoomFit();
       if (hint) hint.textContent = `Example "${project.name}" opened. Ctrl+Z goes back to your previous drawing.`;
+      track('sketch-open', { from: 'example', example: slug });
       return true;
     } catch (e) {
       console.warn('example failed', e);
@@ -129,10 +132,12 @@ export class PersistenceMixin {
     this.refreshUI(); this.solveAndRender();
     this._writeLocal();
     this._renderSaveState?.();
+    track('sketch-new');
   }
   /* ---- Undo / redo ---- */
   undo() {
     if (this.undoStack.length < 2) return;
+    trackOnce('undo');
     const cur = this.undoStack.pop();
     this.redoStack.push(cur);
     const prev = this.undoStack[this.undoStack.length - 1];

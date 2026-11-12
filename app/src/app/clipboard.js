@@ -2,6 +2,7 @@ import { IMAGES_TOTAL_MAX, imageElement, imageSource, isImage, usedImageIds } fr
 import { decodeClipHTML, encodeClipHTML, inkPayload, inkPlainText, pasteItems, textFromPlain } from '../core/ink-clipboard.js';
 import { placeTextCenter } from '../core/strokes.js';
 import { alertDialog } from '../ui/dialogs.js';
+import { trackOnce } from '../ui/analytics.js';
 
 /* =============== CLIPBOARD: COPY, CUT, PASTE ===================
    Ctrl+C / Ctrl+X / Ctrl+V (and Copy / Cut / Paste in the right-click
@@ -58,6 +59,7 @@ export class ClipboardMixin {
    *  async clipboard API). With `cut`, removes it (one undo step). */
   copyInk(items = this._clipItems(), cut = false, dt = null) {
     if (!items.length) return false;
+    trackOnce(cut ? 'cut' : 'copy');
     const payload = inkPayload(items);
     const plain = inkPlainText(items);
     const html = encodeClipHTML(payload, plain);
@@ -120,9 +122,9 @@ export class ClipboardMixin {
    *  @returns {boolean} whether something was taken */
   pasteData({ html = '', file = null, text = '' }) {
     const payload = decodeClipHTML(html);
-    if (payload) { this.pasteInk(payload); return true; }
-    if (file) { this.importImageFile(file); return true; }
-    if (text && text.trim()) return this.pasteText(text);
+    if (payload) { trackOnce('paste', { what: 'ink' }); this.pasteInk(payload); return true; }
+    if (file) { trackOnce('paste', { what: 'image' }); this.importImageFile(file); return true; }
+    if (text && text.trim()) { trackOnce('paste', { what: 'text' }); return this.pasteText(text); }
     return false;
   }
 

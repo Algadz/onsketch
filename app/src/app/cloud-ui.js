@@ -3,6 +3,7 @@ import { isConfigured, openCloud, ConflictError, LimitError, TITLE_MIN } from '.
 import { openDetailsDialog, openProfileDialog } from '../cloud/details-dialog.js';
 import { renderThumbnail, thumbnailBlob } from '../render/thumbnail.js';
 import { confirmDialog, notice } from '../ui/dialogs.js';
+import { track } from '../ui/analytics.js';
 
 /* =============== ACCOUNT AND CLOUD PROJECTS ====================
    Optional. With app/src/cloud/config.js empty nothing here runs and
@@ -107,7 +108,8 @@ export class CloudMixin {
       try {
         this.cloud = await openCloud({ createClient: window.__onsketchCreateClient || null });
         const user = await this.cloud.user();
-        this._cleanAuthParams();
+        const auth = this._cleanAuthParams();
+        if (auth) track(user && auth === 'ok' ? 'signin-done' : 'signin-failed', { method: 'link' });
         this.cloud.onUserChange((u) => { if ((u && u.id) !== (this.cloudUser && this.cloudUser.id)) this._setCloudUser(u); });
         this._setCloudUser(user);
         return this.cloud;
@@ -124,11 +126,12 @@ export class CloudMixin {
   /** Removes ?code=… / ?error=… left by a sign-in redirect; reports errors. */
   _cleanAuthParams() {
     const params = new URLSearchParams(location.search);
-    if (!AUTH_PARAMS.some(k => params.has(k))) return;
+    if (!AUTH_PARAMS.some(k => params.has(k))) return null;
     const err = params.get('error_description');
     AUTH_PARAMS.forEach(k => params.delete(k));
     history.replaceState(null, '', location.pathname + (params.toString() ? '?' + params : '') + location.hash);
     if (err) this._hint(`Sign-in failed: ${err}`);
+    return err ? 'error' : 'ok';
   }
 
   _setCloudUser(user) {
@@ -173,6 +176,7 @@ export class CloudMixin {
       onSubmit: (v) => this.cloud.saveProfile(v),
     });
     if (saved) {
+      track('profile-saved', { first: firstTime });
       this.cloudProfile = saved;
       this._renderAccountButton();
       this._hint(`Your public username is @${saved.username}.`);
@@ -458,6 +462,7 @@ export class CloudMixin {
     box.querySelector('[data-a="close"]').addEventListener('click', () => this.closeAccount());
     box.querySelector('[data-a="google"]')?.addEventListener('click', async () => {
       busy(true); say('Opening Google…');
+      track('signin-start', { method: 'google' });
       try { await this.cloud.signInWithProvider('google', this._returnURL()); }
       catch (e) { busy(false); say(e.message || "Couldn't start Google sign-in.", true); }
     });
@@ -468,13 +473,14 @@ export class CloudMixin {
         const email = form.elements.email.value.trim();
         if (!/^\S+@\S+\.\S+$/.test(email)) { say('Enter your email address.', true); form.elements.email.focus(); return; }
         busy(true); say('Sending…');
+        track('signin-start', { method: 'email' });
         try { await this.cloud.signInWithEmail(email, this._returnURL()); this._signInStep = { email }; this._renderAccount(); box.querySelector('input[name="code"]')?.focus(); }
         catch (e) { busy(false); say(e.message || "Couldn't send the email.", true); }
       } else {
         const code = form.elements.code.value.trim();
         if (!/^\d{6,10}$/.test(code)) { say('Enter the code from the email.', true); return; }
         busy(true); say('Signing in…');
-        try { const user = await this.cloud.verifyEmailCode(step.email, code); this._signInStep = null; this._setCloudUser(user); this._renderAccount(); }
+        try { const user = await this.cloud.verifyEmailCode(step.email, code); track('signin-done', { method: 'email-code' }); this._signInStep = null; this._setCloudUser(user); this._renderAccount(); }
         catch (e) { busy(false); say(e.message || 'That code didn’t work.', true); }
       }
     });
@@ -491,6 +497,7 @@ export class CloudMixin {
     if (!cloud) { this._hint("Couldn't reach the server to save. Check your connection and try again."); return; }
     if (!this.cloudUser) {
       this._setPending('save');
+      track('signin-prompt', { reason: 'save' });
       this.openAccount();
       return;
     }
@@ -518,7 +525,8 @@ export class CloudMixin {
   async openSketch() {
     const cloud = await this._ensureCloud();
     if (!cloud) { this._hint("Couldn't reach the server. Check your connection and try again."); return; }
-    if (!this.cloudUser) { this._setPending('open'); this.openAccount(); return; }
+    if (!this.cloudUser) { this._setPending('open'); track('signin-prompt', { reason: 'open' }); this.openAccount(); return; }
+    track('open-dialog');
     this._accountOpen = true;
     this._openList = true;
     this._accountModal().classList.add('show');
@@ -587,6 +595,7 @@ export class CloudMixin {
       onSubmit: (details) => this.cloud.create(this.project.toJSON(), details),
     });
     if (!row) return;
+    track('sketch-saved-account', { first: true, plan: plan.plan, visibility: row.visibility });
     this._setProjectName(row.name);
     this._cloudLinkTo(row);
     this._writeLocal();
@@ -624,6 +633,7 @@ export class CloudMixin {
       const row = await this.cloud.load(id);
       this._openCloudRow(row);
       this.closeAccount();
+      track('sketch-open', { from: 'account' });
     } catch (e) { notice("Couldn't open the sketch: " + (e.message || e), { kind: 'error' }); }
   }
 
@@ -644,6 +654,7 @@ export class CloudMixin {
       this.commit({ diagnostics: 'sync' });
       this.refreshUI();
       this.zoomFit();
+      track('sketch-open', { from: 'library' });
       this._hint(`"${row.name}" from the library, as a copy in this browser. Save to my account to keep it; Ctrl+Z goes back to your previous drawing.`);
     } catch (e) { console.warn('library copy failed', e); this._hint("Couldn't open this sketch."); }
   }
@@ -667,6 +678,7 @@ export class CloudMixin {
   }
 
   async cloudSignOut() {
+    track('signout');
     this._cloudUnlink();
     try { await this.cloud.signOut(); } catch (e) { console.warn('sign out', e); }
     this._setCloudUser(null);

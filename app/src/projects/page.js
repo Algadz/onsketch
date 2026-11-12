@@ -1,6 +1,7 @@
 import { openCloud, isConfigured, LimitError } from '../cloud/cloud.js';
 import { openDetailsDialog, openProfileDialog } from '../cloud/details-dialog.js';
 import { confirmDialog, notice } from '../ui/dialogs.js';
+import { track, trackErrors } from '../ui/analytics.js';
 
 /* =============== MY SKETCHES (/app/projects/) ==================
    The signed-in user's cloud projects as cards: preview, title,
@@ -158,6 +159,7 @@ class Page {
     m.querySelector('button').focus();
     m.addEventListener('click', (e) => {
       const a = e.target.closest('[data-a]')?.dataset.a; if (!a) return;
+      track('project-action', { action: a });
       this.closeMenus();
       if (a === 'open') location.href = `../?project=${encodeURIComponent(row.id)}`;
       else if (a === 'details') this.editDetails(row);
@@ -214,8 +216,9 @@ class Page {
     } catch (e) { notice("Couldn't delete: " + (e.message || e), { kind: 'error' }); }
   }
   /** Free plan full (or a Pro feature): to the pricing page. */
-  upgrade() { location.href = '/pricing/'; }
+  upgrade() { track('upgrade-click', { from: 'projects' }); location.href = '/pricing/'; }
   async manageSubscription(btn) {
+    track('billing-open', { from: 'projects' });
     if (btn) { btn.disabled = true; btn.textContent = 'Opening…'; }
     try { location.href = await this.cloud.billing('portal'); }
     catch (e) { notice(e.message || "Couldn't open the subscription page.", { kind: 'error' }); if (btn) { btn.disabled = false; btn.textContent = 'Manage subscription'; } }
@@ -228,6 +231,7 @@ class Page {
 
 }
 
+trackErrors('projects');
 const page = new Page();
 window._page = page;
 page.start();

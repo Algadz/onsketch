@@ -8,6 +8,7 @@ import { EraserTool, InkTool } from '../tools/freehand.js';
 import { TextTool } from '../tools/text.js';
 import { ArrowTool } from '../tools/arrow.js';
 import { SmartDimensionTool } from '../tools/smartdim.js';
+import { trackOnce } from '../ui/analytics.js';
 
 export class RenderEventsMixin {
 
@@ -86,6 +87,7 @@ export class RenderEventsMixin {
 
   /* ---- Tool selection ---- */
   setTool(name) {
+    if (name !== this.toolName) trackOnce('tool', { name });
     this.hideContextMenu();
     this._clearOperationState();
     this.finishTextEdit();

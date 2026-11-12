@@ -2,6 +2,7 @@ import { openCloud, isConfigured } from '../cloud/cloud.js';
 import { mountAccount } from '../site/account.js';
 import { countryFlag, countryName } from '../ui/countries.js';
 import { promptDialog } from '../ui/dialogs.js';
+import { track, trackOnce, trackErrors } from '../ui/analytics.js';
 
 /* =============== PUBLIC LIBRARY (/library/) =====================
    Every public sketch that has a description, newest first, with
@@ -43,11 +44,15 @@ class Library {
 
     const form = $('lib-search');
     let timer;
-    const apply = () => { this.query = { ...this.query, search: form.elements.q.value, sort: form.elements.sort.value }; this.reload(); };
+    const apply = () => {
+      if (form.elements.q.value.trim()) trackOnce('library-search');
+      if (form.elements.sort.value !== (this.query.sort || form.elements.sort.options[0]?.value)) track('library-sort', { sort: form.elements.sort.value });
+      this.query = { ...this.query, search: form.elements.q.value, sort: form.elements.sort.value }; this.reload();
+    };
     form.addEventListener('submit', (e) => { e.preventDefault(); clearTimeout(timer); apply(); });
     form.elements.q.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(apply, 300); });
     form.elements.sort.addEventListener('change', apply);
-    $('lib-more').addEventListener('click', () => this.more());
+    $('lib-more').addEventListener('click', () => { trackOnce('library-more'); this.more(); });
     window.addEventListener('popstate', () => this.showFromURL());
 
     if (this.username && !(await this.loadProfile())) return;
@@ -59,6 +64,7 @@ class Library {
 
   /* ---- Profile mode (/library/?u=<username>) ---- */
   async loadProfile() {
+    track('library-profile');
     let p = null;
     try { p = await this.cloud.publicProfile(this.username); } catch { p = null; }
     const box = $('lib-profile');
@@ -173,7 +179,7 @@ class Library {
       <span class="like-count">${r.likes || 0}</span></button>`;
   }
   async toggleLike(id) {
-    if (!this.user) { location.href = `/app/?signin&back=${encodeURIComponent(location.pathname + location.search)}`; return; }
+    if (!this.user) { track('signin-prompt', { reason: 'like' }); location.href = `/app/?signin&back=${encodeURIComponent(location.pathname + location.search)}`; return; }
     const row = this.rows.find(r => r.id === id) || this._detailRow;
     if (!row || row.owner_id === this.user.id || this._liking) return;
     const was = this.liked.has(id);
@@ -188,6 +194,7 @@ class Library {
       });
     };
     apply(!was);
+    track('library-like', { on: !was });
     try { if (was) await this.cloud.unlike(id); else await this.cloud.like(id); }
     catch { apply(was); }
     finally { this._liking = false; }
@@ -214,6 +221,7 @@ class Library {
       return;
     }
     this._detailRow = row;
+    track('library-view', { id: row.id });
     if (this.user && !this.liked.has(row.id) && !this.rows.includes(row)) {
       for (const lid of await this.cloud.likedIds([row.id]).catch(() => new Set())) this.liked.add(lid);
     }
@@ -235,7 +243,9 @@ class Library {
         <a class="btn primary" href="/app/?view=${encodeURIComponent(row.id)}">Open a copy in the editor</a>
       </div>`;
     const msg = back.querySelector('.account-msg');
+    back.querySelector('a.btn.primary').addEventListener('click', () => track('library-open-copy', { id: row.id }));
     back.querySelector('[data-a="copy"]').addEventListener('click', async () => {
+      track('library-copy-link');
       try { await navigator.clipboard.writeText(link); msg.textContent = 'Link copied.'; }
       catch { msg.textContent = link; }
     });
@@ -275,11 +285,13 @@ class Library {
     try {
       const res = await fetch(REPORT_ENDPOINT, { method: 'POST', body: data, headers: { Accept: 'application/json' } });
       if (!res.ok) throw new Error('HTTP ' + res.status);
+      track('library-report');
       msg.textContent = 'Thanks, we will look at it.';
     } catch { msg.textContent = "Couldn't send the report. Try again later."; }
   }
 }
 
+trackErrors('library');
 const lib = new Library();
 window._library = lib;
 lib.start();

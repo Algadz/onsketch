@@ -99,6 +99,7 @@ export class WindowManager {
   toggle(id, open = !this.isOpen(id)) {
     const el = this.wins.get(id);
     if (!el) return;
+    if (open && !this.isOpen(id)) this.onOpen?.(id);
     if (this.compact) {
       if (open) for (const [other, w] of this.wins) if (other !== id) w.hidden = true;
       el.hidden = !open;

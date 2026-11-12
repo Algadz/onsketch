@@ -35,6 +35,7 @@ import { CloudMixin } from './cloud-ui.js';
 import { ImageImportMixin } from './image-import.js';
 import { ClipboardMixin } from './clipboard.js';
 import { onImageLoad } from '../core/images.js';
+import { trackOnce } from '../ui/analytics.js';
 
 /* =============== 10. APP ====================================== */
 export class App {
@@ -397,6 +398,7 @@ export class App {
         const p = this._lookupAny(c.pointId);
         if (p) p.fixed = false;
       }
+      trackOnce('relation-refused', { kind: c.kind, reason: conflict ? 'conflict' : 'implied' });
       if (!quiet && conflict) {
         const label = constraintLabel(c);
         document.getElementById('status-hint').textContent =

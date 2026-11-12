@@ -1,3 +1,4 @@
+import { track } from '../ui/analytics.js';
 
 /* =============== TOUCH AND STYLUS INPUT ========================
    Mouse input never comes through here (render-events.js sends mouse
@@ -33,6 +34,7 @@ export class TouchMixin {
     this.renderer.badgeSize = type === 'mouse' ? null : 19;
     if (type !== 'mouse' && !this.touchUI) {
       this.touchUI = true;                         // touch-only chrome (Delete, Done, keypad…)
+      track('touch-used', { input: type, layout: this.compact ? 'phone' : 'large' });
       document.documentElement.classList.add('touch-ui');
       this._refreshOptionsBar();
     }

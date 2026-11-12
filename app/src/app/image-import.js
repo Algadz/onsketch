@@ -1,6 +1,7 @@
 import { newId } from '../core/entities.js';
 import { IMAGE_MAX_BYTES, IMAGE_TYPES, imageId, imagePixelSize, imagePoints, registerImage, usedImageIds } from '../core/images.js';
 import { alertDialog } from '../ui/dialogs.js';
+import { trackOnce } from '../ui/analytics.js';
 
 /* =============== IMPORTING IMAGES ==============================
    Puts a picture (PNG, JPEG, WebP or GIF, up to 3 MB) on the active
@@ -31,6 +32,7 @@ export class ImageImportMixin {
       const file = [...ev.dataTransfer.files].find(f => f.type.startsWith('image/')) || ev.dataTransfer.files[0];
       if (!file) return;
       const r = c.getBoundingClientRect();
+      trackOnce('image-import', { via: 'drop' });
       this.importImageFile(file, this.view.screenToWorld({ x: ev.clientX - r.left, y: ev.clientY - r.top }));
     });
   }
@@ -44,7 +46,7 @@ export class ImageImportMixin {
     inp.addEventListener('change', () => {
       const file = inp.files && inp.files[0];
       inp.remove();
-      if (file) this.importImageFile(file);
+      if (file) { trackOnce('image-import', { via: 'picker' }); this.importImageFile(file); }
     });
     document.body.appendChild(inp);
     inp.click();

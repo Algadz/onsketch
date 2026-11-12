@@ -1,4 +1,7 @@
 import { App } from './app/App.js';
+import { trackErrors } from './ui/analytics.js';
+
+trackErrors('editor');
 
 /* =============== BOOTSTRAP ==================================== */
 const root = document.documentElement;

@@ -1,6 +1,7 @@
 import { openCloud, isConfigured } from '../cloud/cloud.js';
 import { mountAccount } from '../site/account.js';
 import { notice } from '../ui/dialogs.js';
+import { track, trackErrors } from '../ui/analytics.js';
 
 /* =============== PRICING (/pricing/) ===========================
    Free vs OnSketch Pro, monthly / yearly. The buttons depend on who is
@@ -29,7 +30,7 @@ class Pricing {
 
   async start() {
     mountAccount($('#site-account'));
-    document.querySelectorAll('.pr-toggle [data-interval]').forEach(b => b.addEventListener('click', () => { this.interval = b.dataset.interval; this.render(); }));
+    document.querySelectorAll('.pr-toggle [data-interval]').forEach(b => b.addEventListener('click', () => { this.interval = b.dataset.interval; track('pricing-interval', { interval: this.interval }); this.render(); }));
     this.render();
     if (!isConfigured()) return;
     try {
@@ -54,7 +55,7 @@ class Pricing {
     const free = $('.pr-cta[data-plan="free"]'), proCta = $('.pr-cta[data-plan="pro"]');
     if (!this.user) {
       free.innerHTML = '<a class="btn" href="/app/">Start drawing</a>';
-      proCta.innerHTML = `<a class="btn primary" href="/app/?signin&back=${encodeURIComponent(`/pricing/?checkout=${this.interval}`)}">Sign in to get Pro</a>
+      proCta.innerHTML = `<a class="btn primary" data-umami-event="signin-prompt" data-umami-event-reason="pricing" href="/app/?signin&back=${encodeURIComponent(`/pricing/?checkout=${this.interval}`)}">Sign in to get Pro</a>
         <p class="pr-note">You'll come back here to pay.</p>`;
     } else if (pro) {
       free.innerHTML = '<span class="pr-current muted">Included in Pro</span>';
@@ -73,12 +74,14 @@ class Pricing {
   }
 
   async checkout(interval) {
+    track('checkout-start', { interval, resumed: !!this.autostart });
     const btn = $('.pr-cta[data-plan="pro"] .btn');
     if (btn) { btn.disabled = true; btn.textContent = 'Opening the checkout…'; }
     try { location.href = await this.cloud.billing('checkout', { interval }); }
     catch (e) { notice(e.message || "Couldn't open the checkout.", { kind: 'error', ms: 6000 }); this.render(); }
   }
   async portal(btn) {
+    track('billing-open', { from: 'pricing' });
     btn.disabled = true; btn.textContent = 'Opening…';
     try { location.href = await this.cloud.billing('portal'); }
     catch (e) { notice(e.message || "Couldn't open the subscription page.", { kind: 'error', ms: 6000 }); btn.disabled = false; btn.textContent = 'Manage subscription'; }
@@ -96,6 +99,7 @@ class Pricing {
     }
     if (this.plan?.plan === 'premium') {
       banner.className = 'pr-banner ok';
+      track('pro-activated');
       banner.innerHTML = 'OnSketch Pro is on. Unlimited sketches, and you can make sketches private from <a href="/app/projects/">My sketches</a>.';
     } else {
       banner.className = 'pr-banner warn';
@@ -105,6 +109,7 @@ class Pricing {
   }
 }
 
+trackErrors('pricing');
 const page = new Pricing();
 window._pricing = page;
 page.start();

@@ -3,6 +3,7 @@ import { getTheme } from '../render/theme.js';
 import { uiIcon } from '../ui/icons.js';
 import { INK_DEFAULTS } from './sketch-window.js';
 import { confirmDialog, notice } from '../ui/dialogs.js';
+import { track } from '../ui/analytics.js';
 
 const PREFS_KEY = 'onsketch:prefs';
 const esc = (t) => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -74,6 +75,7 @@ export class LayersPanelMixin {
     } catch { /* storage unavailable */ }
   }
   setTheme(name, save = true) {
+    if (save) track('theme', { to: name });
     this.themeName = name === 'dark' ? 'dark' : 'light';
     document.documentElement.dataset.theme = this.themeName;
     this.renderer.theme = getTheme(this.themeName);

@@ -2,6 +2,7 @@ import { LINE_STYLES, LINE_WEIGHTS } from '../core/style.js';
 import { clamp } from '../core/math.js';
 import { ACTION_ICONS, DRAW_TOOLS, TOOLS, TOOL_ICONS, WINDOW_ICONS, toolDef } from '../ui/tool-defs.js';
 import { WindowManager } from '../ui/windows.js';
+import { track, trackOnce } from '../ui/analytics.js';
 
 /** Name of the Alt key on this platform (Option on a Mac). */
 export const ALT_KEY = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || '') ? '⌥ Option' : 'Alt';
@@ -46,6 +47,7 @@ export class ChromeMixin {
         return { x: t && !t.hidden ? t.offsetLeft + t.offsetWidth + 8 : 12, y: 12 };
       },
     }, () => { this._syncWindowButtons(); if (this.compact) this._renderMobileBar(); });
+    this.windows.onOpen = (id) => trackOnce('window', { name: id });
     this._syncWindowButtons();
     requestAnimationFrame(() => this.windows.layout());
   }
@@ -70,12 +72,12 @@ export class ChromeMixin {
       case 'theme':        this.setTheme(this.themeName === 'dark' ? 'light' : 'dark'); break;
       case 'reset-layout': this.windows.reset(); break;
       case 'account':      this.openAccount(); break;
-      case 'my-sketches':  location.href = 'projects/'; break;
-      case 'library':      location.href = '/library/'; break;
+      case 'my-sketches':  track('nav', { to: 'my-sketches', from: 'editor' }); location.href = 'projects/'; break;
+      case 'library':      track('nav', { to: 'library', from: 'editor' }); location.href = '/library/'; break;
       case 'profile':      this.editProfile(); break;
       case 'signout':      this.cloudSignOut(); break;
-      case 'pricing':      location.href = '/pricing/'; break;
-      case 'billing':      this.manageSubscription(); break;
+      case 'pricing':      track('upgrade-click', { from: 'editor' }); location.href = '/pricing/'; break;
+      case 'billing':      track('billing-open', { from: 'editor' }); this.manageSubscription(); break;
     }
   }
 

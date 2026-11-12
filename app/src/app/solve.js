@@ -1,4 +1,5 @@
 import { Arc } from '../core/entities.js';
+import { trackOnce } from '../ui/analytics.js';
 
 export class SolveMixin {
 
@@ -7,7 +8,14 @@ export class SolveMixin {
     // New constraints and dimensions are filed under the active layer
     // (layers are display only: this only decides where they're listed).
     const activeLayer = this.project.activeLayerId;
-    for (const s of this.project.sketches) for (const c of s.constraints) if (!c.layerId) c.layerId = activeLayer;
+    const added = [];
+    for (const s of this.project.sketches) for (const c of s.constraints) if (!c.layerId) { c.layerId = activeLayer; added.push(c); }
+    // Which relations / dimensions people add (once per kind per visit). A
+    // big batch is an older file being opened, not a user action.
+    if (added.length <= 6) for (const c of added) {
+      trackOnce(typeof c.value === 'number' ? 'dimension' : 'relation', { kind: c.kind });
+      if (c.expr) trackOnce('equation-used');
+    }
     this._refLayers = null;
     // Equation changes (variables, formulas) are applied before the solve.
     if (this._applyEquations().changed) this._solveAllLayers();

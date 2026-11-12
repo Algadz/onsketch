@@ -450,6 +450,7 @@
     footer .wrap { height: auto; padding: 18px 0; flex-direction: column; align-items: flex-start; }
   }
 </style>
+<script defer src="https://cloud.umami.is/script.js" data-website-id="50dad292-9502-4749-a86e-68f2ed8b2e7a"></script>
 </head>
 <body>
   <header class="bar">
@@ -460,11 +461,11 @@
         <a href="#how">How it works</a>
         <a href="#examples">Examples</a>
         <a href="#details">Details</a>
-        <a href="/library/">Library</a>
-        <a href="/pricing/">Pricing</a>
+        <a href="/library/" data-umami-event="landing-nav" data-umami-event-to="library">Library</a>
+        <a href="/pricing/" data-umami-event="landing-nav" data-umami-event-to="pricing">Pricing</a>
       </nav>
       <div id="site-account"></div>
-      <a class="btn primary" href="/app/">Open<span class="xs-hide"> the</span> editor</a>
+      <a class="btn primary" href="/app/" data-umami-event="landing-cta" data-umami-event-where="header">Open<span class="xs-hide"> the</span> editor</a>
     </div>
   </header>
 
@@ -481,8 +482,8 @@
         </svg></span></h1>
         <p class="lede">Give shapes real dimensions, tie them together with equations and constraints, then colour them in. Change one number and the whole concept follows.</p>
         <div class="actions">
-          <a class="btn primary" href="/app/">Start drawing</a>
-          <a class="btn" href="#examples">See examples</a>
+          <a class="btn primary" href="/app/" data-umami-event="landing-cta" data-umami-event-where="hero">Start drawing</a>
+          <a class="btn" href="#examples" data-umami-event="landing-see-examples">See examples</a>
         </div>
         </div>
         <figure class="demo" aria-label="Interactive example: a desk drawn to scale with dimensions, equations, constraints, fills and ink">
@@ -522,7 +523,7 @@
             </div>
             <div class="eqs-foot">
               <p class="eqs-hint">Type a width like <code>1.8m</code> or <code>60in</code>.</p>
-              <a class="open-ex" href="/app/?example=desk">Open this example in the editor &rarr;</a>
+              <a class="open-ex" href="/app/?example=desk" data-umami-event="landing-cta" data-umami-event-where="demo-desk">Open this example in the editor &rarr;</a>
             </div>
           </div>
         </figure>
@@ -722,7 +723,7 @@
           <p>Open the editor and draw your first concept in a couple of minutes.</p>
           <p class="note">Coming next: image export for slides and documents, text labels, share links.</p>
         </div>
-        <a class="btn primary" href="/app/">Open the editor</a>
+        <a class="btn primary" href="/app/" data-umami-event="landing-cta" data-umami-event-where="bottom">Open the editor</a>
       </div>
     </section>
   </main>
@@ -921,10 +922,10 @@
 <script type="importmap">
 {
   "imports": {
-    "app/src/app/App.js": "app/src/app/App.js?v=4f7b7cad26",
-    "app/src/app/chrome.js": "app/src/app/chrome.js?v=2fe79ae9fe",
-    "app/src/app/clipboard.js": "app/src/app/clipboard.js?v=3d0b279211",
-    "app/src/app/cloud-ui.js": "app/src/app/cloud-ui.js?v=50611509f8",
+    "app/src/app/App.js": "app/src/app/App.js?v=4aeea7ba9a",
+    "app/src/app/chrome.js": "app/src/app/chrome.js?v=370b5be7a1",
+    "app/src/app/clipboard.js": "app/src/app/clipboard.js?v=67aba21197",
+    "app/src/app/cloud-ui.js": "app/src/app/cloud-ui.js?v=b97c3a4034",
     "app/src/app/compact.js": "app/src/app/compact.js?v=2f29d7fa9d",
     "app/src/app/constraint-actions.js": "app/src/app/constraint-actions.js?v=b0dd1f3e27",
     "app/src/app/dim-links.js": "app/src/app/dim-links.js?v=082022d450",
@@ -932,22 +933,22 @@
     "app/src/app/drag.js": "app/src/app/drag.js?v=eaf9545381",
     "app/src/app/equations-ui.js": "app/src/app/equations-ui.js?v=681dc76277",
     "app/src/app/fills.js": "app/src/app/fills.js?v=065293b28a",
-    "app/src/app/image-import.js": "app/src/app/image-import.js?v=3ad9f10072",
+    "app/src/app/image-import.js": "app/src/app/image-import.js?v=a4e71ca829",
     "app/src/app/ink-links.js": "app/src/app/ink-links.js?v=1067f53d6c",
     "app/src/app/ink-select.js": "app/src/app/ink-select.js?v=8abb34db7e",
     "app/src/app/ink-transform.js": "app/src/app/ink-transform.js?v=9b066fda29",
-    "app/src/app/layers-panel.js": "app/src/app/layers-panel.js?v=5d0f1f7d8d",
+    "app/src/app/layers-panel.js": "app/src/app/layers-panel.js?v=c8682944e1",
     "app/src/app/operations.js": "app/src/app/operations.js?v=1c78469b73",
     "app/src/app/panels.js": "app/src/app/panels.js?v=29a7d425fc",
-    "app/src/app/persistence.js": "app/src/app/persistence.js?v=60941b2531",
-    "app/src/app/render-events.js": "app/src/app/render-events.js?v=270eae6c94",
-    "app/src/app/report.js": "app/src/app/report.js?v=a98ded1321",
+    "app/src/app/persistence.js": "app/src/app/persistence.js?v=06cb9e8393",
+    "app/src/app/render-events.js": "app/src/app/render-events.js?v=779406b56f",
+    "app/src/app/report.js": "app/src/app/report.js?v=ff38fcdec7",
     "app/src/app/selection.js": "app/src/app/selection.js?v=62f90f6ee7",
     "app/src/app/sketch-window.js": "app/src/app/sketch-window.js?v=20e8c05d9e",
-    "app/src/app/solve.js": "app/src/app/solve.js?v=d4e131eb47",
+    "app/src/app/solve.js": "app/src/app/solve.js?v=b18a4d1075",
     "app/src/app/text-edit.js": "app/src/app/text-edit.js?v=5398a97991",
     "app/src/app/touch-ui.js": "app/src/app/touch-ui.js?v=022cd01c3d",
-    "app/src/app/touch.js": "app/src/app/touch.js?v=6f5b69dd4a",
+    "app/src/app/touch.js": "app/src/app/touch.js?v=475e4214ee",
     "app/src/cloud/cloud.js": "app/src/cloud/cloud.js?v=20b070fa35",
     "app/src/cloud/config.js": "app/src/cloud/config.js?v=76ceeb7132",
     "app/src/cloud/details-dialog.js": "app/src/cloud/details-dialog.js?v=814fdd4a33",
@@ -968,10 +969,10 @@
     "app/src/core/style.js": "app/src/core/style.js?v=7bda2ffda5",
     "app/src/editor/relations.js": "app/src/editor/relations.js?v=88fb4e8ac4",
     "app/src/editor/snap.js": "app/src/editor/snap.js?v=5abff656ee",
-    "app/src/library/page.js": "app/src/library/page.js?v=733297ebd1",
-    "app/src/main.js": "app/src/main.js?v=a4ad0f57da",
-    "app/src/pricing/page.js": "app/src/pricing/page.js?v=c4b4afe8bb",
-    "app/src/projects/page.js": "app/src/projects/page.js?v=bae209eca7",
+    "app/src/library/page.js": "app/src/library/page.js?v=80dae97b35",
+    "app/src/main.js": "app/src/main.js?v=81dd2e155a",
+    "app/src/pricing/page.js": "app/src/pricing/page.js?v=248ec737ab",
+    "app/src/projects/page.js": "app/src/projects/page.js?v=8702a55aad",
     "app/src/render/renderer.js": "app/src/render/renderer.js?v=4a15756753",
     "app/src/render/theme.js": "app/src/render/theme.js?v=1d78b95fbb",
     "app/src/render/thumbnail.js": "app/src/render/thumbnail.js?v=2d3261ac0a",
@@ -985,13 +986,14 @@
     "app/src/tools/smartdim.js": "app/src/tools/smartdim.js?v=818bdfe722",
     "app/src/tools/text.js": "app/src/tools/text.js?v=0683722a27",
     "app/src/tools/tool.js": "app/src/tools/tool.js?v=744dcdae05",
+    "app/src/ui/analytics.js": "app/src/ui/analytics.js?v=241f8b82f7",
     "app/src/ui/countries.js": "app/src/ui/countries.js?v=58c51df772",
     "app/src/ui/cursors.js": "app/src/ui/cursors.js?v=ac73b36810",
     "app/src/ui/dialogs.js": "app/src/ui/dialogs.js?v=adcc3370ba",
     "app/src/ui/icons.js": "app/src/ui/icons.js?v=060fb55608",
     "app/src/ui/tap-guard.js": "app/src/ui/tap-guard.js?v=95b4f25589",
     "app/src/ui/tool-defs.js": "app/src/ui/tool-defs.js?v=3f30f16a6f",
-    "app/src/ui/windows.js": "app/src/ui/windows.js?v=e0e7783c5b"
+    "app/src/ui/windows.js": "app/src/ui/windows.js?v=d5d559d167"
   }
 }
 </script>
