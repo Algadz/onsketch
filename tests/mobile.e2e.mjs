@@ -67,6 +67,24 @@ const lineMidOnScreen = (page, t = 0.5) => app(page, (t) => {
   check(await app(page, () => !!document.querySelector('#optbar [data-touch="done"]')), 'phone: drawing tools show Done');
   await page.tap('#optbar [data-touch="done"]');
 
+  // Line: one drag = one line (placed on lift); tap–tap chains; tap the last point to end.
+  await app(page, () => window._app.setTool('line'));
+  const lines = () => app(page, () => window._app.activeSketch().entities.filter(e => e.constructor.kind === 'line').length);
+  const L0 = await lines();
+  await drag(Array.from({ length: 10 }, (_, i) => [60 + i * 24, 140]));
+  check(await lines() === L0 + 1 && await app(page, () => !window._app.tool.startPt), 'phone: Line, one drag draws one line, placed on lift');
+  await drag(Array.from({ length: 10 }, (_, i) => [60 + i * 24, 200 + i * 3]));
+  check(await lines() === L0 + 2, 'phone: Line, a second drag draws a second, separate line');
+  await page.touchscreen.tap(60, 260); await page.waitForTimeout(350);
+  check(await lines() === L0 + 2 && await app(page, () => !!window._app.tool.startPt), 'phone: Line, a tap sets the start only');
+  await drag(Array.from({ length: 8 }, (_, i) => [100 + i * 20, 300]));
+  check(await lines() === L0 + 3, 'phone: Line, the next touch aims the end and places it on lift');
+  await page.touchscreen.tap(240, 300); await page.waitForTimeout(350);
+  check(await lines() === L0 + 3 && await app(page, () => !window._app.tool.startPt), 'phone: Line, tapping the last point ends the chain');
+  const doneBox = await page.locator('#optbar [data-touch="done"]').boundingBox();
+  check(doneBox && doneBox.x + doneBox.width <= 390, 'phone: Done is on screen without scrolling the options bar');
+  await app(page, () => window._app.setTool('select'));
+
   // Pen with one finger.
   await page.tap('[data-slot="paint"]'); await page.tap('#mb-flyout [data-id="pen"]');
   const s0 = await app(page, () => window._app.activeSketch().strokes.length);

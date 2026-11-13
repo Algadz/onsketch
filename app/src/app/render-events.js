@@ -53,6 +53,8 @@ export class RenderEventsMixin {
       if (prev.strokes)    for (const st of prev.strokes) this.renderer.drawStroke(st);
       if (prev.brush)      this.renderer.drawBrush(prev.brush);
     }
+    // Touch has no hover: mark the placed first point of a two-point tool.
+    if (this.touchUI && this._twoPointAnchor) this.renderer.drawTempPoint(this._twoPointAnchor());
     const opPrev = (this.getMirrorPreview && this.getMirrorPreview())
       || (this.getOffsetPreview && this.getOffsetPreview());
     if (opPrev) {
@@ -182,6 +184,7 @@ export class RenderEventsMixin {
       }
       const snap = this._snapForCurrentTool(world);
       this.lastSnap = snap;
+      if (ev.pointerType && ev.pointerType !== 'mouse' && this._twoPointDown(world, snap, screen, ev)) return;
       this.tool.onPointerDown(world, snap, ev);
     };
 
@@ -225,10 +228,11 @@ export class RenderEventsMixin {
 
     const up = (ev) => {
       if (ev.button === 2) return;
-      const { world } = getWorld(ev);
+      const { screen, world } = getWorld(ev);
       if (panning) { panning = false; this._updateCanvasCursor(); return; }
       this._noteAlt(ev);
       const snap = this._snapForCurrentTool(world);
+      if (ev.pointerType && ev.pointerType !== 'mouse' && this._twoPointUp(world, snap, screen, ev)) return;
       this.tool.onPointerUp(world, snap, ev);
     };
 

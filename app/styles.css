@@ -1507,6 +1507,12 @@
   .nudge .tbtn { min-width: 32px; justify-content: center; }
   .touch-ui #optbar .tbtn { height: 34px; min-width: 34px; }
   .touch-ui #optbar > *, .compact #optbar > * { flex-shrink: 0; }   /* scroll, never overlap */
+  /* Done stays in reach at the right edge while the options scroll under it */
+  .touch-ui #optbar [data-touch="done"] {
+    position: sticky; right: 0; margin-left: auto; z-index: 1;
+    color: var(--accent); font-weight: 600; background: var(--panel);
+    box-shadow: -10px 0 8px -4px var(--panel), 12px 0 0 var(--panel);   /* also hide the bar's right padding */
+  }
   .touch-ui .context-menu-item { min-height: 40px; }
 
   /* Floating Delete button (touch-ui.js), touch devices only */

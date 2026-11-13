@@ -17,7 +17,16 @@ import { track } from '../ui/analytics.js';
    - Hit tolerances grow for fingers (2.5×) and a little for pens (1.5×).
    - A loupe magnifies the canvas above the finger while placing or
      dragging points.
+   - Two-point tools (line, rectangle, circle…) place their first point
+     where the finger lands and their second where it lifts: one drag
+     draws one shape. A tap sets the first point (shown as a dot) and the
+     next touch aims the second, placed on lift, so tap–tap works too and
+     you see the result before committing it. A line drawn by one drag
+     stands alone; lines placed tap by tap chain, and tapping the last
+     point again (or Done) ends the chain.
    ============================================================ */
+const TWO_POINT = { line: 'startPt', centerLine: 'center', rectangle: 'start', centerRectangle: 'center', circle: 'center', hexagon: 'center' };
+const TWO_POINT_MOVE_PX = 10;
 const LONG_PRESS_MS = 450;
 const SLOP_PX = 8;
 const TAP_MS = 300;
@@ -166,8 +175,67 @@ export class TouchMixin {
     }
   }
 
+  /* ---- Two-point tools on touch and pen ---- */
+
+  /** The first point of a two-point tool, once placed (else null). */
+  _twoPointAnchor() {
+    const k = TWO_POINT[this.toolName];
+    return k ? this.tool[k] || null : null;
+  }
+
+  /** Touch / pen down with a two-point tool. @returns {boolean} handled */
+  _twoPointDown(world, snap, screen, ev) {
+    this._twoPt = null;
+    if (!(this.toolName in TWO_POINT)) return false;
+    const armed = !!this._twoPointAnchor();
+    this._twoPt = { armed, start: screen };
+    if (armed) {                                   // aim the second point: placed on lift
+      this.tool.onPointerMove(world, snap, ev);
+      return true;
+    }
+    this.tool.onPointerDown(world, snap, ev);      // first point where the finger lands
+    this.tool.cursor = null;                       // no preview until the finger moves
+    this.requestRender();
+    return true;
+  }
+
+  /** Touch / pen up with a two-point tool. @returns {boolean} handled */
+  _twoPointUp(world, snap, screen, ev) {
+    const g = this._twoPt;
+    this._twoPt = null;
+    if (!g || !(this.toolName in TWO_POINT)) return false;
+    if (ev.type === 'pointercancel') { this._abortTwoPoint(g); return true; }
+    const moved = Math.hypot(screen.x - g.start.x, screen.y - g.start.y) > TWO_POINT_MOVE_PX;
+    const isLine = this.toolName === 'line';
+    if (g.armed) {
+      if (!this._twoPointAnchor()) return true;
+      this.tool.onPointerDown(world, snap, ev);
+      // Tapping the chain's last point again ends the chain.
+      if (isLine && this.tool.invalidEnd && !moved) this.tool.terminateChain(false);
+      this.tool.cursor = null;                     // no stale preview: touch has no hover
+    } else if (moved && this._twoPointAnchor()) {
+      this.tool.onPointerDown(world, snap, ev);    // one drag = one shape
+      if (isLine) this.tool.terminateChain(false); // stands alone (or cancelled if too short)
+      this.tool.cursor = null;
+    }
+    this.requestRender();
+    return true;
+  }
+
+  /** Undo what the current two-point touch did (second finger, cancel). */
+  _abortTwoPoint(g) {
+    if (g.armed) { this.tool.cursor = null; this.requestRender(); return; }   // keep the first point
+    this.setTool(this.toolName);                  // drop the point this touch placed
+  }
+
   /** A second finger arrived after a drag started: put things back. */
   _abortToolAction() {
+    if (this._twoPt) {                            // nothing committed yet by a two-point touch
+      const g = this._twoPt; this._twoPt = null;
+      this.lastDragSnaps = [];
+      this._abortTwoPoint(g);
+      return;
+    }
     const t = this.tool;
     const changed = t && (t.dragging || (t.inkDrag && t.inkDrag.moved) || (t.erasing && t.removed));
     if (changed && this.undoStack.length) {
