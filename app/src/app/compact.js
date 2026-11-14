@@ -54,7 +54,7 @@ export class CompactMixin {
     const bar = document.getElementById('mobilebar');
     if (!bar || !this.compact) return;
     const t = this.toolName;
-    const group = DRAW_TOOLS.has(t) ? 'draw' : PAINT_TOOLS.includes(t) ? 'paint' : t;
+    const group = DRAW_TOOLS.has(t) || t === 'trim' ? 'draw' : PAINT_TOOLS.includes(t) ? 'paint' : t;
     if (group === 'draw' || group === 'paint') this._lastTool[group] = t;
     const panelOpen = PANELS.some(([id]) => this.windows.isOpen(id));
     const slot = (id, icon, label, active, more = false) =>
@@ -80,8 +80,9 @@ export class CompactMixin {
     let items = [];
     if (kind === 'draw') items = TOOLS.filter(x => x.group === 'sketch').map(x => ({ id: x.id, icon: TOOL_ICONS[x.id], label: x.label, on: this.toolName === x.id }));
     // …then the operations on what is selected (Tools window on larger screens).
+    if (kind === 'draw') items.push({ id: 'trim', icon: TOOL_ICONS.trim, label: 'Scissors', on: this.toolName === 'trim', sep: true });
     if (kind === 'draw') items.push(...[['mirror', 'Mirror'], ['offset', 'Offset'], ['linear-pattern', 'Linear pattern'], ['circular-pattern', 'Circular pattern'], ['point-pattern', 'Point pattern']]
-      .map(([id, label], i) => ({ id: 'action:' + id, icon: ACTION_ICONS[id], label, on: false, sep: i === 0 })));
+      .map(([id, label]) => ({ id: 'action:' + id, icon: ACTION_ICONS[id], label, on: false })));
     if (kind === 'paint') {
       items = PAINT_TOOLS.map(id => ({ id, icon: TOOL_ICONS[id], label: toolDef(id).label, on: this.toolName === id }));
       items.push({ id: 'panel:colors', icon: WINDOW_ICONS.colors, label: 'Colours', on: this.windows.isOpen('colors') });

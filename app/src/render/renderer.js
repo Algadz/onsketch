@@ -562,6 +562,50 @@ export class Renderer {
     ctx.restore();
   }
 
+  /** Scissors: the piece a click removes (thick red, dashed), where it's
+   *  cut (ticks), the split spot, the power-trim stroke. */
+  drawCutPreview(cut) {
+    const v = this.view, ctx = this.ctx, t = this.theme;
+    ctx.save();
+    ctx.lineCap = 'round';
+    if (cut.trail) {
+      ctx.strokeStyle = t.over; ctx.globalAlpha = 0.55; ctx.lineWidth = 1.5; ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      cut.trail.forEach((p, i) => { const q = v.worldToScreen(p); if (i) ctx.lineTo(q.x, q.y); else ctx.moveTo(q.x, q.y); });
+      ctx.stroke();
+      ctx.globalAlpha = 1; ctx.setLineDash([]);
+    }
+    const r = cut.remove;
+    if (r) {
+      ctx.strokeStyle = t.over; ctx.lineWidth = 5; ctx.globalAlpha = 0.35;
+      const path = () => {
+        ctx.beginPath();
+        if (r.kind === 'line') { const a = v.worldToScreen(r.a), b = v.worldToScreen(r.b); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); }
+        else if (r.kind === 'circle') { const c = v.worldToScreen(r.center); ctx.arc(c.x, c.y, r.r * v.zoom, 0, TAU); }
+        else drawDirectedArcPath(ctx, v, r.center, r.r, r.a0, r.a1, r.clockwise);
+      };
+      path(); ctx.stroke();
+      ctx.globalAlpha = 1; ctx.lineWidth = 2; ctx.setLineDash([6, 4]);
+      path(); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    for (const p of cut.ends || []) {                  // where the piece is cut
+      const q = v.worldToScreen(p);
+      ctx.strokeStyle = t.over; ctx.lineWidth = 1.8;
+      ctx.beginPath(); ctx.moveTo(q.x - 5, q.y - 5); ctx.lineTo(q.x + 5, q.y + 5); ctx.moveTo(q.x + 5, q.y - 5); ctx.lineTo(q.x - 5, q.y + 5); ctx.stroke();
+    }
+    const marks = [...(cut.marks || [])];
+    if (cut.split) marks.push(cut.split);
+    for (const m of marks) {                           // split spot(s)
+      const q = v.worldToScreen(m);
+      ctx.fillStyle = t.previewHalo || 'rgba(255,255,255,0.8)';
+      ctx.strokeStyle = t.preview; ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.arc(q.x, q.y, m.snapped ? 7 : 5.5, 0, TAU); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(q.x, q.y - 10); ctx.lineTo(q.x, q.y + 10); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   drawTempPoint(point) {
     if (!point) return;
     const v = this.view, ctx = this.ctx;

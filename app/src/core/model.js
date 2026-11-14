@@ -381,7 +381,7 @@ export class Project {
           case 'pointOnLine':   c = new PointOnLineConstraint(cj.pointId, cj.l); break;
           case 'pointOnCircle': c = new PointOnCircleConstraint(cj.pointId, cj.circleId, cj.centerId); break;
           case 'arcEndpointCoincident': c = new ArcEndpointCoincidentConstraint(cj.ref, cj.pointId); break;
-          case 'arcEndpointArcEndpointCoincident': c = new ArcEndpointArcEndpointCoincidentConstraint(cj.ref1, cj.ref2); break;
+          case 'arcEndpointArcEndpointCoincident': c = new ArcEndpointArcEndpointCoincidentConstraint(cj.ref1, cj.ref2, !!cj.angular); break;
           case 'arcEndpointMidpoint': c = new ArcEndpointMidpointConstraint(cj.ref, cj.l); break;
           case 'arcEndpointFix': c = new ArcEndpointFixConstraint(cj.ref, cj.x, cj.y); break;
           case 'arcEndpointOnLine': c = new ArcEndpointOnLineConstraint(cj.ref, cj.l); break;

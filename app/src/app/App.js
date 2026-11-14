@@ -65,6 +65,7 @@ export class App {
     this.offsetSide = 1;
     this.offsetInputEl = null;
     this.pattern = null;           // pattern being created / edited (patterns.js)
+    this.scissorsMode = 'trim';    // Scissors tool: 'trim' | 'split'
     this.polygonSides = 6;
     this.gridOn = true; this.snapOn = true; this.constructionMode = false;
     this.lastSnap = null; this.lastWorldCursor = { x:0, y:0 };

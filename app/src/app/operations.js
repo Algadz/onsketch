@@ -1296,7 +1296,7 @@ export class OperationsMixin {
         clone = new ArcEndpointCoincidentConstraint(arcRef(c.ref), mid(c.pointId));
         break;
       case 'arcEndpointArcEndpointCoincident':
-        clone = new ArcEndpointArcEndpointCoincidentConstraint(arcRef(c.ref1), arcRef(c.ref2));
+        clone = new ArcEndpointArcEndpointCoincidentConstraint(arcRef(c.ref1), arcRef(c.ref2), c.angular);
         break;
       case 'arcEndpointMidpoint':
         clone = new ArcEndpointMidpointConstraint(arcRef(c.ref), lineRef(c.l));

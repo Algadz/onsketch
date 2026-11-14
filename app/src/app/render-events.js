@@ -4,6 +4,7 @@ import { Arc, Circle, Line, Point } from '../core/entities.js';
 import { SelectTool } from '../tools/select.js';
 import { ArcTool, CenterLineTool, CenterRectangleTool, CircleTool, HexagonTool, LineTool, PointTool, RectangleTool, ThreePointCircleTool } from '../tools/draw.js';
 import { FillTool } from '../tools/fill.js';
+import { ScissorsTool } from '../tools/scissors.js';
 import { EraserTool, InkTool } from '../tools/freehand.js';
 import { TextTool } from '../tools/text.js';
 import { ArrowTool } from '../tools/arrow.js';
@@ -52,6 +53,7 @@ export class RenderEventsMixin {
       if (prev.dimPreview) this.renderer.drawDimPreview(prev.dimPreview);
       if (prev.strokes)    for (const st of prev.strokes) this.renderer.drawStroke(st);
       if (prev.brush)      this.renderer.drawBrush(prev.brush);
+      if (prev.cut)        this.renderer.drawCutPreview(prev.cut);
     }
     // Touch has no hover: mark the placed first point of a two-point tool.
     if (this.touchUI && this._twoPointAnchor) this.renderer.drawTempPoint(this._twoPointAnchor());
@@ -89,6 +91,17 @@ export class RenderEventsMixin {
       : 'crosshair';
   }
 
+  /** Scissors: 'trim' (remove a piece) or 'split' (cut in two). */
+  setScissorsMode(mode) {
+    this.scissorsMode = mode === 'split' ? 'split' : 'trim';
+    if (this.tool?.pending) this.tool.pending = null;
+    if (this.tool) this.tool.hover = null;
+    this._refreshOptionsBar();
+    const el = document.getElementById('status-hint');
+    if (el && this.tool?.hint) el.textContent = this.tool.hint();
+    this.requestRender();
+  }
+
   /* ---- Tool selection ---- */
   setTool(name) {
     if (name !== this.toolName) trackOnce('tool', { name });
@@ -112,6 +125,7 @@ export class RenderEventsMixin {
       case 'point':     this.tool = new PointTool(this); break;
       case 'smartdim':  this.tool = new SmartDimensionTool(this); break;
       case 'fill':      this.tool = new FillTool(this); break;
+      case 'trim':      this.tool = new ScissorsTool(this); break;
       case 'pen':       this.tool = new InkTool(this, 'pen'); break;
       case 'marker':    this.tool = new InkTool(this, 'marker'); break;
       case 'eraser':    this.tool = new EraserTool(this); break;
@@ -371,6 +385,7 @@ export class RenderEventsMixin {
       else if (k === 'h') this.setTool('hexagon');
       else if (k === 'a') this.setTool('arc');
       else if (k === 'p') this.setTool('point');
+      else if (k === 'x') { if (this.toolName === 'trim') this.setScissorsMode(this.scissorsMode === 'split' ? 'trim' : 'split'); else this.setTool('trim'); }
       else if (k === 'd') this.setTool('smartdim');
       else if (k === 'b') this.setTool('fill');
       else if (k === 'n') this.setTool('pen');

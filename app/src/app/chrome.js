@@ -169,6 +169,7 @@ export class ChromeMixin {
         ${TOOL_ICONS.smartdim}<span>Dimension</span></button>
       <div class="tool-sep"></div>
       <div class="tool-grid">
+        <button class="tool-btn" data-tool="trim" title="Scissors (X): trim a piece back to the nearest crossing, or split a shape in two" aria-label="Scissors">${TOOL_ICONS.trim}</button>
         <button class="tool-btn" data-action="mirror" title="Mirror selection about a line">${ACTION_ICONS.mirror}</button>
         <button class="tool-btn" data-action="offset" title="Offset selected line, circle or arc">${ACTION_ICONS.offset}</button>
         <button class="tool-btn" data-action="linear-pattern" title="Linear pattern: repeat the selection in a row or a grid">${ACTION_ICONS['linear-pattern']}</button>
@@ -215,6 +216,12 @@ export class ChromeMixin {
       html += sep + '<span class="opt-hint"><b>1.</b> Click one or two entities &nbsp; <b>2.</b> Click to place the dimension &nbsp; <b>3.</b> Type a value, Enter. Click an existing dimension to edit it.</span>';
     } else if (t.group === 'freehand') {
       html += this._sketchOptionsHTML(t.id);
+    } else if (t.id === 'trim') {
+      const split = this.scissorsMode === 'split';
+      html += sep + `<span class="seg"><button class="${split ? '' : 'on'}" data-opt="scissors-trim" title="Remove the piece between the nearest crossings (X switches)">Trim</button><button class="${split ? 'on' : ''}" data-opt="scissors-split" title="Cut a shape in two (X switches)">Split</button></span>`;
+      html += sep + `<span class="opt-hint">${split
+        ? 'Click a line or arc to cut it there (snaps to crossings and the middle); a circle takes two clicks. The pieces stay one shape: collinear, or same centre and radius.'
+        : 'Click the red piece to remove it, or drag across several. Relations on the line or circle stay; its new ends stay on what cut them; length relations go.'}</span>`;
     } else if (t.id === 'fill') {
       html += sep + `<span class="seg"><button class="${this.fillErase ? '' : 'on'}" data-opt="fill-mode">Fill</button><button class="${this.fillErase ? 'on' : ''}" data-opt="erase-mode">Erase fill</button></span>`;
       html += `<label class="opt">Colour <i class="opt-sw" style="--sw:${p.fillColor}"></i></label>`;
@@ -244,6 +251,7 @@ export class ChromeMixin {
       el.addEventListener('click', () => {
         if (k === 'construction') this._runAction('construction');
         else if (k === 'fill-mode' || k === 'erase-mode') this.setFillErase(k === 'erase-mode');
+        else if (k === 'scissors-trim' || k === 'scissors-split') this.setScissorsMode(k === 'scissors-split' ? 'split' : 'trim');
         else this._runAction(k);
       });
     });

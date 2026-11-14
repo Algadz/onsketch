@@ -23,6 +23,7 @@ npm run test:linedim # Smart Dimension between two parallel lines
 npm run test:layers  # layers as display only: editing, relations and dimensions across layers, hiding
 npm run test:nosnap  # Alt = no snap while placing or dragging; Space-drag pans
 npm run test:pattern # linear / circular / point patterns: picks, linked copies, editing, equations, unlink
+npm run test:scissors # scissors: trim (click, drag), split, relations kept / moved / removed, undo
 npm run test:export  # Export (PNG, SVG, copy, DXF, print to scale) and the first-run steps, desktop and phone
 node tests/style.e2e.mjs  # restyling arrows / texts after drawing, touch tap-through guard
 node tests/analytics.e2e.mjs  # Umami events: what is counted, once per visit, nothing sent from tests
@@ -57,7 +58,7 @@ cached modules after a deploy. `npm test` fails if the stamp is out of date.
   per-device preference.
 - **Options bar** (second row): settings for the active tool, as in Paint.NET.
   Line weight, line type and construction while drawing; a short hint with
-  Select (Mirror, Offset and the patterns are in the Tools window); step-by-step help for
+  Select (Scissors, Mirror, Offset and the patterns are in the Tools window); step-by-step help for
   Smart Dimension; Fill / Erase for the Fill tool.
 - **Floating windows** over the canvas, dragged by their title bar and
   remembered per browser: Tools, Colors, Layers, Properties, Equations.
@@ -284,6 +285,7 @@ browsers.
 | | `equation-used`, `undo`, `copy`, `cut` (once) | |
 | | `relation-refused` (once) | `kind`, `reason` (conflict / implied) |
 | | `pattern` (once) | `type` (linear / circular / points), `linked` |
+| | `scissors` (once) | `mode` (trim / split) |
 | | `pattern-edit` (once) | `type` |
 | | `paste` (once) | `what` (ink / image / text) |
 | | `image-import` (once) | `via` (picker / drop) |
@@ -445,6 +447,35 @@ exactly as if it were one layer.
   the active layer, like painting in Paint.NET.
 
 Layers have a name, visibility, opacity and order.
+
+## Scissors (X)
+
+The Scissors tool (Tools window, first of the operations row; X; on a
+phone in Draw ▸) cuts lines, circles and arcs. The options bar (or X
+again) switches between:
+
+- **Trim**: hovering shows in red the piece a click removes: the part
+  between the two nearest places where other visible shapes cross or
+  touch it (with ✕ at the cuts). With nothing crossing it, the whole
+  shape goes. **Drag** across shapes to trim every piece the stroke
+  crosses ("power trim"); the stroke is one undo step.
+- **Split**: click a line or an arc to cut it in two there. The spot
+  snaps to crossings, points on the shape and the middle (Alt: no snap).
+  A circle takes two clicks (Esc forgets the first).
+
+What happens to relations and dimensions:
+
+| | |
+|---|---|
+| **Kept** on the piece that keeps the shape's id | everything about the line's direction or the circle: horizontal, vertical, parallel, perpendicular, collinear, angle, tangent, point on line / circle, symmetric about it, point–line distance, offset, radius / diameter, equal radius, concentric; Fix and dimensions on points that are still there (corners, centres, the far end) |
+| **Added** between the pieces | Collinear (two lines), the same centre + Equal radius (two arcs after a trim), a Coincident joint (after a split; a split circle's second joint only matches angles, so the loop isn't over-constrained) |
+| **Added** at a cut | the new end stays on what cut it: Point on line / Point on circle, or the cut point is shared (Coincident) when it was an existing point or another shape's end |
+| **Removed** | relations about the line's length (Equal length, Midpoint) and anything on a piece or an end that's gone. A note names them (with D-names, as equations using them will show an error) |
+
+A trimmed circle becomes an arc with the circle's id, and pieces keep
+their layer, style and construction, so fills, ink links and dimension
+names stay put. Shapes of a linked pattern aren't cut (unlink the pattern
+first). Core in `core/trim.js`, tool in `tools/scissors.js`.
 
 ## Patterns
 

@@ -535,18 +535,34 @@ export class ArcEndpointCoincidentConstraint extends Constraint {
 }
 
 export class ArcEndpointArcEndpointCoincidentConstraint extends Constraint {
-  constructor(ref1, ref2) {
+  /** angular: the two arcs share a centre and are already held to the same
+   *  radius elsewhere (a circle split in two: the other joint does it), so
+   *  only the angles have to meet. One equation instead of two, so the
+   *  closed loop isn't over-constrained. */
+  constructor(ref1, ref2, angular = false) {
     super('arcEndpointArcEndpointCoincident');
     this.ref1 = ref1;
     this.ref2 = ref2;
+    this.angular = !!angular && ref1.centerId === ref2.centerId;
   }
   refs() { return [this.ref1.arcId, this.ref1.centerId, this.ref2.arcId, this.ref2.centerId]; }
   residuals(L) {
+    if (this.angular) {
+      const a1 = L(this.ref1.arcId, this.ref1.which === 'start' ? 'a0' : 'a1');
+      const a2 = L(this.ref2.arcId, this.ref2.which === 'start' ? 'a0' : 'a1');
+      let d = (a1 - a2 + Math.PI) % (2 * Math.PI);
+      if (d < 0) d += 2 * Math.PI;
+      return [(d - Math.PI) * L(this.ref1.arcId, 'r')];
+    }
     const a = arcEndpointXY(L, this.ref1);
     const b = arcEndpointXY(L, this.ref2);
     return [a.x - b.x, a.y - b.y];
   }
-  toJSON() { return { id:this.id, kind:'arcEndpointArcEndpointCoincident', ref1:this.ref1, ref2:this.ref2 }; }
+  toJSON() {
+    const o = { id:this.id, kind:'arcEndpointArcEndpointCoincident', ref1:this.ref1, ref2:this.ref2 };
+    if (this.angular) o.angular = true;
+    return o;
+  }
 }
 
 export class PointRefHorizontalConstraint extends Constraint {
