@@ -142,6 +142,46 @@ const pan2 = await page.evaluate(() => [window._app.view.panX, window._app.view.
 check(Math.abs(pan2[0] - pan0[0] - 60) < 1 && Math.abs(pan2[1] - pan0[1] - 40) < 1, `Space-drag pans (${pan2.map(v => (v - pan0[pan2.indexOf(v)]).toFixed(0))})`);
 check(await page.evaluate(() => window.scrollY) === 0, 'Space doesn\'t scroll the page');
 
+// Two squares tied at a corner by a coincident relation (separate points):
+// dragging that corner with snap on follows the cursor smoothly. It used to
+// snap to its own partner point (where it was a frame ago) and stutter.
+await page.evaluate((proj) => {
+  const a = window._app;
+  a.project = a.project.constructor.fromJSON(proj);
+  a._afterStateSwap();
+  a.view.zoom = 5; a.view.panX = 0; a.view.panY = 0;
+  a.commit({ diagnostics: 'sync' }); a.setTool('select'); a.snapOn = true;
+  a.refreshUI();
+}, (() => {
+  const sq = (k, x0, y0, x1, y1) => {
+    const p = [P(k + '1', x0, y0), P(k + '2', x1, y0), P(k + '3', x1, y1), P(k + '4', x0, y1)];
+    const ents = [0, 1, 2, 3].map(i => ({ type: 'line', id: k + 'L' + i, p1: p[i], p2: p[(i + 1) % 4] }));
+    const cons = ents.map((e, i) => ({ id: k + 'c' + i, kind: i % 2 ? 'vertical' : 'horizontal', lineId: e.id, p1: e.p1.id, p2: e.p2.id }));
+    return { ents, cons };
+  };
+  const A = sq('a', 20, -10, 40, 10), B = sq('b', 40, 10, 60, 30);
+  return { version: 3, activeLayerId: 'l', layers: [{ id: 'l', name: 'L' }],
+    sketches: [{ id: 's', name: 'S', entities: [...A.ents, ...B.ents, P('still', 46, 1)],
+      constraints: [...A.cons, ...B.cons, { id: 'co', kind: 'coincident', p1: 'a3', p2: 'b1' }] }] };
+})());
+const corner0 = await scr(40, 10);
+await page.mouse.move(corner0.x, corner0.y); await page.mouse.down();
+let worst = 0;
+for (let i = 1; i <= 12; i++) {
+  const q = { x: corner0.x + i * 2, y: corner0.y - i * 1.5 };
+  await page.mouse.move(q.x, q.y);
+  const c = await page.evaluate(() => { const a = window._app; const p = a.activeSketch().entities.find(e => e.id === 'aL2').p1; return a.view.worldToScreen(p); });
+  worst = Math.max(worst, Math.hypot(box.x + c.x - q.x, box.y + c.y - q.y));
+}
+check(worst < 0.6, `shared corner (coincident) follows the cursor with snap on, no stutter (worst gap ${worst.toFixed(1)} px)`);
+// …and still snaps to geometry that stays put.
+const still = await scr(46, 1);
+await page.mouse.move(still.x + 4, still.y + 3, { steps: 4 });
+const snapped = await page.evaluate(() => { const a = window._app, p = a.activeSketch().entities.find(e => e.id === 'aL2').p1; return { kind: a.lastSnap?.kind, x: p.x, y: p.y }; });
+await page.mouse.up();
+const attached = await page.evaluate(() => window._app.activeSketch().constraints.some(c => c.kind === 'coincident' && [c.p1, c.p2].includes('still')));
+check(snapped.kind === 'endpoint' && Math.hypot(snapped.x - 46, snapped.y - 1) < 0.02 && attached, `…and still snaps onto a point that doesn't move, attaching on release (${snapped.kind})`);
+
 check(!errors.length, 'no page errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
 await browser.close();
 server.close();

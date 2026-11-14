@@ -138,6 +138,7 @@ export class SelectTool extends Tool {
         !sketch?.constraints.some(c => c.kind === 'radius' && c.circleId === hit.id);
       const canDrag = pts.length || hitIsResizableCircle;
       this.dragging = canDrag ? this.app.beginLocalizedDrag(world, pts, hit, rigidLines) : null;
+      if (this.dragging) this.dragging.restShapes = this.app._captureRestShapes();   // drag snaps skip what moves
       this.inkDrag = this.app.beginInkDrag(world);           // selected ink moves along
       this.app.refreshUI();
       this.app.requestRender();

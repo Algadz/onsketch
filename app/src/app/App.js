@@ -647,14 +647,67 @@ export class App {
   }
 
   /** Dragged points plus every line / arc / circle they belong to: a
-   *  dragged point can't meaningfully snap onto its own geometry. */
+   *  dragged point can't meaningfully snap onto its own geometry.
+   *  Points tied to a dragged one by a coincident relation (two squares
+   *  sharing a corner through a relation, not one point) are the same
+   *  corner: they sit where the drag was a frame ago, so snapping to them
+   *  held the point back until the cursor got a snap radius away, then it
+   *  jumped (a staircase, worse with a finger's larger radius). They and
+   *  their shapes are left out too. */
   _dragSnapExclusions(drag) {
     if (drag._snapExclusions) return drag._snapExclusions;
     const set = new Set(drag.pts.map(r => r.p));
     const sketch = this.activeSketch();
-    if (sketch) for (const e of sketch.entities) if (e.children().some(c => set.has(c))) set.add(e);
+    if (sketch) {
+      const byId = new Map();
+      for (const e of sketch.entities) { byId.set(e.id, e); for (const c of e.children()) byId.set(c.id, c); }
+      const ids = new Set([...set].map(p => p.id));
+      const add = (p) => { if (p && !ids.has(p.id)) { ids.add(p.id); set.add(p); return true; } return false; };
+      for (let grew = true; grew;) {
+        grew = false;
+        for (const c of sketch.constraints) {
+          if (c.kind === 'coincident') {
+            if (ids.has(c.p1)) grew = add(byId.get(c.p2)) || grew;
+            if (ids.has(c.p2)) grew = add(byId.get(c.p1)) || grew;
+          } else if (c.kind === 'arcEndpointCoincident' && c.ref) {
+            const end = byId.get(c.ref.arcId)?.[c.ref.which];
+            if (ids.has(c.pointId)) grew = add(end) || grew;
+            if (end && ids.has(end.id)) grew = add(byId.get(c.pointId)) || grew;
+          }
+        }
+      }
+      for (const e of sketch.entities) if (e.children().some(c => set.has(c))) set.add(e);
+    }
     drag._snapExclusions = set;
     return set;
+  }
+
+  /** Where every shape of the active sketch is when a drag starts. */
+  _captureRestShapes() {
+    const rest = new Map();
+    const sketch = this.activeSketch(); if (!sketch) return rest;
+    for (const e of sketch.entities) {
+      for (const c of e.children()) rest.set(c, { x: c.x, y: c.y });
+      if (e instanceof Point) rest.set(e, { x: e.x, y: e.y });
+      if (Number.isFinite(e.r)) rest.set(e, { r: e.r });
+    }
+    return rest;
+  }
+
+  /** True when a snap candidate belongs to geometry that has moved since
+   *  the drag started: it moves because of the drag (it follows the
+   *  dragged point through relations), so it sits where the drag was a
+   *  frame earlier. Snapping to it would pull the point back, then let it
+   *  jump: a stutter, and on release a relation that collapses a shape. */
+  _dragSnapTargetMoves(drag, candidate) {
+    const rest = drag.restShapes, e = candidate.entity;
+    if (!rest || !e) return false;
+    const tol = 0.25 / this.view.zoom;
+    const moved = (p) => { const r = rest.get(p); return !!r && Math.hypot(p.x - r.x, p.y - r.y) > tol; };
+    if (e instanceof Point) return moved(e);
+    if (e.children().some(moved)) return true;
+    const r = rest.get(e);
+    return !!(r && Number.isFinite(e.r) && Math.abs(e.r - r.r) > tol);
   }
 
   _snapForDragging(world) {
@@ -670,6 +723,7 @@ export class App {
       const snap = this.snap.find(probe, this.view, this.visibleSketches(), {
         ignore: (candidate) =>
           (candidate.entity && draggedSet.has(candidate.entity)) ||
+          this._dragSnapTargetMoves(drag, candidate) ||
           this.shouldIgnoreDragSnap(drag, candidate)
       });
       if (!snap) continue;
@@ -712,6 +766,7 @@ export class App {
       const snap = this.snap.find(probe, this.view, this.visibleSketches(), {
         ignore: (candidate) =>
           (candidate.entity && draggedSet.has(candidate.entity)) ||
+          this._dragSnapTargetMoves(drag, candidate) ||
           this.shouldIgnoreDragSnap(drag, candidate)
       });
       if (!snap) continue;
