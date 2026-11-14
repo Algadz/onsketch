@@ -7,7 +7,8 @@ import { track } from '../ui/analytics.js';
 
    - One finger is held back until it moves (then it is a drag, replayed
      into the tool from where it started), lifts (a tap: down + up), or
-     stays still for 450 ms (a long press: the context menu).
+     stays still for 450 ms (a long press: the context menu; moving the
+     finger after that drags nothing).
    - A second finger turns it into a gesture: pan + pinch-zoom around the
      two fingers. If the tool had already started (a drag), that action is
      undone first. Two-finger tap = Undo, three-finger tap = Redo.
@@ -112,6 +113,7 @@ export class TouchMixin {
     if (kind === 'move') {
       if (T.gesture) { this._gestureMove(T); return true; }
       if (T.pending && T.pending.id === ev.pointerId) {
+        if (T.pending.menu) return true;          // a long press opened a menu: the finger is choosing, not dragging
         if (Math.hypot(pos.x - T.pending.start.x, pos.y - T.pending.start.y) < SLOP_PX) return true;
         clearTimeout(T.pending.timer);
         const first = T.pending.ev;
@@ -169,8 +171,9 @@ export class TouchMixin {
     const { screen, world } = this._canvasHandlers.getWorld(pend.ev);
     if (this._valueInput) return;                 // a value box is open: nothing to show
     const c = this.hitRelationAtScreen(screen.x, screen.y) || this.hitDimAtScreen(screen.x, screen.y);
-    if (c && this.showConstraintMenu(c, pend.start.x, pend.start.y)) { try { navigator.vibrate?.(12); } catch { /* not supported */ } return; }
+    if (c && this.showConstraintMenu(c, pend.start.x, pend.start.y)) { pend.menu = true; try { navigator.vibrate?.(12); } catch { /* not supported */ } return; }
     if (this.showContextMenu(screen, world, { clientX: pend.start.x, clientY: pend.start.y })) {
+      pend.menu = true;
       try { navigator.vibrate?.(12); } catch { /* not supported */ }
     }
   }

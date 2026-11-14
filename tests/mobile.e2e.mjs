@@ -149,6 +149,31 @@ const lineMidOnScreen = (page, t = 0.5) => app(page, (t) => {
   check(fabDim && await app(page, () => !window._app.activeSketch().constraints.some(c => c.name === 'D4')), 'phone: tap a dimension, then the Delete button removes it');
   check(await app(page, () => document.getElementById('fab-delete').hidden), 'phone: the Delete button hides when nothing is selected');
 
+  // A box drawn by a finger: selects, and the box is gone once it lifts.
+  await app(page, () => { window._app.zoomFit(); window._app.clearSelection(); });
+  await page.waitForTimeout(100);
+  await touch('touchStart', [[375, 120]]);
+  for (let i = 1; i <= 10; i++) await touch('touchMove', [[375 - i * 36, 120 + i * 45]]);
+  await page.waitForTimeout(50);
+  await app(page, () => { const a = window._app; window.__renders = 0; const r = a._render.bind(a); a._render = () => { window.__renders++; r(); }; });
+  await touch('touchEnd', []);
+  await page.waitForTimeout(150);
+  const boxSel = await app(page, () => ({ sel: window._app.activeSketch().entities.filter(e => e.selected).length, renders: window.__renders, box: window._app.tool.box }));
+  check(boxSel.sel > 0 && !boxSel.box && boxSel.renders > 0, `phone: a box drag selects and is redrawn without the box on lift (${JSON.stringify(boxSel)})`);
+  await app(page, () => window._app.clearSelection());
+
+  // Long press opens the menu; moving the finger afterwards drags nothing.
+  const lp = await lineMidOnScreen(page);
+  const lineAt = () => app(page, (id) => { const l = window._app.activeSketch().entities.find(e => e.id === id); return [l.p1.x, l.p1.y, l.p2.x, l.p2.y].map(v => +v.toFixed(3)).join(); }, lp.id);
+  const before = await lineAt();
+  await touch('touchStart', [[lp.x, lp.y]]); await page.waitForTimeout(600);
+  for (let i = 1; i <= 6; i++) await touch('touchMove', [[lp.x + i * 8, lp.y + i * 6]]);
+  await touch('touchEnd', []);
+  check(await lineAt() === before && await app(page, () => !!window._app.contextMenuEl), 'phone: after a long press, moving the finger keeps the menu and moves nothing');
+  await app(page, () => window._app.hideContextMenu());
+  await page.touchscreen.tap(375, 120);           // emulated Chrome drops the click of the first tap after a long press + move
+  await page.waitForTimeout(350);
+
   // Panels as bottom sheets, one at a time.
   await page.tap('[data-slot="panels"]'); await page.tap('#mb-flyout [data-id="panel:layers"]');
   await page.tap('[data-slot="panels"]'); await page.tap('#mb-flyout [data-id="panel:colors"]');

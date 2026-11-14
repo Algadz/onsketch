@@ -257,6 +257,9 @@ export class RenderEventsMixin {
       const snap = this._snapForCurrentTool(world);
       if (ev.pointerType && ev.pointerType !== 'mouse' && this._twoPointUp(world, snap, screen, ev)) return;
       this.tool.onPointerUp(world, snap, ev);
+      // Always redraw on release: a mouse redraws on its next move anyway,
+      // but a finger lifts and is gone (a selection box would stay drawn).
+      this.requestRender();
     };
 
     this._canvasHandlers = { down, move, up, getWorld };
