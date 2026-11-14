@@ -186,3 +186,19 @@ test('a plain tangent (no shared point) still holds the distance to the centre',
   const dx = l.p2.x - l.p1.x, dy = l.p2.y - l.p1.y;
   assert.ok(near(Math.abs(dx * (0 - l.p1.y) - dy * (0 - l.p1.x)) / Math.hypot(dx, dy), c.r, 1e-6));
 });
+
+test('a radius never goes negative: concentric circles 17.5 apart, outer set to 10', () => {
+  const s = sketch();
+  const outer = circle(s, 0, 0, 37.5), inner = circle(s, 0, 0, 20);
+  s.constraints.push(new C.CoincidentConstraint(outer.center.id, inner.center.id));
+  s.constraints.push(new C.CurveDistanceConstraint(outer.id, inner.id, 'radial', 17.5));
+  s.constraints.push(new C.RadiusConstraint(outer.id, 10));
+  const r = solve(s, { revertOnFailure: true });
+  assert.equal(r.ok, false);
+  assert.equal(r.state, 'over');
+  assert.ok(near(outer.r, 37.5) && near(inner.r, 20), `reverted (${outer.r} / ${inner.r})`);
+  // A possible value still solves.
+  s.constraints[2].value = 30;
+  const ok = solve(s, { revertOnFailure: true });
+  assert.ok(ok.ok && near(outer.r, 30, 1e-5) && near(inner.r, 12.5, 1e-5));
+});

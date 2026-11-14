@@ -257,15 +257,20 @@ export class Solver {
     }
 
     const residual = Math.sqrt(f.reduce((s,v)=>s+v*v, 0));
+    // A negative radius satisfies the equations but isn't a shape (two
+    // concentric circles kept 20 apart, the outer one made 15): it counts
+    // as a failure, like a conflict.
+    const badShape = params.some(p => p.key === 'r' && p.ent.r < -1e-9);
+    const failed = residual >= 1e-4 || badShape;
     // A solve that can't satisfy every constraint ends on a least-squares
     // compromise that bends everything, fixed points included. With
     // revertOnFailure the geometry goes back to where it was instead, and
     // the failure is reported (per independent group of constraints).
-    const reverted = options.revertOnFailure && residual >= 1e-4;
+    const reverted = options.revertOnFailure && failed;
     if (reverted) { for (let j = 0; j < n; j++) x[j] = x0[j]; setX(x); }
     if (!diagnostics) {
-      const state = residual > 1e-3 ? 'over' : 'solved';
-      return { ok: residual < 1e-4, iters, residual, dof:null, n, m, rank:null,
+      const state = residual > 1e-3 || badShape ? 'over' : 'solved';
+      return { ok: !failed, iters, residual, dof:null, n, m, rank:null,
                redundant:0, state, entityStatus:null, redundantIds:null, pinned:null,
                diagnostics:false, reverted };
     }
@@ -336,11 +341,11 @@ export class Solver {
     }
 
     let state;
-    if (residual > 1e-3) state = 'over';
+    if (residual > 1e-3 || badShape) state = 'over';
     else if (dof === 0)  state = 'fully';
     else                  state = 'under';
 
-    return { ok: residual < 1e-4, iters, residual, dof, n, m, rank, redundant,
+    return { ok: !failed, iters, residual, dof, n, m, rank, redundant,
              state, entityStatus, redundantIds, pinned, reverted };
   }
 }

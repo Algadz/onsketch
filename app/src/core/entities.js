@@ -129,7 +129,7 @@ export class Circle extends Entity {
     ctx.save();
     applyStroke(ctx, style);
     ctx.beginPath();
-    ctx.arc(c.x, c.y, this.r * view.zoom, 0, TAU);
+    ctx.arc(c.x, c.y, Math.abs(this.r) * view.zoom, 0, TAU);   // never negative: the canvas throws
     ctx.stroke();
     ctx.restore();
   }

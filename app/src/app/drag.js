@@ -243,7 +243,10 @@ export class DragMixin {
   _finishDragStep(drag, result) {
     const sketch = this.activeSketch();
     if (!sketch) return result;
-    if (sketch && (!this._offsetGeometryValid(sketch) || !this._offsetDragGuardValid(drag?.offsetGuard))) {
+    // A drag never takes a radius below zero (a circle kept smaller than
+    // another by a dimension stops when it reaches nothing).
+    const negativeRadius = sketch.entities.some(e => (e instanceof Circle || e instanceof Arc) && e.r < 0);
+    if (sketch && (negativeRadius || !this._offsetGeometryValid(sketch) || !this._offsetDragGuardValid(drag?.offsetGuard))) {
       if (drag?.lastValidValues) this._applyParamValues(drag.state, drag.lastValidValues);
       else if (drag?.state) this._restoreSketchParams(drag.state);
       for (const e of sketch.entities) if (e instanceof Arc) e.syncEnds();
