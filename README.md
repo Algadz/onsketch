@@ -26,6 +26,7 @@ npm run test:pattern # linear / circular / point patterns: picks, linked copies,
 npm run test:scissors # scissors: trim (click, drag), split, relations kept / moved / removed, undo
 npm run test:curve   # Bézier curves: drawing, handles, tangent / smooth / on curve, fill, scissors, mirror, export
 npm run test:export  # Export (PNG, SVG, copy, DXF, print to scale) and the first-run steps, desktop and phone
+npm run test:formula # click a dimension to put it in an equation; variables driving tangents
 node tests/style.e2e.mjs  # restyling arrows / texts after drawing, touch tap-through guard
 node tests/analytics.e2e.mjs  # Umami events: what is counted, once per visit, nothing sent from tests
 npm run test:mobile  # phone / tablet layout and touch input on emulated devices
@@ -373,9 +374,16 @@ touch input. Plan and audit: `docs/mobile-plan.md`.
   dependency order; cycles and unknown names are flagged, not applied.
   Equations are global, like everything else the solver does.
 - Editing a dimension shows its equation (Σ marks equation-driven labels).
-- While a dimension's value box is open, click a line, circle or arc to
-  insert its dimension name (`=D5`, or at the caret inside an equation). A
-  shape without one gets a **floating** (driven, reference) dimension first.
+- **Writing an equation, click what it refers to.** While a formula is
+  being typed (a dimension's value box on the canvas, an expression in the
+  Equations window, or a dimension field in Properties), click a
+  **dimension's label** to insert its name (`=D5`, or at the caret inside
+  an equation, joined with ` + ` after a name; a variable's expression
+  takes the bare name), or click a line, circle or arc to insert the name
+  of the dimension that measures it. The field keeps the focus; Enter
+  applies. Hovering shows a copy cursor and the name a click would insert.
+  A shape without a dimension gets a **floating** (driven, reference)
+  dimension first.
   Floating dimensions re-measure the geometry on every render, solve and drag
   frame, so after `D1 = D5`, dragging that line resizes D1's shape live.
 - In the Equations window, drag a plain value sideways to change it, as in
@@ -406,6 +414,17 @@ touch input. Plan and audit: `docs/mobile-plan.md`.
   snap.) On touch screens: two fingers, see below.
 
 ## Solving and conflicts
+
+- **Angle dimensions** measure between the two lines' directions, in the
+  sector where the dimension was placed: 60° and 120° are different, and
+  any value from 0° to 180° can be reached (an equation like `360/n` moves
+  the shape for every n, including 180°). Older files where an angle was
+  only met by its supplement are re-aimed on load without moving anything.
+- **A line tangent to a circle or arc at its own end** (a tangent drawn
+  from a point of the circle, a slot's side) is held perpendicular to the
+  radius at that end, which the solver follows exactly; it used to stall
+  just short of tangency after a change and report the sketch
+  over-defined.
 
 - A solve that can't satisfy every constraint leaves the geometry as it was
   (per independent group) and reports the sketch as over-defined; it never

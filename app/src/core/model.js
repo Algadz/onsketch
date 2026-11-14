@@ -444,6 +444,7 @@ export class Project {
     }
     ensureDimensionNames(p);
     p.assignConstraintLayers();
+    p.orientAngleDimensions();
     return p;
   }
 
@@ -475,6 +476,32 @@ export class Project {
     }
     base.visible = true;          // sketch visibility has no UI any more
     this.activeSketchId = base.id;
+  }
+
+  /** Angle dimensions measure between line directions. Files from when
+   *  an angle and its supplement counted as the same could hold one that
+   *  is only met by its supplement (a 120° label on a 60° corner): turn its
+   *  second line's direction so the label measures what is drawn. The
+   *  geometry doesn't move.
+   *  @returns {number} how many were turned */
+  orientAngleDimensions() {
+    let n = 0;
+    for (const s of this.sketches) {
+      const pts = new Map();
+      for (const e of s.entities) { pts.set(e.id, e); for (const c of e.children()) pts.set(c.id, c); }
+      const L = (id, k) => pts.get(id)?.[k] ?? 0;
+      for (const c of s.constraints) {
+        if (c.kind !== 'angle' || c.driven) continue;
+        if (![c.l1.a, c.l1.b, c.l2.a, c.l2.b].every(id => pts.has(id))) continue;
+        const phi = AngleConstraint.measure(L, c.l1, c.l2);
+        if (phi == null) continue;
+        if (Math.abs(phi - c.value) > 1e-6 && Math.abs(Math.PI - phi - c.value) <= 1e-6) {
+          c.l2 = { a: c.l2.b, b: c.l2.a };
+          n++;
+        }
+      }
+    }
+    return n;
   }
 
   /** Give every constraint without a layer one: the layer of the first

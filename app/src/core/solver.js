@@ -1,4 +1,5 @@
 import { paramPinnedFromBasis, rowSpaceBasis, solveLinear } from './math.js';
+import { markTangentContacts } from './constraints.js';
 
 /* =============== 4. SOLVER ==================================== */
 export class Solver {
@@ -164,6 +165,7 @@ export class Solver {
     let constraints = extraConstraints.length
       ? activeSketch.constraints.concat(extraConstraints)
       : activeSketch.constraints;
+    markTangentContacts(constraints, this._lookupBuilder(allVisibleSketches.length ? allVisibleSketches : [activeSketch]));
     // Constraints that only touch held geometry (other layers) are
     // constants: nothing in them can move, so they are left out instead of
     // showing up as redundant or unsatisfiable on the active layer.

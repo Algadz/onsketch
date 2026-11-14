@@ -135,3 +135,54 @@ test('constraints serialise with their kind', () => {
   assert.equal(c.toJSON().kind, 'distance');
   assert.equal(c.toJSON().value, 4);
 });
+
+const opening = (a, b) => {   // angle between the directions a and b, in [0, π]
+  const ax = a.p2.x - a.p1.x, ay = a.p2.y - a.p1.y, bx = b.p2.x - b.p1.x, by = b.p2.y - b.p1.y;
+  return Math.abs(Math.atan2(ax * by - ay * bx, ax * bx + ay * by));
+};
+
+test('an angle dimension reaches obtuse values, 180°, and comes back on the same side', () => {
+  const s = sketch(); const o = point(s, 0, 0);
+  const a = line(s, 0, 0, 100, 0), b = line(s, 0, 0, 50, 86.6);
+  s.constraints.push(new C.FixConstraint(a.p1.id, 0, 0), new C.CoincidentConstraint(a.p1.id, b.p1.id), new C.CoincidentConstraint(o.id, a.p1.id));
+  s.constraints.push(new C.HorizontalConstraint(a.id, a.p1.id, a.p2.id));
+  s.constraints.push(new C.DistanceConstraint(a.p1.id, a.p2.id, 100), new C.DistanceConstraint(b.p1.id, b.p2.id, 100));
+  const ang = new C.AngleConstraint(ref(a), ref(b), Math.PI / 3);
+  s.constraints.push(ang);
+  solved(s);
+  for (const deg of [120, 180, 45, 150, 0, 90]) {
+    ang.value = deg * Math.PI / 180;
+    solved(s);
+    assert.ok(near(opening(a, b), ang.value, 1e-6), `${deg}°: got ${opening(a, b) * 180 / Math.PI}`);
+    if (deg > 0 && deg < 180) assert.ok(b.p2.y > 0, `${deg}°: stays above the base line`);
+  }
+});
+
+test('a line tangent to a circle at its own end follows the radius (no false over-definition)', () => {
+  // the "orbital sketch": a line starting on the orbit, tangent to it, sized by equations
+  const s = sketch();
+  const orbit = circle(s, 0, 0, 11.2);
+  const l = line(s, -5.83, 9.56, -9.39, 7.30);
+  s.constraints.push(new C.FixConstraint(orbit.center.id, 0, 0));
+  s.constraints.push(new C.PointOnCircleConstraint(l.p1.id, orbit.id, orbit.center.id));
+  s.constraints.push(new C.TangentLineCircleConstraint(ref(l), orbit.id, orbit.center.id));
+  const r = new C.RadiusConstraint(orbit.id, 11.2), d = new C.DistanceConstraint(l.p1.id, l.p2.id, 4.21);
+  s.constraints.push(r, d);
+  solved(s);
+  for (const radius of [10.15, 21, 3.5, 192.2, 10.15]) {
+    r.value = radius;
+    const res = solved(s);
+    assert.notEqual(res.state, 'over');
+    const dot = (l.p1.x - orbit.center.x) * (l.p2.x - l.p1.x) + (l.p1.y - orbit.center.y) * (l.p2.y - l.p1.y);
+    assert.ok(Math.abs(dot) < 1e-6, `perpendicular to the radius at ${radius}`);
+    assert.ok(near(Math.hypot(l.p1.x, l.p1.y), radius, 1e-6));
+  }
+});
+
+test('a plain tangent (no shared point) still holds the distance to the centre', () => {
+  const s = sketch(); const c = circle(s, 0, 0, 5); const l = line(s, -10, 7, 10, 8);
+  s.constraints.push(new C.FixConstraint(c.center.id, 0, 0), new C.TangentLineCircleConstraint(ref(l), c.id, c.center.id));
+  solved(s);
+  const dx = l.p2.x - l.p1.x, dy = l.p2.y - l.p1.y;
+  assert.ok(near(Math.abs(dx * (0 - l.p1.y) - dy * (0 - l.p1.x)) / Math.hypot(dx, dy), c.r, 1e-6));
+});

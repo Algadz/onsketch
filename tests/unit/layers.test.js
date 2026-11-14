@@ -253,3 +253,18 @@ test('shapes on different layers can share a corner; deleting one layer keeps th
   assert.equal(left.entities[0].p2.id, x.p2.id, 'the corner stays with the remaining line');
   assert.deepEqual(left.constraints.map(c => c.kind), ['horizontal']);
 });
+
+test('an angle saved while met only by its supplement is re-aimed on load, without moving anything', () => {
+  const pt = (id, x, y) => ({ type: 'point', id, x, y });
+  const p = Project.fromJSON({ version: 3, activeLayerId: 'l', layers: [{ id: 'l', name: 'L' }], sketches: [{ id: 's', name: 'S', entities: [
+    { type: 'line', id: 'a', p1: pt('o', 0, 0), p2: pt('x', 10, 0) },
+    { type: 'line', id: 'b', p1: pt('o', 0, 0), p2: pt('y', 5, 8.660254037844386) }],
+  constraints: [{ id: 'k', kind: 'angle', l1: { a: 'o', b: 'x' }, l2: { a: 'o', b: 'y' }, value: 2 * Math.PI / 3 }] }] });
+  const c = p.sketches[0].constraints[0];
+  assert.deepEqual(c.l2, { a: 'y', b: 'o' }, 'the second line is measured the other way: 120° on this corner');
+  const [, b] = p.sketches[0].entities;
+  assert.deepEqual([b.p2.x, b.p2.y], [5, 8.660254037844386]);
+  const L = (id, k) => ({ o: { x: 0, y: 0 }, x: { x: 10, y: 0 }, y: { x: 5, y: 8.660254037844386 } })[id][k];
+  c.prepare(L);                                   // as the solver does before solving
+  assert.equal(Math.abs(c.residuals(L)[0]).toFixed(9), '0.000000000');
+});

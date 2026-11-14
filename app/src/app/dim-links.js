@@ -107,24 +107,103 @@ export class DimLinksMixin {
     }
   }
 
-  /* ---- Value box: click a shape to insert its dimension name ---- */
+  /* ---- Writing an equation: click a dimension (or a shape) to insert its name ----
+     While a formula is being typed (the value box on the canvas, an
+     expression in the Equations window, or a dimension field in
+     Properties), clicking a dimension's label inserts its name (D3) at
+     the caret; clicking a line, circle or arc inserts the name of the
+     dimension that measures it (a floating one is made if it has none).
+     The field keeps the focus: Enter applies, as usual. Hovering shows a
+     copy cursor and says what a click would insert. */
 
-  /** Canvas click while a dimension value box is open. Returns true when
-   *  the click was used to insert a name. */
-  _valueInputPick(world) {
-    const vi = this._valueInput; if (!vi) return false;
+  /** Fields outside the canvas that take a formula. */
+  _setupFormulaFields() {
+    const FIELDS = '#equations-body .eq-expr, #sel-body input[data-dim-edit], #sb-body input[data-dim-edit], input.dim-val[data-dim-edit]';
+    document.addEventListener('focusin', (e) => {
+      const el = e.target;
+      if (el?.matches?.(FIELDS)) this._formulaField = el;
+    });
+    document.addEventListener('focusout', (e) => {
+      if (e.target !== this._formulaField) return;
+      // a canvas pick keeps the focus (see _formulaPick); anything else ends it
+      setTimeout(() => { if (document.activeElement !== this._formulaField) this._formulaField = null; }, 0);
+    });
+    // Keep the field focused through a pick (mousedown would take it).
+    this.canvas.addEventListener('mousedown', (e) => { if (this._keepFormulaFocus) { e.preventDefault(); this._keepFormulaFocus = false; } }, true);
+  }
+
+  /** The formula being typed, or null: { insert(name), selfName, kind }. */
+  _formulaTarget() {
+    if (this._valueInput) return { insert: (n) => this._valueInput.insert(n), hold: () => this._valueInput.hold(), selfName: this._valueInput.selfName };
+    const el = this._formulaField;
+    if (!el || !el.isConnected || document.activeElement !== el) return null;
+    const dims = allDimensions(this.project);
+    let selfName = null, equation = true;
+    if (el.dataset.k === 'dim-expr') selfName = dims[+el.dataset.i]?.name || null;
+    else if (el.dataset.k === 'var-expr') { selfName = (this.project.variables || [])[+el.dataset.i]?.name || null; equation = false; }
+    else if (el.dataset.dimEdit) selfName = this.activeSketch()?.constraints.find(c => c.id === el.dataset.dimEdit)?.name || null;
+    return {
+      selfName,
+      hold: () => setTimeout(() => el.focus(), 0),
+      insert: (name) => {
+        const v = el.value;
+        const a = el.selectionStart ?? v.length, b = el.selectionEnd ?? v.length;
+        let before = v.slice(0, a), after = v.slice(b);
+        // A plain number (not an equation yet) is replaced by =name.
+        if (equation && !/^\s*=/.test(v)) { before = '='; after = ''; }
+        const pad = /[\w.)]\s*$/.test(before) ? ' + ' : '';
+        el.value = before + pad + name + after;
+        const caret = (before + pad + name).length;
+        el.classList.remove('bad');
+        setTimeout(() => { el.focus(); el.setSelectionRange(caret, caret); }, 0);
+      },
+    };
+  }
+
+  /** The name a click at this spot would insert while a formula is
+   *  typed: a dimension label first, then a line, circle or arc. */
+  _formulaCandidate(screen, world) {
+    const dim = this.hitDimAtScreen(screen.x, screen.y);
+    if (dim) { ensureDimensionNames(this.project); return { dim, name: dim.name }; }
     const hits = this.hitTestAllSketches(world, this.activeVisibleSketches());
-    const target = hits.find(e => e instanceof Line || e instanceof Circle || e instanceof Arc);
-    if (!target) return false;
-    const name = this.dimensionNameForEntity(target);
+    const shape = hits.find(e => e instanceof Line || e instanceof Circle || e instanceof Arc);
+    return shape ? { shape } : null;
+  }
+
+  /** Canvas press while a formula is typed. Returns true when it was
+   *  used to insert a name. */
+  _formulaPick(screen, world) {
+    const target = this._formulaTarget(); if (!target) return false;
+    const hit = this._formulaCandidate(screen, world); if (!hit) return false;
+    const name = hit.name || this.dimensionNameForEntity(hit.shape);
     if (!name) return false;
-    if (vi.selfName && name === vi.selfName) {
+    this._keepFormulaFocus = true;
+    if (target.selfName && name === target.selfName) {
       document.getElementById('status-hint').textContent = `${name} is the dimension you are editing.`;
-      vi.hold();
+      target.hold();
       return true;
     }
-    vi.insert(name);
-    document.getElementById('status-hint').textContent = `Inserted ${name}. Enter to apply; drag that shape later and this dimension follows.`;
+    target.insert(name);
+    document.getElementById('status-hint').textContent = hit.dim
+      ? `Inserted ${name}. Enter to apply.`
+      : `Inserted ${name}. Enter to apply; drag that shape later and this dimension follows.`;
+    return true;
+  }
+
+  /** Hover while a formula is typed: copy cursor and what a click inserts.
+   *  @returns {boolean} whether it applied */
+  _formulaHover(screen, world) {
+    if (!this._formulaTarget()) {
+      if (this._formulaHovering) { this._formulaHovering = false; this._updateCanvasCursor(); }
+      return false;
+    }
+    this._formulaHovering = true;
+    const hit = this._formulaCandidate(screen, world);
+    this.canvas.style.cursor = hit ? 'copy' : '';
+    const el = document.getElementById('status-hint');
+    if (el) el.textContent = hit
+      ? `Click to insert ${hit.name || 'this shape\'s dimension'} in the equation.`
+      : 'Click a dimension (or a line, circle or arc) to insert its name in the equation.';
     return true;
   }
 

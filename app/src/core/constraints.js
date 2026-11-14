@@ -150,20 +150,51 @@ export class ConcentricConstraint extends Constraint {
 }
 
 export class TangentLineCircleConstraint extends Constraint {
-  /** Distance from center to line equals radius (squared form, sign-free). */
-  constructor(l, circleId, centerId) { super('tangent'); this.l=l; this.circleId=circleId; this.centerId=centerId; }
+  /** The line touches the circle (or arc): the distance from the centre
+   *  to the line equals the radius.
+   *
+   *  When one end of the line is itself held on the circle (a tangent
+   *  drawn from a point of the circle, a slot's straight side), that
+   *  distance peaks exactly at tangency: it has no slope there, and the
+   *  solver used to stall a hair away and report the sketch over-defined.
+   *  Then `at` (set by the solver, see markTangentContacts) names that
+   *  end, and the line is held perpendicular to the radius there instead:
+   *  the same shapes, with a slope the solver can follow. */
+  constructor(l, circleId, centerId) { super('tangent'); this.l=l; this.circleId=circleId; this.centerId=centerId; this.at=null; }
   refs() { return [this.l.a, this.l.b, this.circleId, this.centerId]; }
   residuals(L) {
     const ax=L(this.l.a,'x'), ay=L(this.l.a,'y');
     const bx=L(this.l.b,'x'), by=L(this.l.b,'y');
     const cx=L(this.centerId,'x'), cy=L(this.centerId,'y');
-    const r=L(this.circleId,'r');
     const dx=bx-ax, dy=by-ay;
+    const len = Math.hypot(dx, dy);
+    if (len < EPS) return [0];
+    if (this.at) {
+      const px=L(this.at,'x'), py=L(this.at,'y');
+      return [ ((px-cx)*dx + (py-cy)*dy) / len ];
+    }
+    const r=L(this.circleId,'r');
     const cross = dx*(cy-ay) - dy*(cx-ax);
-    const len2 = dx*dx + dy*dy;
-    return [ cross*cross - r*r*len2 ];
+    return [ Math.abs(cross) / len - r ];
   }
   toJSON() { return { id:this.id, kind:'tangent', l:this.l, circleId:this.circleId, centerId:this.centerId }; }
+}
+
+/** Before a solve: for each line–circle tangent, the end of the line that
+ *  another constraint holds on that circle or arc, if any (see
+ *  TangentLineCircleConstraint); with a lookup `L`, each constraint's
+ *  prepare(L) (angles pick their side). */
+export function markTangentContacts(constraints, L = null) {
+  if (L) for (const c of constraints) if (c.prepare) c.prepare(L);
+  const on = new Set();
+  for (const c of constraints) {
+    if (c.kind === 'pointOnCircle') on.add(c.pointId + '|' + c.circleId);
+    else if (c.kind === 'arcEndpointCoincident') on.add(c.pointId + '|' + c.ref.arcId);
+  }
+  for (const c of constraints) {
+    if (!(c instanceof TangentLineCircleConstraint)) continue;
+    c.at = on.has(c.l.a + '|' + c.circleId) ? c.l.a : on.has(c.l.b + '|' + c.circleId) ? c.l.b : null;
+  }
 }
 
 export class TangentCircleCircleConstraint extends Constraint {
@@ -422,27 +453,49 @@ export class OffsetDistanceConstraint extends Constraint {
 }
 
 export class AngleConstraint extends Constraint {
-  /** Angle between two line entities, in radians (0 .. π). The solver
-   *  constrains the undirected line pair so dragging an endpoint through
-   *  the opposite endpoint does not mirror the line to preserve a directed
-   *  segment vector. The stored value still selects the displayed sector. */
+  /** Angle between two lines, in radians (0 .. π), measured between their
+   *  directions a → b: the sector the dimension was placed in (the
+   *  smaller of the two sectors between those directions). 60° and 120°
+   *  are different dimensions, and every value from 0 to 180° can be
+   *  reached (a cosine-based residual can't tell an angle from its
+   *  supplement and has no slope at 0° and 180°). */
   constructor(l1Pts, l2Pts, value) {
     super('angle'); this.l1=l1Pts; this.l2=l2Pts; this.value=normalizeAngleValue(value);
     this.labelDist=null; this.labelMidAngle=null; this.driven=false;
   }
   refs() { return [this.l1.a, this.l1.b, this.l2.a, this.l2.b]; }
+  /** Current angle between the directions, in [0, π], or null. */
+  static measure(L, l1, l2) {
+    const phi = AngleConstraint.signed(L, l1, l2);
+    return phi == null ? null : Math.abs(phi);
+  }
+  /** Signed angle from l1's direction to l2's, in (−π, π], or null. */
+  static signed(L, l1, l2) {
+    const dx1=L(l1.b,'x')-L(l1.a,'x'), dy1=L(l1.b,'y')-L(l1.a,'y');
+    const dx2=L(l2.b,'x')-L(l2.a,'x'), dy2=L(l2.b,'y')-L(l2.a,'y');
+    if (Math.hypot(dx1, dy1) < EPS || Math.hypot(dx2, dy2) < EPS) return null;
+    return Math.atan2(dx1*dy2 - dy1*dx2, dx1*dx2 + dy1*dy2);
+  }
+  /** Before a solve: which side of l1 the angle opens to, from the
+   *  geometry as it is (kept for the whole solve, so overshooting past
+   *  the line can't flip the shape). Right on the line (0° or 180°) the
+   *  side from before is kept. */
+  prepare(L) {
+    const phi = AngleConstraint.signed(L, this.l1, this.l2);
+    if (phi != null && Math.abs(Math.sin(phi)) > 1e-3) this.side = phi < 0 ? -1 : 1;
+  }
   residuals(L) {
     if (this.driven) return [];
+    const phi = AngleConstraint.signed(L, this.l1, this.l2);
+    if (phi == null) return [0];
+    let d = (this.side || 1) * phi - this.value;
+    while (d > Math.PI) d -= TAU;
+    while (d <= -Math.PI) d += TAU;
+    // In length units (the arc the error sweeps on the lines), like the
+    // other constraints, so a turn of a long line isn't damped away.
     const dx1=L(this.l1.b,'x')-L(this.l1.a,'x'), dy1=L(this.l1.b,'y')-L(this.l1.a,'y');
     const dx2=L(this.l2.b,'x')-L(this.l2.a,'x'), dy2=L(this.l2.b,'y')-L(this.l2.a,'y');
-    const len1 = Math.hypot(dx1, dy1), len2 = Math.hypot(dx2, dy2);
-    if (len1 < EPS || len2 < EPS) return [0];
-    const cosAng = (dx1*dx2 + dy1*dy2) / (len1 * len2);
-    const target = Math.cos(this.value);
-    if (Math.abs(target) < 1e-9) return [ cosAng ];
-    return [ Math.sign(cosAng || target) === Math.sign(target)
-      ? cosAng - target
-      : -cosAng - target ];
+    return [ d * Math.sqrt(Math.hypot(dx1, dy1) * Math.hypot(dx2, dy2)) ];
   }
   toJSON() {
     const o = { id:this.id, kind:'angle', l1:this.l1, l2:this.l2, value:this.value };

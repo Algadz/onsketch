@@ -95,6 +95,7 @@ export class App {
     this._setupReport();
     this._setupImageImport();
     this._setupClipboard();
+    this._setupFormulaFields();
     onImageLoad(() => this.requestRender());
     this._loadStylusPref();
     this._setupCompact();

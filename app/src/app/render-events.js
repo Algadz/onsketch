@@ -192,8 +192,9 @@ export class RenderEventsMixin {
       }
       this.hideContextMenu();
       this._noteAlt(ev);
-      // A dimension value box is open: clicking a shape inserts its name.
-      if (ev.button === 0 && !this._spaceHeld && this._valueInput && this._valueInputPick(world)) {
+      // A formula is being typed: clicking a dimension or a shape inserts
+      // its name (dim-links.js).
+      if (ev.button === 0 && !this._spaceHeld && this._formulaPick(screen, world)) {
         ev.preventDefault();
         return;
       }
@@ -228,6 +229,7 @@ export class RenderEventsMixin {
         document.getElementById('cursor-hint').style.display = 'none';
         return;
       }
+      if (!this.tool?.dragging && this._formulaHover(screen, world)) { this.requestRender(); return; }
       const snap = this._snapForCurrentTool(world);
       this.lastSnap = snap;
       this.tool.onPointerMove(world, snap, ev);
