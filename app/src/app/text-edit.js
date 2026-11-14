@@ -58,7 +58,7 @@ export class TextEditMixin {
       const v = this.view;
       const p = v.worldToScreen(item.points[0]);
       const px = Math.max(4, item.size * v.zoom);
-      const b = textBox({ ...item, text: ta.value || ' ' });
+      const b = textBox({ ...item, text: ta.value || ' ', _raw: true });   // formulas as typed
       // With a box, the textarea is the box: padded, filled and outlined
       // like the canvas draws it.
       const pad = item.box ? BOX_PAD * item.size * v.zoom : 0;
@@ -98,7 +98,7 @@ export class TextEditMixin {
     this._textEdit = te;
     focus();                     // at once, so typing right away goes in the box
     setTimeout(focus, 0);
-    document.getElementById('status-hint').textContent = 'Type the text. Enter or Esc finishes, Shift+Enter adds a line. Size, Bold, box and colour apply to it.';
+    document.getElementById('status-hint').textContent = 'Type the text. {D1} or {orbit*2} shows a value (click a dimension to insert it). Enter or Esc finishes, Shift+Enter adds a line.';
     this.requestRender();
   }
 

@@ -244,7 +244,21 @@ function measureEm(line, bold) {
   return w;
 }
 
-export function textLines(item) { return String(item.text ?? '').split('\n'); }
+/* ---- Formulas in text (core/text-fields.js) ----
+   The editor (App) installs a resolver that turns {D3} into its value;
+   textLines() returns what is shown, so drawing, bounds, hit tests and
+   exports all use the shown text. `_raw` on an item (the inline editor
+   measuring what is typed) skips it. */
+let textResolver = null;
+export function setTextResolver(fn) { textResolver = typeof fn === 'function' ? fn : null; }
+export function getTextResolver() { return textResolver; }
+
+/** The lines a text shows (formulas replaced by their values). */
+export function textLines(item) {
+  let t = String(item.text ?? '');
+  if (textResolver && !item._raw && t.includes('{')) t = textResolver(t);
+  return t.split('\n');
+}
 
 /** Width and height of a text, in world units. */
 export function textBox(item) {

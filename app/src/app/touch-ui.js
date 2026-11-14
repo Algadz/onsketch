@@ -153,7 +153,7 @@ export class TouchUIMixin {
     const key = (k, label = k, cls = '') => `<button type="button" class="${cls}" data-k="${esc(k)}">${esc(label)}</button>`;
     pad.innerHTML = `
       <div class="pad-names">${names.length ? names.map(n => key(n, n, 'name')).join('') : '<span class="pad-hint">Tap a shape to use its size</span>'}</div>
-      <div class="pad-units">${['mm', 'cm', 'm', 'in', 'ft', 'deg'].map(u => key(u, u === 'deg' ? '°' : u, 'unit')).join('')}</div>
+      <div class="pad-units">${['mm', 'cm', 'm', 'km', 'in', 'ft', 'deg'].map(u => key(u, u === 'deg' ? '°' : u, 'unit')).join('')}</div>
       <div class="pad-keys">
         ${key('7')}${key('8')}${key('9')}${key('/', '÷', 'op')}${key('back', '⌫', 'op')}
         ${key('4')}${key('5')}${key('6')}${key('*', '×', 'op')}${key('(', '(', 'op')}

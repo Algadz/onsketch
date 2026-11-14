@@ -39,6 +39,8 @@ import { ExportMixin } from './export.js';
 import { GuideMixin } from './guide.js';
 import { InsertMixin } from './insert.js';
 import { onImageLoad } from '../core/images.js';
+import { setTextResolver, textLines } from '../core/strokes.js';
+import { projectLookup, resolveFields } from '../core/text-fields.js';
 import { trackOnce } from '../ui/analytics.js';
 
 /* =============== 10. APP ====================================== */
@@ -97,6 +99,16 @@ export class App {
     this._setupClipboard();
     this._setupFormulaFields();
     onImageLoad(() => this.requestRender());
+    // Formulas in text: {D1}, {orbit/1000:2} show their values (cached
+    // until the next render or commit).
+    setTextResolver((t) => {
+      const cache = this._fieldCache ||= new Map();
+      if (cache.has(t)) return cache.get(t);
+      this._fieldLookup ||= projectLookup(this.project);
+      const shown = resolveFields(t, this._fieldLookup).text;
+      cache.set(t, shown);
+      return shown;
+    });
     this._loadStylusPref();
     this._setupCompact();
     this._setupFab();
@@ -119,6 +131,8 @@ export class App {
   get project() { return this._project; }
   set project(p) {
     this._project = p;
+    this._fieldCache = null; this._fieldLookup = null;
+    if (p && this._syncUnits) this._syncUnits();     // expressions use its unit
     if (p) p.drawStyle = this.pen ? this._penStyle() : null;
     // A project opened from storage brings its display (grid, snap,
     // dimensions, relations); undo / redo keep the current one (toggling
@@ -128,6 +142,9 @@ export class App {
       else this.applyDisplay(p.display);
     }
   }
+
+  /** What a text shows (its formulas as values). */
+  textShown(item) { return textLines(item).join('\n'); }
 
   /* ---- Sketch helpers ---- */
   activeSketch() { return this.project.active(); }

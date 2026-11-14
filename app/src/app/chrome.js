@@ -2,6 +2,8 @@ import { LINE_STYLES, LINE_WEIGHTS } from '../core/style.js';
 import { clamp } from '../core/math.js';
 import { ACTION_ICONS, DRAW_TOOLS, TOOLS, TOOL_ICONS, WINDOW_ICONS, toolDef } from '../ui/tool-defs.js';
 import { WindowManager } from '../ui/windows.js';
+import { DOC_UNITS, UNIT_NAMES, setDocumentUnit } from '../core/expr.js';
+import { choose } from '../ui/dialogs.js';
 import { track, trackOnce } from '../ui/analytics.js';
 
 /** Name of the Alt key on this platform (Option on a Mac). */
@@ -18,7 +20,66 @@ export const ALT_KEY = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.tes
    explicit "Apply line style" on the selection.
    ============================================================ */
 export class ChromeMixin {
+  /* ---- Document unit ----
+     Plain numbers in the drawing (coordinates, dimensions, equations) are
+     in the document unit; typed units convert to it (5mm, 2in, 3km). A
+     large unit keeps large drawings precise: in km, the Earth–Moon
+     distance is 384400. Changing the unit relabels: the numbers stay, so
+     a 10 mm line becomes 10 km (values typed with a unit, like 5mm in an
+     equation, keep their meaning and are converted). */
+  _setupUnits() {
+    const sel = document.getElementById('doc-units');
+    if (!sel) return;
+    sel.innerHTML = DOC_UNITS.map(u => `<option value="${u}" title="${UNIT_NAMES[u]}">${u}</option>`).join('');
+    sel.addEventListener('change', async () => {
+      const ok = await this.setDocumentUnits(sel.value);
+      if (!ok) sel.value = this.project.units;
+    });
+    this._syncUnits();
+  }
+
+  /** The menu bar shows the project's unit; expressions use it. */
+  _syncUnits() {
+    setDocumentUnit(this.project?.units);
+    const sel = document.getElementById('doc-units');
+    if (sel && this.project) sel.value = this.project.units;
+  }
+
+  /** Phone ⋯ menu: pick the unit from a list. */
+  async chooseDocumentUnits() {
+    const u = await choose({
+      title: 'Document unit',
+      message: `Plain numbers are in this unit. Now: ${UNIT_NAMES[this.project.units]}.`,
+      cancelValue: null,
+      choices: [{ label: 'Cancel', value: null }, ...DOC_UNITS.map(x => ({ label: `${x} · ${UNIT_NAMES[x]}`, value: x }))],
+    });
+    if (u) await this.setDocumentUnits(u);
+  }
+
+  /** Sets the document unit; asks first when the drawing has content.
+   *  @returns {Promise<boolean>} whether it changed */
+  async setDocumentUnits(u) {
+    if (!DOC_UNITS.includes(u) || u === this.project.units) return false;
+    const has = this.project.sketches.some(s => s.entities.length || s.strokes.length);
+    if (has) {
+      const go = await choose({
+        title: `Draw in ${UNIT_NAMES[u]}?`,
+        message: `The numbers stay as they are: a 10 ${this.project.units} line becomes 10 ${u}. Values typed with a unit (like 5mm in an equation) keep their real size and are converted.`,
+        cancelValue: 'cancel',
+        choices: [{ label: 'Cancel', value: 'cancel' }, { label: `Use ${u}`, value: 'go' }],
+      });
+      if (go !== 'go') return false;
+    }
+    this.project.units = u;
+    this._syncUnits();
+    this.commit({ diagnostics: 'sync' });
+    this.refreshUI();
+    this._refreshEquationsPanel?.(true);
+    return true;
+  }
+
   _setupChrome() {
+    this._setupUnits();
     // Menu bar icons + labels.
     const labels = { new: 'New', open: 'Open', save: 'Save', export: 'Export', grid: 'Grid', snap: 'Snap', dimensions: 'Dimensions', relations: 'Relations' };
     document.querySelectorAll('#menubar [data-action]').forEach(b => {

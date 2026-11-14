@@ -4,6 +4,7 @@ import { inkBounds } from '../core/strokes.js';
 import { Renderer } from './renderer.js';
 import { SvgContext } from './svg-context.js';
 import { View } from './view.js';
+import { mmPerUnit } from '../core/expr.js';
 
 /* =============== EXPORT: THE DRAWING AS A PICTURE ===============
    Draws the project for showing rather than editing, with the same
@@ -173,7 +174,26 @@ export function printableArea({ pw, ph }) {
 export function bestScale(paper, w, h) {
   const area = printableArea(paperFor(paper, w, h));
   for (const n of SCALES) if (w / n <= area.w + 1e-6 && h / n <= area.h + 1e-6) return n;
-  return SCALES[SCALES.length - 1];
+  // Bigger than the standard scales (a town in m, the Moon's orbit in km):
+  // the smallest 1, 2 or 5 × 10^k that fits.
+  const need = Math.max(w / area.w, h / area.h);
+  let k = Math.pow(10, Math.floor(Math.log10(need)));
+  for (;;) { for (const m of [1, 2, 5]) if (m * k >= need - 1e-9 * need) return m * k; k *= 10; }
+}
+
+/** Scales to offer for a drawing whose best fit is 1 : best. */
+export function scaleChoices(best) {
+  if (best <= SCALES[SCALES.length - 1]) return SCALES;
+  const out = [];
+  for (let k = Math.pow(10, Math.floor(Math.log10(best)) - 1); out.length < 9; k *= 10) {
+    for (const m of [1, 2, 5]) if (m * k >= best / 5 && out.length < 9) out.push(m * k);
+  }
+  return out;
+}
+
+/** "1:1 000 000" for big scales. */
+export function scaleLabel(n) {
+  return '1:' + (n >= 10000 ? n.toLocaleString('en').replace(/,/g, ' ') : String(n));
 }
 
 /** Where the drawing goes on one sheet at a true scale: the sheet, the
@@ -185,13 +205,15 @@ export function printLayout(src, opts = {}, { paper = 'A4', scale = null } = {})
   if (!shapes) return null;
   // Size the sheet on what is drawn, dimension labels included.
   let bounds = boundsWithDimensions(src, opts, shapes, fittedView(shapes, 1200, 36));
-  const size = () => ({ w: bounds.maxX - bounds.minX, h: bounds.maxY - bounds.minY });
+  // Sizes on paper are in mm: drawing units × mm per unit (km: 10^6).
+  const U = mmPerUnit(src.project.units);
+  const size = () => ({ w: (bounds.maxX - bounds.minX) * U, h: (bounds.maxY - bounds.minY) * U });
   let { w, h } = size();
   const n = scale || bestScale(paper, w, h);
   const sheet = paperFor(paper, w, h);
   const view = new View();
   view.cssW = sheet.pw * PX_PER_MM; view.cssH = sheet.ph * PX_PER_MM;
-  view.zoom = PX_PER_MM / n;
+  view.zoom = PX_PER_MM * U / n;
   const place = () => {
     view.panX = -((bounds.minX + bounds.maxX) / 2) * view.zoom;
     view.panY = ((bounds.minY + bounds.maxY) / 2) * view.zoom - (PRINT_FOOTER / 2) * PX_PER_MM;
@@ -218,14 +240,15 @@ export function exportPrintSVG(src, opts = {}, { paper = 'A4', scale = null } = 
   ctx.fillStyle = '#111418'; ctx.strokeStyle = '#111418'; ctx.lineWidth = 1;
   ctx.font = '11px ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif';
   ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
-  ctx.fillText(`${src.project.name || 'Untitled'}  ·  Scale 1:${n}  ·  onsketch.io`, x0, y);
+  ctx.fillText(`${src.project.name || 'Untitled'}  ·  Scale ${scaleLabel(n)}  ·  onsketch.io`, x0, y);
   const x1 = (sheet.pw - PRINT_MARGIN) * mm, xa = x1 - check * mm;
   ctx.beginPath();
   ctx.moveTo(xa, y - 1); ctx.lineTo(x1, y - 1);
   ctx.moveTo(xa, y - 5); ctx.lineTo(xa, y + 3); ctx.moveTo(x1, y - 5); ctx.lineTo(x1, y + 3);
   ctx.stroke();
   ctx.textAlign = 'right';
-  ctx.fillText(`this line is ${check} mm on paper${n > 1 ? ` (${check * n} mm real)` : ''}`, xa - 8, y);
+  const units = src.project.units || 'mm', real = check * n / mmPerUnit(units);
+  ctx.fillText(`this line is ${check} mm on paper${n > 1 ? ` (${Number(real.toPrecision(6)).toLocaleString('en').replace(/,/g, ' ')} ${units} real)` : ''}`, xa - 8, y);
   ctx.restore();
   return {
     svg: ctx.toSVG({ size: { width: sheet.pw + 'mm', height: sheet.ph + 'mm' }, title: src.project.name || 'OnSketch' }),

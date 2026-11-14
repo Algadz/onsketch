@@ -120,6 +120,7 @@ export class CompactMixin {
       '-',
       ['grid', 'Grid', this.gridOn], ['snap', 'Snap', this.snapOn], ['dimensions', 'Dimensions', this.showDimensions],
       ['relations', 'Relations', this.showRelations], ['zoom-fit', 'Zoom to fit'], ['theme', 'Dark theme', this.themeName === 'dark'],
+      ['units', `Units: ${this.project.units}…`],
       '-',
       ...(!this.cloudEnabled ? [] : this.cloudUser
         ? ['-', ['my-sketches', 'My sketches'], ['library', 'Library'], ['profile', 'Public profile'],
@@ -147,6 +148,7 @@ export class CompactMixin {
     this._toggleMoreMenu(false);
     if (a === 'stylus') { this.setStylusMode(!this.stylusMode); return; }
     if (a === 'report') { document.getElementById('report-open')?.click(); return; }
+    if (a === 'units') { this.chooseDocumentUnits(); return; }
     const btn = document.querySelector(`#menubar [data-action="${a}"]`);
     this._runAction(a, btn);
   }

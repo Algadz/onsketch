@@ -26,6 +26,7 @@ import { ensureDimensionNames } from './equations.js';
 import { PatternConstraint } from './patterns.js';
 import { reviveStroke, strokeToJSON } from './strokes.js';
 import { imageSource, registerImage, usedImageIds } from './images.js';
+import { DOC_UNITS } from './expr.js';
 
 /** Constraints that tie a point to itself or to a line it is an end of:
  *  always true, never useful, dropped on load. */
@@ -290,7 +291,7 @@ export class Project {
     const p = new Project();
     if (o.images && typeof o.images === 'object') for (const [id, src] of Object.entries(o.images)) registerImage(src, id);
     p.name  = o.name || 'Untitled';
-    p.units = o.units || 'mm';
+    p.units = DOC_UNITS.includes(o.units) ? o.units : 'mm';
     p.background = /^#[0-9a-f]{6}$/i.test(o.background || '') ? o.background : null;
     p.display = cleanDisplay(o.display);
     p.variables = Array.isArray(o.variables)

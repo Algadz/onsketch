@@ -27,6 +27,7 @@ npm run test:scissors # scissors: trim (click, drag), split, relations kept / mo
 npm run test:curve   # Bézier curves: drawing, handles, tangent / smooth / on curve, fill, scissors, mirror, export
 npm run test:export  # Export (PNG, SVG, copy, DXF, print to scale) and the first-run steps, desktop and phone
 npm run test:formula # click a dimension to put it in an equation; variables driving tangents
+npm run test:units   # document unit (km: Earth to Moon), typed units, print scale, formulas in text
 node tests/style.e2e.mjs  # restyling arrows / texts after drawing, touch tap-through guard
 node tests/analytics.e2e.mjs  # Umami events: what is counted, once per visit, nothing sent from tests
 npm run test:mobile  # phone / tablet layout and touch input on emulated devices
@@ -158,6 +159,15 @@ cached modules after a deploy. `npm test` fails if the stamp is out of date.
   (`core/images.js`); undo snapshots don't copy the data. If the
   browser's storage is full, the browser copy keeps the drawing without
   the pictures and says so: save the sketch to keep them.
+- **Formulas in text**: anything between braces in a text is computed,
+  with the dimensions and global variables, like an equation:
+  `Moon at {D3} km, {D3/D1:1} Earth radii` shows `Moon at 384400 km, 60.3
+  Earth radii` and follows every change. `{expr:n}` shows n decimals (else
+  up to two), `{{` and `}}` write braces, a field that can't be computed
+  shows `#?`. While typing a text (or its field in Properties), click a
+  dimension (or a shape) to insert `{D1}`. The text keeps its formulas;
+  the canvas, exports, copies to other apps and thumbnails show the values
+  (`core/text-fields.js`).
 - **Copy, cut and paste** (Ctrl+C / Ctrl+X / Ctrl+V, ⌘ on a Mac; also
   Copy / Cut on right-clicked ink and Paste on empty canvas): selected ink
   (texts, images, strokes, arrows, groups) is copied with its pictures, so
@@ -365,6 +375,17 @@ touch input. Plan and audit: `docs/mobile-plan.md`.
   rectangle, a Parallel relation) it holds one end only, so nothing is
   over-defined. Saved as `offsetDistance` with `sourceEntityId` /
   `targetEntityId`, like an Offset's distance.
+
+- **Document unit** (the picker next to the project name; phone: ⋯ →
+  Units): mm, cm, m, km, in, ft or mi. Plain numbers in the drawing,
+  dimensions, equations and variables are in that unit; typed units convert
+  to it (`3474800m / 2`, `1079.6mi`). Pick a unit that fits the drawing: in
+  km the Earth–Moon distance is 384400, which keeps the solver precise
+  (zoom goes from a ten-millionth to ten million px per unit). Changing the
+  unit of a drawing asks first and relabels: the numbers stay (a 10 mm line
+  becomes 10 km); values typed with a unit keep their real size. Saved with
+  the sketch; print to scale and DXF use it (big drawings get scales like
+  1:2 000 000 000; DXF says its unit in $INSUNITS).
 
 - Typed dimension values take units: `4in`, `1.5"`, `2ft`, `35cm`, `25mm`,
   `30deg`, `0.5rad` (stored in mm and degrees). Arithmetic works: `1in + 4mm`.

@@ -1,8 +1,9 @@
 /* =============== EXPRESSIONS ===================================
    Safe evaluator for dimension values and equations (no eval).
 
-     25            plain number, in the project unit (mm) or degrees
-     4in  1.5"     units: mm cm m in " ft '  (lengths → mm)
+     25            plain number, in the document unit or degrees
+     4in  1.5"     units: mm cm m km in " ft ' mi  (converted to the
+                   document unit: project.units, see setDocumentUnit)
      30deg 0.5rad  units: deg ° rad          (angles → degrees)
      =D1*2 + 5mm   names of other dimensions and global variables
      sqrt(2)*D3    functions: sin cos tan asin acos atan sqrt abs
@@ -12,7 +13,20 @@
    Trigonometric functions work in degrees, as in SolidWorks.
    ============================================================ */
 
-export const LENGTH_UNITS = { mm: 1, cm: 10, m: 1000, in: 25.4, inch: 25.4, inches: 25.4, '"': 25.4, ft: 304.8, "'": 304.8 };
+/** Millimetres per length unit. */
+export const LENGTH_UNITS = { mm: 1, cm: 10, m: 1000, km: 1e6, in: 25.4, inch: 25.4, inches: 25.4, '"': 25.4, ft: 304.8, "'": 304.8, mi: 1609344 };
+/** Units a document can be drawn in (project.units). Drawing numbers are
+ *  in that unit: with km, the Earth–Moon distance is 384400. */
+export const DOC_UNITS = ['mm', 'cm', 'm', 'km', 'in', 'ft', 'mi'];
+export const UNIT_NAMES = { mm: 'millimetres', cm: 'centimetres', m: 'metres', km: 'kilometres', in: 'inches', ft: 'feet', mi: 'miles' };
+
+let docUnit = 'mm';
+/** The unit plain numbers are in, and that typed units convert to. */
+export function setDocumentUnit(u) { docUnit = DOC_UNITS.includes(u) ? u : 'mm'; }
+export function documentUnit() { return docUnit; }
+/** Millimetres per document unit (for real-size output: print, DXF). */
+export function mmPerUnit(u = docUnit) { return LENGTH_UNITS[u] || 1; }
+
 export const ANGLE_UNITS = { deg: 1, '°': 1, rad: 180 / Math.PI };
 const UNITS = { ...LENGTH_UNITS, ...ANGLE_UNITS };
 
@@ -40,7 +54,7 @@ function tokenize(src) {
       i += num[0].length;
       // A unit right after a number (optionally one space): 4in, 4 mm, 2', 30°
       const rest = src.slice(i);
-      const u = /^ ?(mm|cm|inches|inch|in|ft|deg|rad|m|°|"|')(?![A-Za-z0-9_])/.exec(rest);
+      const u = /^ ?(mm|cm|km|mi|inches|inch|in|ft|deg|rad|m|°|"|')(?![A-Za-z0-9_])/.exec(rest);
       if (u) { toks.push({ t: 'unit', v: u[1] }); i += u[0].length; }
       continue;
     }
@@ -126,11 +140,15 @@ export function references(src) {
  * Evaluate an expression.
  * @param {string} src
  * @param {(name:string)=>number|undefined} lookup  value of a name
- * @returns {number} in mm for lengths, degrees for angles
+ * @returns {number} in the document unit for lengths, degrees for angles
  */
 export function evaluate(src, lookup = () => undefined) {
   const ev = (n) => {
-    if ('num' in n) return n.unit ? n.num * UNITS[n.unit] : n.num;
+    if ('num' in n) {
+      if (!n.unit) return n.num;
+      if (n.unit in LENGTH_UNITS) return n.num * LENGTH_UNITS[n.unit] / LENGTH_UNITS[docUnit];
+      return n.num * UNITS[n.unit];
+    }
     if (n.name) {
       const v = lookup(n.name);
       if (v === undefined || !Number.isFinite(v)) throw new Error(`Unknown name "${n.name}"`);

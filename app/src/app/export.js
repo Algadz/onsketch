@@ -1,5 +1,6 @@
 import { toDXF } from '../core/dxf.js';
-import { PAPERS, SCALES, exportPNG, exportPrintSVG, exportSVG, printLayout } from '../render/export.js';
+import { PAPERS, exportPNG, exportPrintSVG, exportSVG, printLayout, scaleChoices, scaleLabel } from '../render/export.js';
+import { UNIT_NAMES } from '../core/expr.js';
 import { choose } from '../ui/dialogs.js';
 import { track } from '../ui/analytics.js';
 
@@ -100,11 +101,13 @@ export class ExportMixin {
       // Scales that fit the chosen paper.
       const auto = printLayout(this._exportSource(), opts, { paper: opts.paper });
       const { w = 0, h = 0, area = { w: 1, h: 1 }, n: best = 1 } = auto || {};
-      scaleSel.innerHTML = `<option value="auto"${opts.scale === 'auto' ? ' selected' : ''}>Auto (1:${best})</option>`
-        + SCALES.map(n => `<option value="${n}"${String(opts.scale) === String(n) ? ' selected' : ''}>1:${n}${w / n > area.w || h / n > area.h ? ' (too big)' : ''}</option>`).join('');
+      const choices = scaleChoices(best);
+      if (opts.scale !== 'auto' && !choices.includes(+opts.scale)) opts.scale = 'auto';
+      scaleSel.innerHTML = `<option value="auto"${opts.scale === 'auto' ? ' selected' : ''}>Auto (${scaleLabel(best)})</option>`
+        + choices.map(n => `<option value="${n}"${String(opts.scale) === String(n) ? ' selected' : ''}>${scaleLabel(n)}${w / n > area.w || h / n > area.h ? ' (too big)' : ''}</option>`).join('');
       const n = opts.scale === 'auto' ? best : +opts.scale;
       back.querySelector('[data-note="scale"]').textContent = auto
-        ? `DXF is in millimetres at real size (shapes only). Printing: ${Math.round(w / n)} × ${Math.round(h / n)} mm on ${opts.paper} at 1:${n}; choose "Save as PDF" in the print dialog for a PDF.`
+        ? `DXF is in ${UNIT_NAMES[this.project.units] || 'millimetres'} at real size (shapes only). Printing: ${Math.round(w / n)} × ${Math.round(h / n)} mm on ${opts.paper} at ${scaleLabel(n)}; choose "Save as PDF" in the print dialog for a PDF.`
         : '';
     };
     back.querySelectorAll('input[data-opt]').forEach(i => i.addEventListener('change', () => { opts[i.dataset.opt] = i.checked; refresh(); }));
@@ -159,7 +162,7 @@ export class ExportMixin {
       if (!res.fits) {
         const ok = await choose({
           title: 'The drawing is larger than the sheet',
-          message: `At 1:${res.scale} it doesn't fit on ${opts.paper}: the edges will be cut off. Choose Auto for the largest scale that fits.`,
+          message: `At ${scaleLabel(res.scale)} it doesn't fit on ${opts.paper}: the edges will be cut off. Choose Auto for the largest scale that fits.`,
           cancelValue: false,
           choices: [{ label: 'Cancel', value: false }, { label: 'Print anyway', value: true }],
         });
@@ -167,7 +170,7 @@ export class ExportMixin {
       }
       this._print(res);
       track('export', { ...info, scale: res.scale, paper: opts.paper });
-      return `Print dialog opened at 1:${res.scale}. Keep the print scale at 100 %.`;
+      return `Print dialog opened at ${scaleLabel(res.scale)}. Keep the print scale at 100 %.`;
     }
     // png, copy
     const canvas = exportPNG(src, opts);

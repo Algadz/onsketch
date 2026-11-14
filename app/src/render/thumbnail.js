@@ -2,7 +2,8 @@ import { Arc, Bezier, Circle, Line, Point } from '../core/entities.js';
 import { bezierBBox } from '../core/bezier.js';
 import { Renderer } from './renderer.js';
 import { View } from './view.js';
-import { inkBounds } from '../core/strokes.js';
+import { getTextResolver, inkBounds, setTextResolver } from '../core/strokes.js';
+import { projectLookup, resolveFields } from '../core/text-fields.js';
 
 /* =============== PROJECT THUMBNAIL ==============================
    Draws the whole project (fills, shapes, ink) on an off-screen canvas,
@@ -38,6 +39,15 @@ export function projectBounds(project) {
 /** Renders `project` to a canvas. `fillDisplay` is the editor's
  *  layerId → { painted } map (App.fillDisplay()). */
 export function renderThumbnail(project, fillDisplay = new Map(), { width = THUMB_W / 2, height = THUMB_H / 2, scale = 2 } = {}) {
+  // Text formulas show this project's values (also outside the editor).
+  const prevResolver = getTextResolver();
+  const lookup = projectLookup(project);
+  setTextResolver((t) => resolveFields(t, lookup).text);
+  try { return renderThumbnailInner(project, fillDisplay, { width, height, scale }); }
+  finally { setTextResolver(prevResolver); }
+}
+
+function renderThumbnailInner(project, fillDisplay, { width, height, scale }) {
   const canvas = document.createElement('canvas');
   canvas.width = Math.round(width * scale); canvas.height = Math.round(height * scale);
   const view = new View();

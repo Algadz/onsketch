@@ -1374,7 +1374,11 @@
     background: var(--field); font-size: 12px;
   }
   #project-name:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
-  #menubar .units { font-size: 11px; color: var(--text-muted); margin-left: -2px; }
+  #menubar .units {
+    font-size: 11px; color: var(--text-muted); margin-left: -2px; padding: 2px 2px; height: 24px;
+    border: 1px solid transparent; border-radius: 5px; background: transparent; cursor: pointer;
+  }
+  #menubar .units:hover, #menubar .units:focus-visible { border-color: var(--border); color: var(--text); background: var(--field); }
 
   /* ---------- Tool options bar ---------- */
   #optbar {

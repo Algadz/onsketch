@@ -22,6 +22,7 @@ export class RenderEventsMixin {
     requestAnimationFrame(tick);
   }
   _render() {
+    this._fieldCache = null; this._fieldLookup = null;   // text formulas see this frame's values
     this.refreshDrivenDimensions();           // floating dimensions show what they measure
     this.syncInkLinks();                      // linked ink follows its geometry
     this.renderer.drawGrid(this.gridOn, this.project.background);
@@ -292,7 +293,7 @@ export class RenderEventsMixin {
       const sp = { x: ev.clientX - r.left, y: ev.clientY - r.top };
       const factor = Math.exp(-ev.deltaY * 0.0015);
       this.view.zoomAt(sp, factor);
-      document.getElementById('status-zoom').textContent = 'Zoom: ' + Math.round(this.view.zoom*25) + '%';
+      document.getElementById('status-zoom').textContent = zoomText(this.view.zoom);
       this.requestRender();
     }, { passive: false });
   }
@@ -428,6 +429,13 @@ export class RenderEventsMixin {
     }
     if (minX === Infinity) return;
     this.view.fitTo({minX, minY, maxX, maxY}, 80);
+    const z = document.getElementById('status-zoom'); if (z) z.textContent = zoomText(this.view.zoom);
     this.requestRender();
   }
+}
+
+/** "Zoom: 250%", small zooms with two significant digits ("Zoom: 0.0067%"). */
+export function zoomText(zoom) {
+  const pct = zoom * 25;
+  return 'Zoom: ' + (pct >= 10 ? Math.round(pct) : Number(pct.toPrecision(2))) + '%';
 }

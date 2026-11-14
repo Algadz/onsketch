@@ -118,7 +118,7 @@ export class DimLinksMixin {
 
   /** Fields outside the canvas that take a formula. */
   _setupFormulaFields() {
-    const FIELDS = '#equations-body .eq-expr, #sel-body input[data-dim-edit], #sb-body input[data-dim-edit], input.dim-val[data-dim-edit]';
+    const FIELDS = '#equations-body .eq-expr, #sel-body input[data-dim-edit], #sb-body input[data-dim-edit], input.dim-val[data-dim-edit], textarea[data-ink-k="text"]';
     document.addEventListener('focusin', (e) => {
       const el = e.target;
       if (el?.matches?.(FIELDS)) this._formulaField = el;
@@ -135,6 +135,20 @@ export class DimLinksMixin {
   /** The formula being typed, or null: { insert(name), selfName, kind }. */
   _formulaTarget() {
     if (this._valueInput) return { insert: (n) => this._valueInput.insert(n), hold: () => this._valueInput.hold(), selfName: this._valueInput.selfName };
+    // A text being typed (or a text's field in Properties): {name}.
+    const textEl = this._textEdit?.ta || (this._formulaField?.dataset?.inkK === 'text' ? this._formulaField : null);
+    if (textEl && textEl.isConnected) {
+      return {
+        selfName: null, hold: () => setTimeout(() => textEl.focus(), 0),
+        insert: (name) => {
+          const v = textEl.value, a = textEl.selectionStart ?? v.length, b = textEl.selectionEnd ?? v.length;
+          const ins = `{${name}}`;
+          textEl.value = v.slice(0, a) + ins + v.slice(b);
+          textEl.dispatchEvent(new Event('input', { bubbles: true }));
+          setTimeout(() => { textEl.focus(); textEl.setSelectionRange(a + ins.length, a + ins.length); }, 0);
+        },
+      };
+    }
     const el = this._formulaField;
     if (!el || !el.isConnected || document.activeElement !== el) return null;
     const dims = allDimensions(this.project);

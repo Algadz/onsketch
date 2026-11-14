@@ -31,6 +31,7 @@ export class PanelsMixin {
     this._refreshOptionsBar();
     this._refreshFab();
     document.getElementById('project-name').value = this.project.name;
+    this._syncUnits?.();
   }
 
   refreshToolOptions() {

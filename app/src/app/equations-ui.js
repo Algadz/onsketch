@@ -366,7 +366,7 @@ export class EquationsMixin {
           placeholder="${c.driven ? 'driven (reference)' : 'value or =equation'}" ${c.driven ? 'disabled' : ''} title="${esc(c.exprError || kind)}" aria-label="Dimension equation">
         <span class="eq-val${!c.expr && !c.driven ? ' scrub' : ''}" data-val="dim:${i}" ${!c.expr && !c.driven ? `data-scrub="dim:${i}" title="Drag left / right to change (Shift: fine, Ctrl: round)"` : `title="${c.driven ? 'Floating: measures the geometry' : 'Set by its equation'}"`}>${c.exprError ? '!' : fmt(userValue(c), ang)}</span><span></span>`;
     });
-    html += '</div><div class="hint">Units: mm cm m in " ft, deg rad. Functions: sin cos tan sqrt abs min max, pi. Start with = to keep an equation.</div>';
+    html += `</div><div class="hint">Plain numbers are in ${esc(this.project.units)}; units: mm cm m km in " ft mi, deg rad. Functions: sin cos tan sqrt abs min max, pi. Start with = to keep an equation.</div>`;
     this._eqRebuilding = true;           // a browser may fire change on the removed field
     try { body.innerHTML = html; } finally { this._eqRebuilding = false; }
     if (keep) {

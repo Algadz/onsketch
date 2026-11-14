@@ -29,6 +29,9 @@ export function dxfLayerName(name, used = new Set()) {
 }
 
 /** @returns {{ text: string, count: number }} the file and how many shapes it holds */
+/** $INSUNITS codes of the document units. */
+const DXF_UNITS = { in: 1, ft: 2, mi: 3, mm: 4, cm: 5, m: 6, km: 7 };
+
 export function toDXF(project, { construction = false } = {}) {
   const used = new Set(['CONSTRUCTION']);
   const names = new Map(project.layers.map(l => [l.id, dxfLayerName(l.name, used)]));
@@ -80,7 +83,7 @@ export function toDXF(project, { construction = false } = {}) {
   const out = [
     '0', 'SECTION', '2', 'HEADER',
     '9', '$ACADVER', '1', 'AC1009',
-    '9', '$INSUNITS', '70', '4',                       // millimetres
+    '9', '$INSUNITS', '70', String(DXF_UNITS[project.units] ?? 4),   // the document unit
     '9', '$EXTMIN', '10', fmt(minX), '20', fmt(minY), '30', '0',
     '9', '$EXTMAX', '10', fmt(maxX), '20', fmt(maxY), '30', '0',
     '0', 'ENDSEC',

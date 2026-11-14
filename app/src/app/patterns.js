@@ -713,13 +713,13 @@ export class PatternsMixin {
       };
       html += '<div class="sb-subhead">Direction 1</div>';
       html += stepper('d1.count', 'Instances');
-      html += field('d1.spacing', 'Spacing', 'mm');
+      html += field('d1.spacing', 'Spacing', this.project.units);
       html += dirRow('d1');
       const two = p.d2.count > 1;
       html += `<div class="sb-subhead pat-head">Direction 2<label class="switch" title="Repeat in a second direction too (a grid)"><input type="checkbox" data-dir2${two ? ' checked' : ''}><span></span></label></div>`;
       if (two) {
         html += stepper('d2.count', 'Instances');
-        html += field('d2.spacing', 'Spacing', 'mm');
+        html += field('d2.spacing', 'Spacing', this.project.units);
         html += dirRow('d2');
       }
     } else if (st.type === 'circular') {
@@ -858,7 +858,7 @@ export class PatternsMixin {
     const live = new Set(sketch ? sketch.entities.map(e => e.id) : []);
     const copies = c.instances.filter(i => i.pairs.some(pr => live.has(pr[1]))).length;
     let what = '';
-    if (c.type === 'linear') what = p.d2.count > 1 ? `${p.d1.count} × ${p.d2.count}, ${fmt(p.d1.spacing)} × ${fmt(p.d2.spacing)} mm` : `${p.d1.count} × ${fmt(p.d1.spacing)} mm`;
+    if (c.type === 'linear') what = p.d2.count > 1 ? `${p.d1.count} × ${p.d2.count}, ${fmt(p.d1.spacing)} × ${fmt(p.d2.spacing)} ${this.project.units}` : `${p.d1.count} × ${fmt(p.d1.spacing)} ${this.project.units}`;
     else if (c.type === 'circular') what = `${p.count} × ${fmt(circularStep(p))}°`;
     else what = `${p.targets.length} target${p.targets.length === 1 ? '' : 's'}`;
     const skipped = c.skipped.length ? `, ${c.skipped.length} skipped` : '';

@@ -19,6 +19,7 @@ export class SolveMixin {
     this._refLayers = null;
     // Equation changes (variables, formulas) are applied before the solve.
     if (this._applyEquations().changed) this._solveAllLayers();
+    this._fieldCache = null; this._fieldLookup = null;     // text formulas follow
     const diagnostics = options.diagnostics || 'defer';
     const sketch = this.activeSketch();
     const activeIds = options.activeIds

@@ -1,3 +1,4 @@
+import { zoomText } from './render-events.js';
 import { track } from '../ui/analytics.js';
 
 /* =============== TOUCH AND STYLUS INPUT ========================
@@ -273,7 +274,7 @@ export class TouchMixin {
     // keep the world point that was under the fingers under them
     v.panX = f.c.x - v.cssW / 2 - g.world0.x * v.zoom;
     v.panY = f.c.y - v.cssH / 2 + g.world0.y * v.zoom;
-    document.getElementById('status-zoom').textContent = 'Zoom: ' + Math.round(v.zoom * 25) + '%';
+    document.getElementById('status-zoom').textContent = zoomText(v.zoom);
     this.requestRender();
   }
   _gestureEnd(T) {

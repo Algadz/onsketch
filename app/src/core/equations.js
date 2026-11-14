@@ -7,10 +7,11 @@
    into the dimension values; cycles and bad names are reported per
    dimension / variable instead of applied.
 
-   Values seen by equations are what the user sees: lengths in mm,
+   Values seen by equations are what the user sees: lengths in the
+   document unit (project.units),
    angles in degrees, diameter dimensions as diameters.
    ============================================================ */
-import { evaluate, NAME_RE, isReservedName } from './expr.js';
+import { evaluate, NAME_RE, isReservedName, setDocumentUnit } from './expr.js';
 import { normalizeAngleValue } from './math.js';
 
 export const DIM_KINDS = new Set(['distance', 'pointLineDistance', 'radius', 'curveDistance', 'angle', 'directedAngle', 'offsetDistance']);
@@ -76,6 +77,7 @@ export function renameReferences(project, from, to) {
  * @returns {number} how many errors were found
  */
 export function solveEquations(project, apply) {
+  setDocumentUnit(project.units);
   const dims = allDimensions(project);
   const vars = project.variables || [];
   const byName = new Map();

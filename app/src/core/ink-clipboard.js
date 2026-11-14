@@ -1,6 +1,6 @@
 import { newId } from './entities.js';
 import { imageSource, isImage, registerImage } from './images.js';
-import { TEXT_MAX, isText, reviveStroke, strokeToJSON, unionBounds } from './strokes.js';
+import { TEXT_MAX, isText, reviveStroke, strokeToJSON, textLines, unionBounds } from './strokes.js';
 
 /* =============== COPY AND PASTE INK ============================
    Ctrl+C / Ctrl+X put the selected ink (strokes, arrows, texts, images)
@@ -36,9 +36,10 @@ export function inkPayload(items) {
   return { v: 1, stamp: newId('c') + Date.now().toString(36), items: items.map(strokeToJSON), images };
 }
 
-/** The words of the copied texts, one text per line. */
+/** The words of the copied texts as shown (formulas as their values),
+ *  one text per line. */
 export function inkPlainText(items) {
-  return items.filter(isText).map(t => t.text).join('\n');
+  return items.filter(isText).map(t => textLines(t).join('\n')).join('\n');
 }
 
 export function encodeClipHTML(payload, plain = '') {

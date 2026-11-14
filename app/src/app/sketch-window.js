@@ -234,7 +234,7 @@ export class SketchWindowMixin {
           : target === 'arrow'
             ? 'Drag from where the arrow starts to what it points at. With Snap on, an end dropped on a shape stays attached to it. Shift: 15° steps.'
           : target === 'text'
-            ? 'Click to type a label; click a text to edit it. Right-click ink to group it or link it to a shape so it follows the geometry.'
+            ? 'Click to type a label; click a text to edit it. {D1} or {orbit*2:1} in a text shows a value (click a dimension while typing to insert it). Right-click ink to group it or link it to a shape.'
             : 'Freehand ink on the active layer. Not solved or dimensioned, and it doesn\'t close areas for the Fill tool.'}</div>`;
     }
     body.innerHTML = `<div class="tool-grid sketch-grid">${SKETCH_TOOLS.map(btn).join('')}</div>
@@ -350,7 +350,7 @@ export class SketchWindowMixin {
     }
     const hint = restyle ? `Restyles the selected ${id === 'arrow' ? 'arrows' : 'texts'}; it also sets the style of the next one.`
       : id === 'eraser' ? 'Drag over strokes and texts to erase them (active layer only).'
-      : id === 'text' ? 'Click to place text, Enter to finish, Shift+Enter for a new line. Click a text to edit it.'
+      : id === 'text' ? 'Click to place text, Enter to finish, Shift+Enter for a new line. {D1} shows a value. Click a text to edit it.'
       : id === 'arrow' ? `Drag to what you point at. Ends snap to shapes and stay attached. Shift: 15° steps.${this.touchUI ? '' : ` ${/Mac|iPhone|iPad/.test(navigator.platform || '') ? '⌥ Option' : 'Alt'}: no snap.`}`
         : 'Drag to draw. Esc cancels the stroke. Space-drag pans.';
     html += sep + `<span class="opt-hint">${hint}</span>`;
