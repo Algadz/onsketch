@@ -148,6 +148,14 @@ const kinds = (page) => app(page, () => window._app.activeSketch().constraints.m
   await page.waitForTimeout(400);
   await page.tap('#context-menu .cm-chip[data-rel="horizontal"]');
   check((await kinds(page)).includes('horizontal'), 'phone: a chip adds the relation');
+  // Long press on an end of the selected line: still the selection menu.
+  await app(page, () => window._app.hideContextMenu());
+  await page.waitForTimeout(400);
+  const end = await app(page, (id) => { const a = window._app, l = a.activeSketch().entities.find(e => e.id === id), r = a.canvas.getBoundingClientRect(); const s = a.view.worldToScreen(l.p1); return { x: s.x + r.left, y: s.y + r.top }; }, l1.id);
+  await app(page, (id) => { const a = window._app; a.clearSelection(); a.setSelected(a.activeSketch().entities.find(e => e.id === id), true); a.refreshUI(); }, l1.id);
+  await touch('touchStart', [[end.x, end.y]]); await page.waitForTimeout(600); await touch('touchEnd', []);
+  await page.waitForTimeout(150);
+  check(await app(page, () => !!document.querySelector('#context-menu.cm-selection')), `phone: long press on an end of the selected line shows the selection menu (${await menuText(page)})`);
   check(l2 && !errors.length, `phone: no page errors ${errors.join(' ')}`);
   await ctx.close();
 }

@@ -557,7 +557,8 @@ export class App {
 
     // On something already selected: the selection's relations (see
     // context-relations.js) instead of the list of what is under the cursor.
-    const onSelection = !ink && items.some(i => i.selected);
+    // (an end point of a selected line counts: a finger lands on it easily)
+    const onSelection = !ink && items.some(i => i.selected || (i instanceof Point && this.project.ownerOf(i)?.selected));
     if (onSelection) {
       menu.classList.add('cm-selection');
       this._appendSelectionRelations(menu, () => this.showContextMenu(screen, world, ev));
