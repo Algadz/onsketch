@@ -208,5 +208,5 @@ export class TouchUIMixin {
     return id;
   }
   _toolLabel(id) { return toolDef(id).label; }
-  _isShape(e) { return e instanceof Line || e instanceof Circle || e instanceof Arc; }
+  _isShape(e) { return e instanceof Line || e instanceof Circle || e instanceof Arc || e?.constructor?.kind === 'bezier'; }
 }

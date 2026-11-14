@@ -1,4 +1,5 @@
-import { Arc, Circle, Line, Point } from '../core/entities.js';
+import { Arc, Bezier, Circle, Line, Point } from '../core/entities.js';
+import { bezierNearest } from '../core/bezier.js';
 import { constraintLabel } from '../core/constraints.js';
 import { pieceAt, pieceShape, splitAt, splitSpot, splittable, strokeCrossings, trimPiece } from '../core/trim.js';
 import { notice } from '../ui/dialogs.js';
@@ -20,7 +21,7 @@ import { Tool } from './tool.js';
    ============================================================ */
 
 const SNAP_PX = 9;
-const isCurve = (e) => e instanceof Line || e instanceof Circle || e instanceof Arc;
+const isCurve = (e) => e instanceof Line || e instanceof Circle || e instanceof Arc || e instanceof Bezier;
 
 export class ScissorsTool extends Tool {
   constructor(app) {
@@ -36,7 +37,7 @@ export class ScissorsTool extends Tool {
     if (this.mode === 'split') {
       return this.pending
         ? 'Split: click a second spot on the circle (Esc: cancel).'
-        : 'Split: click a line or an arc to cut it in two there (snaps to crossings and the middle). A circle: click two spots.';
+        : 'Split: click a line, an arc or a curve to cut it in two there (snaps to crossings and the middle). A circle: click two spots.';
     }
     return 'Trim: click the piece to remove (it\'s shown in red), or drag across several. With nothing crossing it, the whole shape goes. X: split instead.';
   }
@@ -53,7 +54,7 @@ export class ScissorsTool extends Tool {
     let best = null, bd = Infinity;
     for (const e of s.entities) {
       if (!isCurve(e) || !this.app.isEntityVisible(e) || !e.hit(world, v)) continue;
-      const d = e instanceof Line ? distToSeg(world, e) : Math.abs(Math.hypot(world.x - e.center.x, world.y - e.center.y) - e.r);
+      const d = e instanceof Line ? distToSeg(world, e) : e instanceof Bezier ? bezierNearest(e.ctrl(), world, 24).d : Math.abs(Math.hypot(world.x - e.center.x, world.y - e.center.y) - e.r);
       const bonus = this.app._onActiveLayer?.(e) ? 0 : 1e6;      // the active layer wins overlaps
       if (d + bonus < bd) { bd = d + bonus; best = e; }
     }

@@ -8,7 +8,8 @@
    traced. So shapes that share an edge, a corner, or part of a side,
    and shapes that cross, all give the regions you see on screen.
    ============================================================ */
-import { Line, Circle, Arc } from './entities.js';
+import { Line, Circle, Arc, Bezier } from './entities.js';
+import { bezierSamples, sampleCount } from './bezier.js';
 import { directedArcSpan } from './math.js';
 
 const TOL = 1e-6;
@@ -56,6 +57,12 @@ export function arcPoints(arc) {
   return out;
 }
 
+/** Sample a Bézier curve from its start to its end. */
+export function bezierPoints(b) {
+  const P = b.ctrl();
+  return bezierSamples(P, Math.min(96, sampleCount(P, 0.02))).map(p => ({ x: p.x, y: p.y }));
+}
+
 function circlePoints(c) {
   const n = 64;
   const out = [];
@@ -72,6 +79,7 @@ function polylineOf(e) {
   if (e instanceof Line) return [{ x: e.p1.x, y: e.p1.y }, { x: e.p2.x, y: e.p2.y }];
   if (e instanceof Arc) { e.syncEnds(); return arcPoints(e); }
   if (e instanceof Circle) return e.r > 0 ? circlePoints(e) : null;
+  if (e instanceof Bezier) return bezierPoints(e);
   return null;
 }
 
@@ -521,6 +529,7 @@ export function findClosedProfiles(entities) {
     if (e instanceof Circle) { if (e.r > 0) circles.push(e); continue; }
     if (e instanceof Line) edges.push({ e, a: nodeOf(e.p1), b: nodeOf(e.p2) });
     else if (e instanceof Arc) { e.syncEnds(); edges.push({ e, a: nodeOf(e.start), b: nodeOf(e.end) }); }
+    else if (e instanceof Bezier) edges.push({ e, a: nodeOf(e.p1), b: nodeOf(e.p2) });
   }
   const adj = new Map();
   edges.forEach((ed, i) => {
@@ -554,7 +563,7 @@ export function findClosedProfiles(entities) {
     if (!ok || chain.length < 2) continue;
     const pts = [];
     for (const { ed, forward } of chain) {
-      let seg = ed.e instanceof Line ? [ed.e.p1, ed.e.p2] : arcPoints(ed.e);
+      let seg = ed.e instanceof Line ? [ed.e.p1, ed.e.p2] : ed.e instanceof Bezier ? bezierPoints(ed.e) : arcPoints(ed.e);
       if (!forward) seg = seg.slice().reverse();
       for (let k = (pts.length ? 1 : 0); k < seg.length; k++) pts.push({ x: seg[k].x, y: seg[k].y });
     }
@@ -572,6 +581,7 @@ export function geometryKey(entities) {
     if (e instanceof Line) parts.push(e.id, e.p1.x, e.p1.y, e.p2.x, e.p2.y);
     else if (e instanceof Circle) parts.push(e.id, e.center.x, e.center.y, e.r);
     else if (e instanceof Arc) parts.push(e.id, e.center.x, e.center.y, e.r, e.a0, e.a1, e.clockwise ? 1 : 0);
+    else if (e instanceof Bezier) parts.push(e.id, ...e.ctrl().flatMap(p => [p.x, p.y]));
   }
   return parts.join(',');
 }

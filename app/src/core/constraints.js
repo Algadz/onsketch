@@ -1,5 +1,6 @@
 import { EPS, TAU, normalizeAngleValue } from './math.js';
 import { newId } from './entities.js';
+import { bezierAt, bezierNearest, bezierTangent } from './bezier.js';
 
 /* =============== 3. CONSTRAINTS =============================== */
 export class Constraint {
@@ -666,6 +667,69 @@ export function constraintLabel(c) {
   return CONSTRAINT_LABELS[c?.kind] || c?.kind;
 }
 
+/* ---- Bézier curves (see core/bezier.js) ----
+   A curve's end direction is its handle: anchor → handle. */
+
+/** The curve leaves its anchor along a line, or tangent to a circle /
+ *  arc through the anchor. target: { line: {a, b} } | { circle: id, centerId }. */
+export class CurveTangentConstraint extends Constraint {
+  constructor(anchorId, handleId, target) {
+    super('curveTangent');
+    this.anchorId = anchorId; this.handleId = handleId;
+    this.line = target.line ? { a: target.line.a, b: target.line.b } : null;
+    this.circleId = target.circle || null; this.centerId = target.centerId || null;
+  }
+  refs() { return this.line ? [this.anchorId, this.handleId, this.line.a, this.line.b] : [this.anchorId, this.handleId, this.circleId, this.centerId]; }
+  residuals(L) {
+    const ax = L(this.anchorId, 'x'), ay = L(this.anchorId, 'y');
+    const hx = L(this.handleId, 'x') - ax, hy = L(this.handleId, 'y') - ay;
+    if (this.line) {
+      const ux = L(this.line.b, 'x') - L(this.line.a, 'x'), uy = L(this.line.b, 'y') - L(this.line.a, 'y');
+      const n = Math.hypot(ux, uy);
+      return [n < EPS ? 0 : (hx * uy - hy * ux) / n];
+    }
+    const rx = ax - L(this.centerId, 'x'), ry = ay - L(this.centerId, 'y');
+    const n = Math.hypot(rx, ry);
+    return [n < EPS ? 0 : (hx * rx + hy * ry) / n];
+  }
+  toJSON() {
+    return { id: this.id, kind: 'curveTangent', anchorId: this.anchorId, handleId: this.handleId,
+      ...(this.line ? { line: this.line } : { circleId: this.circleId, centerId: this.centerId }) };
+  }
+  static fromJSON(o) {
+    return new CurveTangentConstraint(o.anchorId, o.handleId, o.line ? { line: o.line } : { circle: o.circleId, centerId: o.centerId });
+  }
+}
+
+/** Two curves meet without a kink: both handles at their shared anchor
+ *  are on one line through it (G1; handle lengths stay free). */
+export class SmoothConstraint extends Constraint {
+  constructor(anchorId, h1Id, h2Id) { super('smooth'); this.anchorId = anchorId; this.h1 = h1Id; this.h2 = h2Id; }
+  refs() { return [this.anchorId, this.h1, this.h2]; }
+  residuals(L) {
+    const ax = L(this.anchorId, 'x'), ay = L(this.anchorId, 'y');
+    const ux = L(this.h1, 'x') - ax, uy = L(this.h1, 'y') - ay;
+    const vx = ax - L(this.h2, 'x'), vy = ay - L(this.h2, 'y');
+    const n = Math.hypot(vx, vy);
+    return [n < EPS ? 0 : (ux * vy - uy * vx) / n];
+  }
+  toJSON() { return { id: this.id, kind: 'smooth', anchorId: this.anchorId, h1: this.h1, h2: this.h2 }; }
+}
+
+/** A point lies on a Bézier curve (anywhere along it). pts: [p1, c1, c2, p2] ids. */
+export class PointOnCurveConstraint extends Constraint {
+  constructor(pointId, curveId, pts) { super('pointOnCurve'); this.pointId = pointId; this.curveId = curveId; this.pts = [...pts]; }
+  refs() { return [this.pointId, this.curveId, ...this.pts]; }
+  residuals(L) {
+    const P = this.pts.map(id => ({ x: L(id, 'x'), y: L(id, 'y') }));
+    const q = { x: L(this.pointId, 'x'), y: L(this.pointId, 'y') };
+    const near = bezierNearest(P, q, 16);
+    const b = bezierAt(P, near.t), u = bezierTangent(P, near.t);
+    return [(q.x - b.x) * -u.y + (q.y - b.y) * u.x];
+  }
+  toJSON() { return { id: this.id, kind: 'pointOnCurve', pointId: this.pointId, curveId: this.curveId, pts: this.pts }; }
+}
+
 export const CONSTRAINT_LABELS = {
   fix:'Fix', coincident:'Coincident', horizontal:'Horizontal',
   vertical:'Vertical', parallel:'Parallel', perpendicular:'Perpendicular',
@@ -678,7 +742,8 @@ export const CONSTRAINT_LABELS = {
   distance:'Distance', radius:'Radius', curveDistance:'Curve distance', angle:'Angle', directedAngle:'Central angle',
   pointLineDistance:'Pt-Line dist',
   pointOnLine:'On line', pointOnCircle:'On circle',
-  offset:'Offset', offsetDistance:'Offset dist', pattern:'Pattern'
+  offset:'Offset', offsetDistance:'Offset dist', pattern:'Pattern',
+  curveTangent:'Tangent', smooth:'Smooth', pointOnCurve:'On curve'
 };
 
 export const CONSTRAINT_GLYPHS = {
@@ -693,5 +758,6 @@ export const CONSTRAINT_GLYPHS = {
   distance:'↔', radius:'R', diameter:'⌀', curveDistance:'↔', angle:'∠',
   pointLineDistance:'↔',
   pointOnLine:'⊥•', pointOnCircle:'○•',
-  offset:'⊿', offsetDistance:'↔', pattern:'▦'
+  offset:'⊿', offsetDistance:'↔', pattern:'▦',
+  curveTangent:'∽', smooth:'S', pointOnCurve:'∿•'
 };

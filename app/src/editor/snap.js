@@ -1,5 +1,6 @@
 import { EPS, angleOnDirectedArc, dist } from '../core/math.js';
-import { Arc, Circle, Line, Point } from '../core/entities.js';
+import { Arc, Bezier, Circle, Line, Point } from '../core/entities.js';
+import { bezierNearest } from '../core/bezier.js';
 
 /* =============== 7. SNAP ENGINE =============================== */
 export class SnapEngine {
@@ -73,6 +74,12 @@ export class SnapEngine {
               consider({ x: e.center.x + adx/ad * e.r, y: e.center.y + ady/ad * e.r }, 'on-circle', e);
             }
           }
+        } else if (e instanceof Bezier) {
+          // Anchors are end points; handles never snap (they aren't geometry).
+          consider(e.p1, 'endpoint', e.p1);
+          consider(e.p2, 'endpoint', e.p2);
+          const n = bezierNearest(e.ctrl(), world, 24);
+          if (n.t > 0.02 && n.t < 0.98) consider({ x: n.x, y: n.y }, 'on-curve', e);
         } else if (e instanceof Point) {
           consider(e, 'endpoint', e);
         }

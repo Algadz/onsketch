@@ -1,4 +1,5 @@
-import { Arc, Circle, Line, Point } from './entities.js';
+import { Arc, Bezier, Circle, Line, Point } from './entities.js';
+import { bezierSamples, sampleCount } from './bezier.js';
 
 /* =============== DXF EXPORT ====================================
    The shapes of a project as an ASCII DXF (R12, the version every CAD,
@@ -59,6 +60,15 @@ export function toDXF(project, { construction = false } = {}) {
         const [a0, a1] = e.clockwise ? [e.a1, e.a0] : [e.a0, e.a1];
         ent('ARC', name, [[10, e.center.x], [20, e.center.y], [30, 0], [40, e.r], [50, deg(a0)], [51, deg(a1)]]);
         acc(e.center.x - e.r, e.center.y - e.r); acc(e.center.x + e.r, e.center.y + e.r);
+      } else if (e instanceof Bezier) {
+        // R12 has no splines: a polyline close enough to the curve (0.01 mm).
+        const P = e.ctrl();
+        const pts = bezierSamples(P, sampleCount(P, 0.01));
+        seenLayers.add(name);
+        body.push('0', 'POLYLINE', '8', name, '66', '1', '10', '0', '20', '0', '30', '0', '70', '0');
+        for (const p of pts) { body.push('0', 'VERTEX', '8', name, '10', fmt(p.x), '20', fmt(p.y), '30', '0'); acc(p.x, p.y); }
+        body.push('0', 'SEQEND', '8', name);
+        count++;
       } else if (e instanceof Point) {
         ent('POINT', name, [[10, e.x], [20, e.y], [30, 0]]);
         acc(e.x, e.y);

@@ -1,5 +1,5 @@
 import { Circle, Line } from '../core/entities.js';
-import { CollinearConstraint, ConcentricConstraint, Constraint, constraintLabel, EqualLengthConstraint, EqualRadiusConstraint, HorizontalConstraint, ParallelConstraint, PerpendicularConstraint, TangentCircleCircleConstraint, TangentLineCircleConstraint, VerticalConstraint } from '../core/constraints.js';
+import { CollinearConstraint, ConcentricConstraint, Constraint, CurveTangentConstraint, PointOnCurveConstraint, SmoothConstraint, constraintLabel, EqualLengthConstraint, EqualRadiusConstraint, HorizontalConstraint, ParallelConstraint, PerpendicularConstraint, TangentCircleCircleConstraint, TangentLineCircleConstraint, VerticalConstraint } from '../core/constraints.js';
 import { classifySelection } from '../editor/relations.js';
 import { confirmDialog } from '../ui/dialogs.js';
 
@@ -15,7 +15,8 @@ export const RELATION_FAMILY = {
   pointOnCircle: ['pointOnCircle', 'arcEndpointOnCircle'],
   parallel: ['parallel'], perpendicular: ['perpendicular'], collinear: ['collinear'],
   equalLength: ['equalLength'], equalRadius: ['equalRadius'], concentric: ['concentric'],
-  tangent: ['tangent'],
+  tangent: ['tangent', 'curveTangent'],
+  smooth: ['smooth'], pointOnCurve: ['pointOnCurve'],
 };
 const FAMILY_OF = new Map(Object.entries(RELATION_FAMILY).flatMap(([f, ks]) => ks.map(k => [k, f])));
 export const relationFamily = (kind) => FAMILY_OF.get(kind) || kind;
@@ -59,7 +60,7 @@ export class ConstraintActionsMixin {
     let held = 0;
     if (!sketch) return { add, held };
     const byId = this._lookupMap([sketch]);
-    const { points, lines, circles, arcs } = classifySelection(sel);
+    const { points, lines, circles, arcs, curves } = classifySelection(sel);
     const consider = (c) => {
       if (!c || this._isInvalidConstraint(sketch, c)) return;
       if ([...sketch.constraints, ...add].some(ex => this._sameRelation(ex, c, byId))) { held++; return; }
@@ -76,7 +77,7 @@ export class ConstraintActionsMixin {
 
     switch (kind) {
       case 'fix': {
-        const pts = [...points, ...lines.flatMap(l => [l.p1, l.p2]), ...circles.map(c => c.center), ...arcs.map(a => a.center)];
+        const pts = [...points, ...lines.flatMap(l => [l.p1, l.p2]), ...circles.map(c => c.center), ...arcs.map(a => a.center), ...curves.flatMap(b => b.children())];
         for (const p of new Set(pts)) consider(this._fixConstraintForPoint(p));
         break;
       }
@@ -143,13 +144,28 @@ export class ConstraintActionsMixin {
         }
         break;
       }
+      case 'smooth':
+        if (curves.length === 2) consider(this._smoothBetween(curves[0], curves[1]));
+        break;
+      case 'pointOnCurve':
+        if (curves.length === 1) {
+          const own = new Set(curves[0].children());
+          for (const p of points) if (!own.has(p)) consider(new PointOnCurveConstraint(p.id, curves[0].id, curves[0].ctrl().map(q => q.id)));
+        }
+        break;
       case 'tangent': {
-        const curves = [...circles, ...arcs];
-        if (lines.length === 1 && curves.length === 1 && points.length === 0) {
-          const l = lines[0], c = curves[0];
+        if (curves.length === 1 && lines.length + circles.length + arcs.length === 1 && points.length === 0) {
+          consider(this._curveTangentTo(curves[0], lines[0] || circles[0] || arcs[0]));
+          break;
+        }
+        if (curves.length === 2) { consider(this._smoothBetween(curves[0], curves[1])); break; }
+        if (curves.length) break;
+        const roundish = [...circles, ...arcs];
+        if (lines.length === 1 && roundish.length === 1 && points.length === 0) {
+          const l = lines[0], c = roundish[0];
           consider(new TangentLineCircleConstraint({ a:l.p1.id, b:l.p2.id }, c.id, c.center.id));
-        } else if (curves.length === 2 && lines.length === 0) {
-          consider(new TangentCircleCircleConstraint(curves[0].id, curves[0].center.id, curves[1].id, curves[1].center.id, false));
+        } else if (roundish.length === 2 && lines.length === 0) {
+          consider(new TangentCircleCircleConstraint(roundish[0].id, roundish[0].center.id, roundish[1].id, roundish[1].center.id, false));
         }
         break;
       }
@@ -164,6 +180,35 @@ export class ConstraintActionsMixin {
         break;
     }
     return { add, held };
+  }
+
+  /** The curve end nearest `other` (shared corner first) leaves along a
+   *  line, or tangent to a circle / arc. */
+  _curveTangentTo(curve, other) {
+    if (!curve || !other) return null;
+    const ends = [{ a: curve.p1, h: curve.c1 }, { a: curve.p2, h: curve.c2 }];
+    const distTo = (p) => {
+      if (other instanceof Line) {
+        if (other.p1 === p || other.p2 === p) return -1;
+        return Math.min(Math.hypot(p.x - other.p1.x, p.y - other.p1.y), Math.hypot(p.x - other.p2.x, p.y - other.p2.y));
+      }
+      return Math.abs(Math.hypot(p.x - other.center.x, p.y - other.center.y) - other.r);
+    };
+    const end = distTo(ends[0].a) <= distTo(ends[1].a) ? ends[0] : ends[1];
+    const target = other instanceof Line ? { line: { a: other.p1.id, b: other.p2.id } } : { circle: other.id, centerId: other.center.id };
+    return new CurveTangentConstraint(end.a.id, end.h.id, target);
+  }
+
+  /** Two curves joined without a kink at their common (or nearest) ends. */
+  _smoothBetween(b1, b2) {
+    const ends1 = [{ a: b1.p1, h: b1.c1 }, { a: b1.p2, h: b1.c2 }];
+    const ends2 = [{ a: b2.p1, h: b2.c1 }, { a: b2.p2, h: b2.c2 }];
+    let best = null;
+    for (const e1 of ends1) for (const e2 of ends2) {
+      const d = e1.a === e2.a ? -1 : Math.hypot(e1.a.x - e2.a.x, e1.a.y - e2.a.y);
+      if (!best || d < best.d) best = { d, e1, e2 };
+    }
+    return new SmoothConstraint(best.e1.a.id, best.e1.h.id, best.e2.h.id);
   }
 
   /** Relations of this kind directly between selected items (what

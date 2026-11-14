@@ -1,7 +1,7 @@
 import { evaluate } from '../core/expr.js';
 import { EPS, TAU, angleOnDirectedArc, directedArcSpan, dist, lineIntersection, mirrorPointAcrossLine, offsetArc, offsetCircle, offsetLine } from '../core/math.js';
 import { uiIcon } from '../ui/icons.js';
-import { Arc, Circle, Line, Point, newId } from '../core/entities.js';
+import { Arc, Bezier, Circle, Line, Point, newId } from '../core/entities.js';
 import { AngleConstraint, ArcEndpointArcEndpointCoincidentConstraint, ArcEndpointCoincidentConstraint, ArcEndpointMidpointConstraint, ArcEndpointOnCircleConstraint, ArcEndpointOnLineConstraint, CoincidentConstraint, CollinearConstraint, ConcentricConstraint, Constraint, DirectedAngleConstraint, EqualLengthConstraint, EqualRadiusConstraint, HorizontalConstraint, MidpointConstraint, OffsetConstraint, OffsetDistanceConstraint, ParallelConstraint, ParamFixConstraint, PerpendicularConstraint, PointOnCircleConstraint, PointOnLineConstraint, PointRefHorizontalConstraint, PointRefVerticalConstraint, SymmetricConstraint, TangentCircleCircleConstraint, TangentLineCircleConstraint, VerticalConstraint } from '../core/constraints.js';
 import { SelectTool } from '../tools/select.js';
 import { notice } from '../ui/dialogs.js';
@@ -85,6 +85,8 @@ export class OperationsMixin {
       : e instanceof Line ? 'Line'
       : e instanceof Circle ? 'Circle'
       : e instanceof Arc ? 'Arc'
+      : e?.constructor?.kind === 'bezier' ? 'Curve'
+      : e?.bezierOwner ? 'Handle'
       : e?.constructor?.kind || 'Entity';
     return `${kind} ${e.id}`;
   }
@@ -842,7 +844,7 @@ export class OperationsMixin {
     };
     const sources = [];
     for (const e of sketch.entities) {
-      if (e !== axis && (sel.includes(e) || e.selected) && (e instanceof Point || e instanceof Line || e instanceof Circle)) sources.push(e);
+      if (e !== axis && (sel.includes(e) || e.selected) && (e instanceof Point || e instanceof Line || e instanceof Circle || e instanceof Bezier)) sources.push(e);
     }
     for (const e of sel) {
       if (e instanceof Point && e !== axis && !pointOwnedBySelectedEntity(e) && !sources.includes(e)) sources.push(e);
@@ -855,7 +857,7 @@ export class OperationsMixin {
     const axis = this.mirrorAxisId ? sketch.entities.find(e => e instanceof Line && e.id === this.mirrorAxisId) : null;
     const sources = this.mirrorEntityIds
       .map(id => this._lookupAny(id))
-      .filter(e => e && this.project.sketchOf(e) === sketch && e !== axis && (e instanceof Point || e instanceof Line || e instanceof Circle));
+      .filter(e => e && this.project.sketchOf(e) === sketch && e !== axis && (e instanceof Point || e instanceof Line || e instanceof Circle || e instanceof Bezier));
     return { axis, sources };
   }
 
@@ -883,7 +885,7 @@ export class OperationsMixin {
       this.mirrorEntityIds = this.mirrorEntityIds.filter(id => id !== hit.id);
       this.mirrorPickMode = 'entities';
     } else {
-      if (!(hit instanceof Point || hit instanceof Line || hit instanceof Circle)) return true;
+      if (!(hit instanceof Point || hit instanceof Line || hit instanceof Circle || hit instanceof Bezier)) return true;
       if (hit.id === this.mirrorAxisId) return true;
       const i = this.mirrorEntityIds.indexOf(hit.id);
       if (i >= 0) this.mirrorEntityIds.splice(i, 1);
@@ -899,7 +901,7 @@ export class OperationsMixin {
     if (!sketch) return true;
     if (opts.replace) this.mirrorEntityIds = [];
     for (const hit of hits || []) {
-      if (!(hit instanceof Point || hit instanceof Line || hit instanceof Circle)) continue;
+      if (!(hit instanceof Point || hit instanceof Line || hit instanceof Circle || hit instanceof Bezier)) continue;
       if (this.project.sketchOf(hit) !== sketch) continue;
       if (hit.id === this.mirrorAxisId) continue;
       const i = this.mirrorEntityIds.indexOf(hit.id);
@@ -1116,7 +1118,7 @@ export class OperationsMixin {
       return;
     }
     if (!sources.length) {
-      notice('Select at least one point, line or circle to mirror, as well as the axis.');
+      notice('Select at least one point, line, circle or curve to mirror, as well as the axis.');
       return;
     }
 
@@ -1162,6 +1164,12 @@ export class OperationsMixin {
         sketch.addEntity(circle);
         sketch.constraints.push(new EqualRadiusConstraint(src.id, circle.id));
         newEntities.push(circle);
+      } else if (src instanceof Bezier) {
+        const curve = new Bezier(linkPoint(src.p1), linkPoint(src.c1), linkPoint(src.c2), linkPoint(src.p2));
+        curve.construction = src.construction;
+        copyDisplay(src, curve);
+        sketch.addEntity(curve);
+        newEntities.push(curve);
       }
     }
 
@@ -1193,6 +1201,7 @@ export class OperationsMixin {
     const paths = [];
     const points = [];
     const circles = [];
+    const curves = [];
     for (const src of sources) {
       if (src instanceof Point) {
         points.push(mirroredPoint(src));
@@ -1200,9 +1209,11 @@ export class OperationsMixin {
         paths.push([mirroredPoint(src.p1), mirroredPoint(src.p2)]);
       } else if (src instanceof Circle) {
         circles.push({ center: mirroredPoint(src.center), r: src.r });
+      } else if (src instanceof Bezier) {
+        curves.push(src.ctrl().map(mirroredPoint));
       }
     }
-    return { paths, points, circles, dashed: true };
+    return { paths, points, circles, curves, dashed: true };
   }
 
   _mapOffsetEntityIds(source, target, idMap) {

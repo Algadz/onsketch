@@ -21,6 +21,7 @@
     "test:nosnap": "node tests/nosnap.e2e.mjs",
     "test:pattern": "node tests/pattern.e2e.mjs",
     "test:scissors": "node tests/scissors.e2e.mjs",
+    "test:curve": "node tests/curve.e2e.mjs",
     "test:export": "node tests/export.e2e.mjs"
   },
   "devDependencies": {

@@ -1,5 +1,6 @@
 import * as C from './constraints.js';
-import { Arc, Circle, Line, Point } from './entities.js';
+import { Arc, Bezier, Circle, Line, Point } from './entities.js';
+import { bezierAt, bezierBezierHits, bezierCircleHits, bezierLineHits, bezierNearest, bezierSplit, bezierSub, polygonLength } from './bezier.js';
 
 /* =============== SCISSORS: TRIM AND SPLIT =======================
    Trim removes the piece of a line, circle or arc between the two
@@ -48,6 +49,7 @@ export function arcAngle(a, u) { return a.a0 + (a.clockwise ? -u : u); }
 /** Where a world point falls along the shape: lines t ∈ [0,1], arcs the
  *  angle from the start, circles the angle. */
 export function paramOf(e, p) {
+  if (e instanceof Bezier) return bezierNearest(e.ctrl(), p).t;
   if (e instanceof Line) {
     const dx = e.p2.x - e.p1.x, dy = e.p2.y - e.p1.y, L2 = dx * dx + dy * dy;
     if (L2 < 1e-24) return 0;
@@ -63,15 +65,16 @@ export function paramOf(e, p) {
 }
 
 export function pointAt(e, u) {
+  if (e instanceof Bezier) return bezierAt(e.ctrl(), u);
   if (e instanceof Line) return { x: e.p1.x + (e.p2.x - e.p1.x) * u, y: e.p1.y + (e.p2.y - e.p1.y) * u };
   const th = e instanceof Arc ? arcAngle(e, u) : u;
   return { x: e.center.x + e.r * Math.cos(th), y: e.center.y + e.r * Math.sin(th) };
 }
 
 /** Parameter length of the shape (1 for lines, the sweep, or 2π). */
-const paramEnd = (e) => (e instanceof Line ? 1 : e instanceof Arc ? arcSpan(e) : TAU);
+const paramEnd = (e) => (e instanceof Line || e instanceof Bezier ? 1 : e instanceof Arc ? arcSpan(e) : TAU);
 /** Drawing units per unit of parameter (to compare with a tolerance). */
-const paramScale = (e) => (e instanceof Line ? Math.hypot(e.p2.x - e.p1.x, e.p2.y - e.p1.y) : e.r);
+const paramScale = (e) => (e instanceof Line ? Math.hypot(e.p2.x - e.p1.x, e.p2.y - e.p1.y) : e instanceof Bezier ? polygonLength(e.ctrl()) : e.r);
 
 /* ---------------- intersections ---------------- */
 
@@ -111,6 +114,21 @@ export function crossings(e, o) {
   const inSeg = (t) => t >= -1e-9 && t <= 1 + 1e-9;
   const onArc = (a, p) => !(a instanceof Arc) || arcU(a, Math.atan2(p.y - a.center.y, p.x - a.center.x)) <= arcSpan(a) + 1e-9;
   const xy = (p) => ({ x: p.x, y: p.y });
+  const onShape = (s, p) => {
+    if (s instanceof Line) {
+      const dx = s.p2.x - s.p1.x, dy = s.p2.y - s.p1.y, L2 = dx * dx + dy * dy || 1;
+      return inSeg(((p.x - s.p1.x) * dx + (p.y - s.p1.y) * dy) / L2);
+    }
+    return onArc(s, p);
+  };
+  if (e instanceof Bezier || o instanceof Bezier) {
+    const [b, other] = e instanceof Bezier ? [e, o] : [o, e];
+    let hits;
+    if (other instanceof Bezier) hits = bezierBezierHits(b.ctrl(), other.ctrl());
+    else if (other instanceof Line) hits = bezierLineHits(b.ctrl(), other.p1, other.p2);
+    else hits = bezierCircleHits(b.ctrl(), other.center, other.r);
+    return hits.filter(p => other instanceof Bezier || onShape(other, p)).map(xy);
+  }
   if (e instanceof Line && o instanceof Line) {
     const r = segSeg(e.p1, e.p2, o.p1, o.p2);
     return r && inSeg(r.t) && inSeg(r.s) ? [xy(r)] : [];
@@ -120,8 +138,9 @@ export function crossings(e, o) {
   return circleCircle(e.center, e.r, o.center, o.r).filter(p => onArc(e, p) && onArc(o, p)).map(xy);
 }
 
-const isCurve = (e) => e instanceof Line || e instanceof Circle || e instanceof Arc;
+const isCurve = (e) => e instanceof Line || e instanceof Circle || e instanceof Arc || e instanceof Bezier;
 const distTo = (e, p) => {
+  if (e instanceof Bezier) return bezierNearest(e.ctrl(), p).d;
   if (e instanceof Line) { const q = pointAt(e, paramOf(e, p)); return Math.hypot(q.x - p.x, q.y - p.y); }
   const d = Math.abs(Math.hypot(p.x - e.center.x, p.y - e.center.y) - e.r);
   if (e instanceof Arc && arcU(e, Math.atan2(p.y - e.center.y, p.x - e.center.x)) > arcSpan(e) + 1e-9) return Infinity;
@@ -149,7 +168,7 @@ export function findCuts(sketch, e, opts = {}) {
       }
     }
     // points lying on e: sketch points and other shapes' ends (not centres)
-    const pts = o instanceof Point ? [o] : o instanceof Line ? o.children() : o instanceof Arc ? [o.start, o.end] : [];
+    const pts = o instanceof Point ? [o] : o instanceof Line ? o.children() : o instanceof Arc ? [o.start, o.end] : o instanceof Bezier ? [o.p1, o.p2] : [];
     for (const p of pts) {
       if (own.has(p) || distTo(e, p) > tol * 10) continue;
       const u = paramOf(e, p);
@@ -201,6 +220,10 @@ export function pieceAt(sketch, e, at, opts = {}) {
 /** Drawable outline of a piece (for the hover preview). */
 export function pieceShape(piece) {
   const e = piece.e;
+  if (e instanceof Bezier) {
+    const Q = bezierSub(e.ctrl(), piece.lo ? piece.lo.u : 0, piece.hi ? piece.hi.u : 1);
+    return { kind: 'curve', ctrl: Q.map(p => ({ x: p.x, y: p.y })) };
+  }
   if (e instanceof Line) {
     const a = piece.lo ? piece.lo : e.p1, b = piece.hi ? piece.hi : e.p2;
     return { kind: 'line', a: { x: a.x, y: a.y }, b: { x: b.x, y: b.y } };
@@ -317,6 +340,8 @@ function linePointAt(sketch, cut, like, added) {
       { arcId: cut.arcEnd.arc.id, centerId: cut.arcEnd.arc.center.id, which: cut.arcEnd.which }, p.id), like));
   } else if (cut.cutter instanceof Line) {
     added.push(tag(new C.PointOnLineConstraint(p.id, { a: cut.cutter.p1.id, b: cut.cutter.p2.id }), like));
+  } else if (cut.cutter instanceof Bezier) {
+    added.push(tag(new C.PointOnCurveConstraint(p.id, cut.cutter.id, cut.cutter.ctrl().map(q => q.id)), like));
   } else if (cut.cutter) {
     added.push(tag(new C.PointOnCircleConstraint(p.id, cut.cutter.id, cut.cutter.center.id), like));
   }
@@ -331,12 +356,53 @@ function arcEndOn(cut, arc, which, added) {
   else if (cut.arcEnd) added.push(tag(new C.ArcEndpointArcEndpointCoincidentConstraint(ref,
     { arcId: cut.arcEnd.arc.id, centerId: cut.arcEnd.arc.center.id, which: cut.arcEnd.which }), arc));
   else if (cut.cutter instanceof Line) added.push(tag(new C.ArcEndpointOnLineConstraint(ref, { a: cut.cutter.p1.id, b: cut.cutter.p2.id }), arc));
+  else if (cut.cutter instanceof Bezier) return;          // no "arc end on curve" relation: the end just stays there
   else if (cut.cutter) added.push(tag(new C.ArcEndpointOnCircleConstraint(ref, cut.cutter.id, cut.cutter.center.id), arc));
 }
 
 /** Removes `e` from the sketch without touching relations (they were
  *  moved already; pruneStale cleans what's left). */
 const detach = (sketch, e) => { sketch.entities = sketch.entities.filter(x => x !== e); };
+
+/* ---- curves ---- */
+
+const setXY = (p, q) => { p.x = q.x; p.y = q.y; return p; };
+/** A new handle point for curve `b` at its p1 / p2 end. */
+function handleFor(b, q, which) { const h = new Point(q.x, q.y); h.bezierOwner = b; h.handleAnchor = which; return h; }
+
+/** Relations about a curve's end (its anchor and handle together:
+ *  tangent, smooth): they go when that end is cut off. */
+function dropCurveEnd(sketch, anchorId, handleId) {
+  const dropped = [];
+  sketch.constraints = sketch.constraints.filter(c => {
+    if (c.kind !== 'curveTangent' && c.kind !== 'smooth') return true;
+    const r = c.refs();
+    if (r.includes(anchorId) && r.includes(handleId)) { dropped.push(c); return false; }
+    return true;
+  });
+  return dropped;
+}
+
+/** Points "on curve" go to the piece of the curve they lie on (by where
+ *  they were along the original), or lose the relation when their part
+ *  was cut away. pieces: [{ curve, t0, t1 }] in the original's parameter. */
+function redistributeOnCurve(sketch, curveId, P, pieces) {
+  const pts = new Map();
+  for (const e of sketch.entities) { pts.set(e.id, e); for (const ch of e.children()) pts.set(ch.id, ch); }
+  const dropped = [];
+  sketch.constraints = sketch.constraints.filter(c => {
+    if (c.kind !== 'pointOnCurve' || c.curveId !== curveId) return true;
+    const q = pts.get(c.pointId);
+    if (!q) return true;
+    const t = bezierNearest(P, q).t;
+    const piece = pieces.find(pc => t >= pc.t0 - 1e-6 && t <= pc.t1 + 1e-6);
+    if (!piece || piece.curve.children().includes(q)) { dropped.push(c); return false; }
+    c.curveId = piece.curve.id;
+    c.pts = piece.curve.ctrl().map(x => x.id);
+    return true;
+  });
+  return dropped;
+}
 
 /* ---------------- trim ---------------- */
 
@@ -393,6 +459,33 @@ export function trimPiece(sketch, piece) {
     arcEndOn(piece.lo, arc, 'end', added);
     res.removed.push(e);
     res.added.push(arc);
+  } else if (e instanceof Bezier) {
+    const P0 = e.ctrl().map(p => ({ x: p.x, y: p.y }));
+    const P1 = e.p1, C1 = e.c1, C2 = e.c2, P2 = e.p2;
+    if (!piece.lo) {                                   // from the start to the first cut
+      const Q = bezierSub(P0, piece.hi.u, 1);
+      res.dropped.push(...dropCurveEnd(sketch, P1.id, C1.id));
+      e.p1 = linePointAt(sketch, piece.hi, e, added);
+      setXY(C1, Q[1]); setXY(C2, Q[2]);
+      res.dropped.push(...redistributeOnCurve(sketch, e.id, P0, [{ curve: e, t0: piece.hi.u, t1: 1 }]));
+    } else if (!piece.hi) {                            // from the last cut to the end
+      const Q = bezierSub(P0, 0, piece.lo.u);
+      res.dropped.push(...dropCurveEnd(sketch, P2.id, C2.id));
+      e.p2 = linePointAt(sketch, piece.lo, e, added);
+      setXY(C1, Q[1]); setXY(C2, Q[2]);
+      res.dropped.push(...redistributeOnCurve(sketch, e.id, P0, [{ curve: e, t0: 0, t1: piece.lo.u }]));
+    } else {                                           // the middle: two curves
+      const A = bezierSub(P0, 0, piece.lo.u), B = bezierSub(P0, piece.hi.u, 1);
+      const q1 = linePointAt(sketch, piece.lo, e, added);
+      const q2 = linePointAt(sketch, piece.hi, e, added);
+      setXY(C1, A[1]);
+      e.c2 = handleFor(e, A[2], 'p2');
+      e.p2 = q1;
+      setXY(C2, B[2]);                                 // the far end keeps its handle (and its relations)
+      const b = addLike(sketch, new Bezier(q2, new Point(B[1].x, B[1].y), C2, P2), e);
+      res.added.push(b);
+      res.dropped.push(...redistributeOnCurve(sketch, e.id, P0, [{ curve: e, t0: 0, t1: piece.lo.u }, { curve: b, t0: piece.hi.u, t1: 1 }]));
+    }
   } else if (e instanceof Arc) {
     if (!piece.lo) {
       res.dropped.push(...arcEndRefs(sketch, e, 'start'));
@@ -479,6 +572,20 @@ export function splitAt(sketch, e, spot, spot2 = null) {
       { arcId: e.id, centerId: e.center.id, which: 'end' }, { arcId: b.id, centerId: b.center.id, which: 'start' }), e));
     if (spot.cutter || spot.point || spot.arcEnd) arcEndOn(spot, e, 'end', added);
     res.added.push(b);
+  } else if (e instanceof Bezier) {
+    if (!splittable(e, spot)) return null;
+    const P0 = e.ctrl().map(p => ({ x: p.x, y: p.y }));
+    const [A, B] = bezierSplit(P0, spot.u);
+    const C2 = e.c2, P2 = e.p2;
+    const q = linePointAt(sketch, spot, e, added);
+    setXY(e.c1, A[1]);
+    e.c2 = handleFor(e, A[2], 'p2');
+    e.p2 = q;
+    setXY(C2, B[2]);
+    const b = addLike(sketch, new Bezier(q, new Point(B[1].x, B[1].y), C2, P2), e);
+    added.push(tag(new C.SmoothConstraint(q.id, e.c2.id, b.c1.id), e));     // no kink where it was cut
+    res.added.push(b);
+    res.dropped.push(...redistributeOnCurve(sketch, e.id, P0, [{ curve: e, t0: 0, t1: spot.u }, { curve: b, t0: spot.u, t1: 1 }]));
   } else if (e instanceof Circle) {
     if (!spot2) return null;
     let u1 = spot.u, u2 = spot2.u;

@@ -1,5 +1,5 @@
 import { EPS, TAU, angleArcFromPoints, angleSectorForValue, drawDirectedArcPath, lineIntersection, normalizeAngleValue } from '../core/math.js';
-import { Arc, Circle, Line, Point } from '../core/entities.js';
+import { Arc, Circle, Line, Point, refreshHandleVisibility } from '../core/entities.js';
 import { CONSTRAINT_GLYPHS, distanceFrame } from '../core/constraints.js';
 import { resolveStyle, dashFor, withAlpha } from '../core/style.js';
 import { getTheme, INK } from './theme.js';
@@ -133,6 +133,7 @@ export class Renderer {
     };
     for (const s of project.sketches) {
       if (!s.visible) continue;
+      refreshHandleVisibility(s.entities);
       for (const e of s.entities) slot(project.layerOf(e), s).ents.push(e);
     }
     const paintSketch = project.active();
@@ -582,6 +583,7 @@ export class Renderer {
         ctx.beginPath();
         if (r.kind === 'line') { const a = v.worldToScreen(r.a), b = v.worldToScreen(r.b); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); }
         else if (r.kind === 'circle') { const c = v.worldToScreen(r.center); ctx.arc(c.x, c.y, r.r * v.zoom, 0, TAU); }
+        else if (r.kind === 'curve') { const [a, b, c, d] = r.ctrl.map(p => v.worldToScreen(p)); ctx.moveTo(a.x, a.y); ctx.bezierCurveTo(b.x, b.y, c.x, c.y, d.x, d.y); }
         else drawDirectedArcPath(ctx, v, r.center, r.r, r.a0, r.a1, r.clockwise);
       };
       path(); ctx.stroke();
@@ -602,6 +604,20 @@ export class Renderer {
       ctx.strokeStyle = t.preview; ctx.lineWidth = 1.6;
       ctx.beginPath(); ctx.arc(q.x, q.y, m.snapped ? 7 : 5.5, 0, TAU); ctx.fill(); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(q.x, q.y - 10); ctx.lineTo(q.x, q.y + 10); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  /** Handles of a curve being drawn: stems from the anchors and squares. */
+  drawTempHandles(handles) {
+    const v = this.view, ctx = this.ctx;
+    ctx.save();
+    ctx.strokeStyle = this.theme.preview; ctx.lineWidth = 1;
+    for (const { anchor, handle } of handles) {
+      const a = v.worldToScreen(anchor), h = v.worldToScreen(handle);
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(h.x, h.y); ctx.stroke();
+      ctx.fillStyle = this.theme.previewHalo;
+      ctx.fillRect(h.x - 3.5, h.y - 3.5, 7, 7); ctx.strokeRect(h.x - 3.5, h.y - 3.5, 7, 7);
     }
     ctx.restore();
   }
@@ -692,7 +708,8 @@ export class Renderer {
     const atCircle = (id) => { const e = entMap.get(id); return e && e.center && Number.isFinite(e.r) ? [{ x: e.center.x, y: e.center.y + e.r, kind: 'circle' }] : []; };
     switch (c.kind) {
       case 'coincident': return atPoint(P(c.p1));
-      case 'fix': case 'midpoint': case 'pointOnLine': case 'pointOnCircle': return atPoint(P(c.pointId));
+      case 'fix': case 'midpoint': case 'pointOnLine': case 'pointOnCircle': case 'pointOnCurve': return atPoint(P(c.pointId));
+      case 'curveTangent': case 'smooth': return atPoint(P(c.anchorId));
       case 'arcEndpointCoincident': case 'arcEndpointFix': case 'arcEndpointMidpoint':
       case 'arcEndpointOnLine': case 'arcEndpointOnCircle': return atPoint(arcEnd(c.ref));
       case 'arcEndpointArcEndpointCoincident': return atPoint(arcEnd(c.ref1));

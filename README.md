@@ -24,6 +24,7 @@ npm run test:layers  # layers as display only: editing, relations and dimensions
 npm run test:nosnap  # Alt = no snap while placing or dragging; Space-drag pans
 npm run test:pattern # linear / circular / point patterns: picks, linked copies, editing, equations, unlink
 npm run test:scissors # scissors: trim (click, drag), split, relations kept / moved / removed, undo
+npm run test:curve   # Bézier curves: drawing, handles, tangent / smooth / on curve, fill, scissors, mirror, export
 npm run test:export  # Export (PNG, SVG, copy, DXF, print to scale) and the first-run steps, desktop and phone
 node tests/style.e2e.mjs  # restyling arrows / texts after drawing, touch tap-through guard
 node tests/analytics.e2e.mjs  # Umami events: what is counted, once per visit, nothing sent from tests
@@ -58,7 +59,7 @@ cached modules after a deploy. `npm test` fails if the stamp is out of date.
   per-device preference.
 - **Options bar** (second row): settings for the active tool, as in Paint.NET.
   Line weight, line type and construction while drawing; a short hint with
-  Select (Scissors, Mirror, Offset and the patterns are in the Tools window); step-by-step help for
+  Select (Curve is with the sketch tools; Scissors, Mirror, Offset and the patterns are in the Tools window); step-by-step help for
   Smart Dimension; Fill / Erase for the Fill tool.
 - **Floating windows** over the canvas, dragged by their title bar and
   remembered per browser: Tools, Colors, Layers, Properties, Equations.
@@ -286,6 +287,7 @@ browsers.
 | | `relation-refused` (once) | `kind`, `reason` (conflict / implied) |
 | | `pattern` (once) | `type` (linear / circular / points), `linked` |
 | | `scissors` (once) | `mode` (trim / split) |
+| | `curve` (once) | `clicks` (smooth / corner) |
 | | `pattern-edit` (once) | `type` |
 | | `paste` (once) | `what` (ink / image / text) |
 | | `image-import` (once) | `via` (picker / drop) |
@@ -447,6 +449,54 @@ exactly as if it were one layer.
   the active layer, like painting in Paint.NET.
 
 Layers have a name, visibility, opacity and order.
+
+## Curves (V)
+
+The **Curve** tool draws cubic Bézier paths, segment by segment, like a
+pen tool:
+
+- **Click** a point. With **Smooth clicks** (options bar, the default) the
+  path goes through it without a kink: its handles line up with the
+  points either side, and a **Smooth** relation keeps them so. With
+  **Corner clicks**, a kink.
+- **Press and drag** to pull the point's handle out yourself (Shift: 15°
+  steps); the other side mirrors it.
+- Starting or ending on the **free end of a line, an arc or a curve**
+  continues it: the handle takes its direction and a **Tangent** (or
+  Smooth) relation keeps it; drag the handle elsewhere to make a corner
+  instead. At a corner of two shapes it doesn't guess.
+- **Click the first point** to close the path; Enter, Esc or a
+  double-click ends it. Each segment is one undo step. Points snap like
+  line ends (ends, middles, on line / circle / curve…).
+
+A curve is two end points and two **handles**, all ordinary points: the
+handles show (small squares on stems) when the curve or one of its points
+is selected, with the neighbouring curve's handle at a joint; otherwise
+they can't be picked or snapped to. With Select, **drag a handle** to
+shape the curve and **drag an end** to move it (its handle comes along),
+even when nothing anchors the drawing; drag the curve itself to move it.
+Properties shows its length.
+
+Relations: everything that works on points works on the ends and handles
+(an end and its handle → **Horizontal** for a level end, a dimension on a
+handle…), plus:
+
+| Selection | Relation |
+|---|---|
+| curve + line, or curve + circle / arc | **Tangent**: the nearest end leaves along the line (or tangent to the circle) |
+| two curves | **Smooth**: no kink where they meet (handle lengths stay free) |
+| curve + points | **On curve**: the points stay on it, anywhere along it (also what snapping onto a curve makes) |
+| curve | Fix (all four points) |
+
+With the other tools: **Fill** paints areas curves close; **Scissors**
+trims and splits curves (a split keeps the shape and adds Smooth; tangent
+relations follow the end they belong to) and trims other shapes back to a
+curve (their new end stays On curve); **Mirror** and the **patterns** copy
+curves, handles included; construction, layers, styles, saving, parts,
+SVG / PNG / print export (true curves) and DXF (R12 has no splines: a
+polyline within 0.01 mm) all take them. Offset doesn't (the offset of a
+Bézier isn't one). Core in `core/bezier.js` (math) and the `Bezier`
+entity; tool in `tools/bezier.js`.
 
 ## Scissors (X)
 

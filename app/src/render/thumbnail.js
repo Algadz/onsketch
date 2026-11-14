@@ -1,4 +1,5 @@
-import { Arc, Circle, Line, Point } from '../core/entities.js';
+import { Arc, Bezier, Circle, Line, Point } from '../core/entities.js';
+import { bezierBBox } from '../core/bezier.js';
 import { Renderer } from './renderer.js';
 import { View } from './view.js';
 import { inkBounds } from '../core/strokes.js';
@@ -22,6 +23,7 @@ export function projectBounds(project) {
       if (project.layerOf(e)?.visible === false) continue;
       if (e instanceof Line) { acc(e.p1.x, e.p1.y); acc(e.p2.x, e.p2.y); }
       else if (e instanceof Circle || e instanceof Arc) { acc(e.center.x - e.r, e.center.y - e.r); acc(e.center.x + e.r, e.center.y + e.r); }
+      else if (e instanceof Bezier) { const b = bezierBBox(e.ctrl()); acc(b.minX, b.minY); acc(b.maxX, b.maxY); }
       else if (e instanceof Point) acc(e.x, e.y);
     }
     for (const st of s.strokes || []) {

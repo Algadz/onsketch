@@ -21,7 +21,7 @@ export class FillsMixin {
   /** Shapes of one layer that can bound a fill. */
   _layerShapes(sketch, layerId) {
     return sketch.entities.filter(e => !e.construction && e.layerId === layerId
-      && (e.constructor.kind === 'line' || e.constructor.kind === 'arc' || e.constructor.kind === 'circle'));
+      && (e.constructor.kind === 'line' || e.constructor.kind === 'arc' || e.constructor.kind === 'circle' || e.constructor.kind === 'bezier'));
   }
 
   /** Attach each stored fill's current area (after load / undo); paint

@@ -204,6 +204,10 @@ export class ChromeMixin {
       html += sep + `<label class="opt">Weight <select data-pen="lineWidth">${LINE_WEIGHTS.map(w => `<option value="${w}"${p.lineWidth === w ? ' selected' : ''}>${w} px</option>`).join('')}</select></label>`;
       html += `<label class="opt">Line <select data-pen="lineStyle">${Object.entries(LINE_STYLES).map(([k, v]) => `<option value="${k}"${p.lineStyle === k ? ' selected' : ''}>${v.label}</option>`).join('')}</select></label>`;
       html += sep + `<button class="tbtn toggle${this.constructionMode ? ' on' : ''}" data-opt="construction" title="Draw construction (reference) geometry">${ACTION_ICONS.construction}<span class="btn-label">Construction</span></button>`;
+      if (t.id === 'curve') {
+        const corner = this.curveClicks === 'corner';
+        html += sep + `<span class="seg" title="What a click (without dragging) makes"><button class="${corner ? '' : 'on'}" data-opt="curve-smooth" title="Clicks make smooth points: the curve passes through without a kink">Smooth clicks</button><button class="${corner ? 'on' : ''}" data-opt="curve-corner" title="Clicks make corners; drag to pull a handle">Corner clicks</button></span>`;
+      }
       if (t.id === 'hexagon') {
         html += sep + `<label class="opt">Sides <input type="number" min="3" max="64" step="1" value="${this.polygonSides}" data-opt="sides"></label>`;
       }
@@ -251,6 +255,7 @@ export class ChromeMixin {
       el.addEventListener('click', () => {
         if (k === 'construction') this._runAction('construction');
         else if (k === 'fill-mode' || k === 'erase-mode') this.setFillErase(k === 'erase-mode');
+        else if (k === 'curve-smooth' || k === 'curve-corner') { this.curveClicks = k === 'curve-corner' ? 'corner' : 'smooth'; this._refreshOptionsBar(); }
         else if (k === 'scissors-trim' || k === 'scissors-split') this.setScissorsMode(k === 'scissors-split' ? 'split' : 'trim');
         else this._runAction(k);
       });

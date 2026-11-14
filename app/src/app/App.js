@@ -1,6 +1,6 @@
 import { constraintLabel } from '../core/constraints.js';
-import { Arc, Circle, Line, Point, newId } from '../core/entities.js';
-import { ArcEndpointArcEndpointCoincidentConstraint, ArcEndpointCoincidentConstraint, ArcEndpointFixConstraint, ArcEndpointMidpointConstraint, ArcEndpointOnCircleConstraint, ArcEndpointOnLineConstraint, CoincidentConstraint, FixConstraint, HorizontalConstraint, MidpointConstraint, PointOnCircleConstraint, PointOnLineConstraint, PointRefHorizontalConstraint, PointRefVerticalConstraint, VerticalConstraint } from '../core/constraints.js';
+import { Arc, Bezier, Circle, Line, Point, isHiddenHandle, newId } from '../core/entities.js';
+import { ArcEndpointArcEndpointCoincidentConstraint, ArcEndpointCoincidentConstraint, ArcEndpointFixConstraint, ArcEndpointMidpointConstraint, ArcEndpointOnCircleConstraint, ArcEndpointOnLineConstraint, CoincidentConstraint, FixConstraint, HorizontalConstraint, MidpointConstraint, PointOnCircleConstraint, PointOnCurveConstraint, PointOnLineConstraint, PointRefHorizontalConstraint, PointRefVerticalConstraint, VerticalConstraint } from '../core/constraints.js';
 import { Solver } from '../core/solver.js';
 import { Project } from '../core/model.js';
 import { View } from '../render/view.js';
@@ -66,6 +66,7 @@ export class App {
     this.offsetInputEl = null;
     this.pattern = null;           // pattern being created / edited (patterns.js)
     this.scissorsMode = 'trim';    // Scissors tool: 'trim' | 'split'
+    this.curveClicks = 'smooth';   // Curve tool: clicks make 'smooth' or 'corner' points
     this.polygonSides = 6;
     this.gridOn = true; this.snapOn = true; this.constructionMode = false;
     this.lastSnap = null; this.lastWorldCursor = { x:0, y:0 };
@@ -260,6 +261,9 @@ export class App {
     if (snap.kind === 'on-circle' && snap.entity && (snap.entity instanceof Circle || snap.entity instanceof Arc)) {
       return new PointOnCircleConstraint(point.id, snap.entity.id, snap.entity.center.id);
     }
+    if (snap.kind === 'on-curve' && snap.entity instanceof Bezier && !snap.entity.children().includes(point)) {
+      return new PointOnCurveConstraint(point.id, snap.entity.id, snap.entity.ctrl().map(p => p.id));
+    }
     return null;
   }
 
@@ -433,7 +437,7 @@ export class App {
     for (const s of sketches) {
       for (const e of s.entities) {
         if (!ok(e)) continue;
-        for (const c of e.children()) if (c.hit(world, v)) return c;
+        for (const c of e.children()) if (!isHiddenHandle(c) && c.hit(world, v)) return c;
         if (e instanceof Point && e.hit(world, v)) return e;
       }
     }
@@ -458,7 +462,7 @@ export class App {
       for (const s of sketches) {
         for (const e of s.entities) {
           if (!ok(e)) continue;
-          for (const c of e.children()) if (c.hit(world, v)) add(c);
+          for (const c of e.children()) if (!isHiddenHandle(c) && c.hit(world, v)) add(c);
           if (e instanceof Point && e.hit(world, v)) add(e);
         }
       }
@@ -499,6 +503,7 @@ export class App {
     if (e instanceof Line) return 'L';
     if (e instanceof Circle) return 'C';
     if (e instanceof Arc) return 'A';
+    if (e instanceof Bezier) return 'B';
     return '?';
   }
 
@@ -643,7 +648,7 @@ export class App {
     if (!this.snapActive()) return null;
     // Arrow ends snap like line ends (and attach to what they land on),
     // when drawing an arrow or dragging the end of a selected one.
-    const drawing = ['line','centerLine','rectangle','centerRectangle','circle','threePointCircle','hexagon','arc','point','arrow'].includes(this.toolName)
+    const drawing = ['line','centerLine','rectangle','centerRectangle','circle','threePointCircle','hexagon','arc','point','curve','arrow'].includes(this.toolName)
       || (this.toolName === 'select' && this.tool && this.tool.arrowEnd);
     const dragging = this.toolName === 'select' && this.tool && this.tool.dragging;
     if (!drawing && !dragging) return null;

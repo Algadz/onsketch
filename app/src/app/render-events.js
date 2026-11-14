@@ -1,10 +1,12 @@
 import { toolDef } from '../ui/tool-defs.js';
 import { fillCursor } from '../ui/cursors.js';
-import { Arc, Circle, Line, Point } from '../core/entities.js';
+import { Arc, Bezier, Circle, Line, Point } from '../core/entities.js';
+import { bezierBBox, bezierSamples } from '../core/bezier.js';
 import { SelectTool } from '../tools/select.js';
 import { ArcTool, CenterLineTool, CenterRectangleTool, CircleTool, HexagonTool, LineTool, PointTool, RectangleTool, ThreePointCircleTool } from '../tools/draw.js';
 import { FillTool } from '../tools/fill.js';
 import { ScissorsTool } from '../tools/scissors.js';
+import { BezierTool } from '../tools/bezier.js';
 import { EraserTool, InkTool } from '../tools/freehand.js';
 import { TextTool } from '../tools/text.js';
 import { ArrowTool } from '../tools/arrow.js';
@@ -47,6 +49,8 @@ export class RenderEventsMixin {
       if (prev.dashedPaths) for (const p of prev.dashedPaths) this.renderer.drawTempPath(p, true);
       if (prev.circles)    for (const c of prev.circles) this.renderer.drawTempCircle(c.center, c.r);
       if (prev.arcs)       for (const a of prev.arcs) this.renderer.drawTempArc(a.center, a.r, a.a0, a.a1, !!a.clockwise);
+      if (prev.curves)     for (const c of prev.curves) this.renderer.drawTempPath(bezierSamples(c, 48), prev.dashed);
+      if (prev.handles)    this.renderer.drawTempHandles(prev.handles);
       if (prev.points)     for (const p of prev.points) this.renderer.drawTempPoint(p);
       if (prev.box)        this.renderer.drawSelectionBox(prev.box);
       if (prev.dimPicks)   this.renderer.drawDimPicks(prev.dimPicks);
@@ -64,6 +68,7 @@ export class RenderEventsMixin {
       if (opPrev.paths)   for (const p of opPrev.paths) this.renderer.drawTempPath(p, true);
       if (opPrev.circles) for (const c of opPrev.circles) this.renderer.drawTempCircle(c.center, c.r);
       if (opPrev.arcs)    for (const a of opPrev.arcs) this.renderer.drawTempArc(a.center, a.r, a.a0, a.a1, !!a.clockwise);
+      if (opPrev.curves)  for (const c of opPrev.curves) this.renderer.drawTempPath(bezierSamples(c, 48), true);
       if (opPrev.points)  for (const p of opPrev.points) this.renderer.drawTempPoint(p);
       if (opPrev.marks)   this.renderer.drawPatternMarks(opPrev.marks);
     }
@@ -126,6 +131,7 @@ export class RenderEventsMixin {
       case 'smartdim':  this.tool = new SmartDimensionTool(this); break;
       case 'fill':      this.tool = new FillTool(this); break;
       case 'trim':      this.tool = new ScissorsTool(this); break;
+      case 'curve':     this.tool = new BezierTool(this); break;
       case 'pen':       this.tool = new InkTool(this, 'pen'); break;
       case 'marker':    this.tool = new InkTool(this, 'marker'); break;
       case 'eraser':    this.tool = new EraserTool(this); break;
@@ -303,7 +309,7 @@ export class RenderEventsMixin {
    *  snapping matters. */
   _placingOrDragging() {
     const t = this.tool;
-    return ['line', 'centerLine', 'rectangle', 'centerRectangle', 'circle', 'threePointCircle', 'hexagon', 'arc', 'point', 'arrow'].includes(this.toolName)
+    return ['line', 'centerLine', 'rectangle', 'centerRectangle', 'circle', 'threePointCircle', 'hexagon', 'arc', 'point', 'curve', 'arrow'].includes(this.toolName)
       || !!(t && (t.dragging || t.arrowEnd));
   }
 
@@ -385,6 +391,7 @@ export class RenderEventsMixin {
       else if (k === 'h') this.setTool('hexagon');
       else if (k === 'a') this.setTool('arc');
       else if (k === 'p') this.setTool('point');
+      else if (k === 'v') this.setTool('curve');
       else if (k === 'x') { if (this.toolName === 'trim') this.setScissorsMode(this.scissorsMode === 'split' ? 'trim' : 'split'); else this.setTool('trim'); }
       else if (k === 'd') this.setTool('smartdim');
       else if (k === 'b') this.setTool('fill');
@@ -411,6 +418,7 @@ export class RenderEventsMixin {
       if (e instanceof Line) { acc(e.p1); acc(e.p2); }
       else if (e instanceof Circle) { acc({x:e.center.x-e.r, y:e.center.y-e.r}); acc({x:e.center.x+e.r, y:e.center.y+e.r}); }
       else if (e instanceof Arc)    { acc({x:e.center.x-e.r, y:e.center.y-e.r}); acc({x:e.center.x+e.r, y:e.center.y+e.r}); }
+      else if (e instanceof Bezier) { const b = bezierBBox(e.ctrl()); acc({ x: b.minX, y: b.minY }); acc({ x: b.maxX, y: b.maxY }); }
       else if (e instanceof Point)  { acc(e); }
     }
     if (minX === Infinity) return;

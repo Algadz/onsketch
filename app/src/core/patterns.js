@@ -1,5 +1,6 @@
 import { Constraint } from './constraints.js';
-import { Arc, Circle, Line, Point } from './entities.js';
+import { Arc, Bezier, Circle, Line, Point } from './entities.js';
+import { bezierBBox } from './bezier.js';
 
 /* =============== PATTERNS =======================================
    Linear, circular and point ("sketch-driven") patterns of geometry,
@@ -370,6 +371,9 @@ export function copyShape(seed, T, pointMap) {
   } else if (seed instanceof Circle) {
     e = new Circle(pt(seed.center), seed.r);
     pairs.push([seed.id, e.id, 'r']);
+  } else if (seed instanceof Bezier) {
+    e = new Bezier(pt(seed.p1), pt(seed.c1), pt(seed.c2), pt(seed.p2));
+    pairs.push([seed.id, e.id, 'e']);
   } else if (seed instanceof Point) {
     if (pointMap.has(seed.id)) return null;      // already there as a corner of another copy
     const q = T.map(seed);
@@ -505,6 +509,7 @@ export function shapesBBox(shapes) {
   for (const e of shapes) {
     if (e instanceof Line) { acc(e.p1.x, e.p1.y); acc(e.p2.x, e.p2.y); }
     else if (e instanceof Circle || e instanceof Arc) { acc(e.center.x - e.r, e.center.y - e.r); acc(e.center.x + e.r, e.center.y + e.r); }
+    else if (e instanceof Bezier) { const b = bezierBBox(e.ctrl()); acc(b.minX, b.minY); acc(b.maxX, b.maxY); }
     else if (e instanceof Point) acc(e.x, e.y);
   }
   return minX === Infinity ? null : { minX, minY, maxX, maxY };
@@ -512,7 +517,7 @@ export function shapesBBox(shapes) {
 
 /** First point of a shape (where a point pattern's origin defaults to). */
 export function shapeReferencePoint(e) {
-  if (e instanceof Line) return e.p1;
+  if (e instanceof Line || e instanceof Bezier) return e.p1;
   if (e instanceof Circle || e instanceof Arc) return e.center;
   if (e instanceof Point) return e;
   return null;

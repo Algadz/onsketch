@@ -1,4 +1,5 @@
-import { Arc, Circle, Line, Point } from '../core/entities.js';
+import { Arc, Bezier, Circle, Line, Point } from '../core/entities.js';
+import { bezierBBox } from '../core/bezier.js';
 import { Tool } from './tool.js';
 
 export class SelectTool extends Tool {
@@ -314,6 +315,7 @@ export class SelectTool extends Tool {
           if (e instanceof Line)        inside = inBox(e.p1) && inBox(e.p2);
           else if (e instanceof Circle) inside = inBox(e.center);
           else if (e instanceof Arc)    inside = inBox(e.center);
+          else if (e instanceof Bezier) { const b = bezierBBox(e.ctrl()); inside = inBox({ x: b.minX, y: b.minY }) && inBox({ x: b.maxX, y: b.maxY }); }
           else if (e instanceof Point)  inside = inBox(e);
           if (!inside) continue;
           if (wasOffsetBox) {
@@ -321,7 +323,7 @@ export class SelectTool extends Tool {
               if (!this.app.offsetEntityIds.includes(e.id)) this.app.offsetEntityIds.push(e.id);
             }
           } else if (wasMirrorBox) {
-            if (e instanceof Point || e instanceof Line || e instanceof Circle) mirrorHits.push(e);
+            if (e instanceof Point || e instanceof Line || e instanceof Circle || e instanceof Bezier) mirrorHits.push(e);
           } else if (wasPatternBox) {
             mirrorHits.push(e);
           } else {

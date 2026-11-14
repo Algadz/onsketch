@@ -1,4 +1,4 @@
-import { Arc, Circle, Line, Point } from '../core/entities.js';
+import { Arc, Bezier, Circle, Line, Point } from '../core/entities.js';
 import { DistanceConstraint, MidpointConstraint, RadiusConstraint, constraintLabel } from '../core/constraints.js';
 import { allDimensions, ensureDimensionNames } from '../core/equations.js';
 
@@ -133,7 +133,7 @@ export class DimLinksMixin {
   /** Shapes the right-click actions apply to: the selection when the
    *  clicked shape is part of it, else just the clicked shape. */
   _actionTargets(item) {
-    const curves = (list) => list.filter(e => e instanceof Line || e instanceof Circle || e instanceof Arc);
+    const curves = (list) => list.filter(e => e instanceof Line || e instanceof Circle || e instanceof Arc || e instanceof Bezier);
     if (item && item.selected) {
       const sel = curves(this._selectedTopEntities());
       if (sel.length) return sel;
@@ -144,7 +144,7 @@ export class DimLinksMixin {
   /** Context-menu actions for the shape under the cursor. */
   contextActions(items) {
     const owner = (e) => (e instanceof Point ? (this.project.ownerOf(e) || e) : e);
-    const item = items.map(owner).find(e => e instanceof Line || e instanceof Circle || e instanceof Arc);
+    const item = items.map(owner).find(e => e instanceof Line || e instanceof Circle || e instanceof Arc || e instanceof Bezier);
     if (!item) return [];
     const targets = this._actionTargets(item);
     const out = [];

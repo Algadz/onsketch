@@ -1,5 +1,5 @@
 import { evaluate, isEquation } from '../core/expr.js';
-import { Arc, Circle, Line, Point } from '../core/entities.js';
+import { Arc, Bezier, Circle, Line, Point } from '../core/entities.js';
 import { isDimension } from '../core/equations.js';
 import {
   PATTERN_LABELS, PATTERN_MAX_COPIES, PatternConstraint, circularStep, cleanPatternParams, defaultPatternParams,
@@ -44,7 +44,7 @@ const nice = (v) => {
 };
 const ACTION_TYPE = { 'linear-pattern': 'linear', 'circular-pattern': 'circular', 'point-pattern': 'points' };
 const TYPE_ICON = { linear: 'linear-pattern', circular: 'circular-pattern', points: 'point-pattern' };
-const isShape = (e) => e instanceof Line || e instanceof Circle || e instanceof Arc || e instanceof Point;
+const isShape = (e) => e instanceof Line || e instanceof Circle || e instanceof Arc || e instanceof Point || e instanceof Bezier;
 
 /** Read / write a parameter by path ('d1.spacing', 'count'…). */
 const getPath = (p, path) => path.split('.').reduce((o, k) => (o ? o[k] : undefined), p);
@@ -590,6 +590,7 @@ export class PatternsMixin {
           if (s instanceof Line) out.paths.push([T.map(s.p1), T.map(s.p2)]);
           else if (s instanceof Arc) out.arcs.push({ center: T.map(s.center), r: s.r, a0: s.a0 + T.rot, a1: s.a1 + T.rot, clockwise: s.clockwise });
           else if (s instanceof Circle) out.circles.push({ center: T.map(s.center), r: s.r });
+          else if (s instanceof Bezier) (out.curves = out.curves || []).push(s.ctrl().map(p => T.map(p)));
           else if (s instanceof Point) out.points.push(T.map(s));
         }
       }

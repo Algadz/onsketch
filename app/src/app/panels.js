@@ -1,6 +1,10 @@
 import { evaluate } from '../core/expr.js';
 import { dist } from '../core/math.js';
-import { Arc, Circle, Line, Point } from '../core/entities.js';
+import { Arc, Bezier, Circle, Line, Point } from '../core/entities.js';
+import { bezierLength } from '../core/bezier.js';
+
+const fmtNum = (v) => String(Number(Number(v).toFixed(3)));
+const CURVE_KINDS = new Set(['smooth', 'curveTangent', 'pointOnCurve']);
 import { CONSTRAINT_GLYPHS, constraintLabel, Constraint } from '../core/constraints.js';
 import { isAngular, isDimension } from '../core/equations.js';
 import { availableDimensions, availableRelations, constraintAppliesToSelection } from '../editor/relations.js';
@@ -104,11 +108,13 @@ export class PanelsMixin {
 
   _glyphOf(e) {
     if (e instanceof Constraint) return CONSTRAINT_GLYPHS[e.kind] || '•';
-    return e instanceof Point ? 'P' : e instanceof Line ? 'L' : e instanceof Circle ? 'C' : e instanceof Arc ? 'A' : '?';
+    if (e instanceof Point && e.bezierOwner) return 'H';
+    return e instanceof Point ? 'P' : e instanceof Line ? 'L' : e instanceof Circle ? 'C' : e instanceof Arc ? 'A' : e instanceof Bezier ? 'B' : '?';
   }
 
   _kindName(e) {
-    return e instanceof Point ? 'point' : e instanceof Line ? 'line' : e instanceof Circle ? 'circle' : e instanceof Arc ? 'arc' : 'item';
+    if (e instanceof Point && e.bezierOwner) return 'handle';
+    return e instanceof Point ? 'point' : e instanceof Line ? 'line' : e instanceof Circle ? 'circle' : e instanceof Arc ? 'arc' : e instanceof Bezier ? 'curve' : 'item';
   }
 
   /** Shapes a constraint ties, as the user thinks of them: a line rather
@@ -125,6 +131,8 @@ export class PanelsMixin {
         out.push(e); ids.delete(e.id); ids.delete(e.center.id);
       } else if (e instanceof Line && ids.has(e.id)) {
         out.push(e); ids.delete(e.id); ids.delete(e.p1.id); ids.delete(e.p2.id);
+      } else if (e instanceof Bezier && (ids.has(e.id) || (CURVE_KINDS.has(c.kind) && e.children().some(p => ids.has(p.id))))) {
+        out.push(e); ids.delete(e.id); for (const p of e.children()) if (p !== e.p1 && p !== e.p2) ids.delete(p.id);
       }
     }
     for (const id of ids) { const x = byId.get(id); if (x) out.push(x); }
@@ -188,7 +196,7 @@ export class PanelsMixin {
     const u = esc(this.project.units);
     const e = geom[0];
     let html = '';
-    const curves = geom.filter(x => x instanceof Line || x instanceof Circle || x instanceof Arc);
+    const curves = geom.filter(x => x instanceof Line || x instanceof Circle || x instanceof Arc || x instanceof Bezier);
     if (geom.length === 1) {
       if (e instanceof Point) {
         html += this._numRow('X', 'x', e.x, u) + this._numRow('Y', 'y', e.y, u);
@@ -202,6 +210,11 @@ export class PanelsMixin {
         html += this._numRow('Diameter', 'diameter', e.r * 2, u);
       } else if (e instanceof Arc) {
         html += this._numRow('Radius', 'r', e.r, u);
+      } else if (e instanceof Bezier) {
+        html += `<div class="prop-row"><label>Length</label><span class="prop-val">${fmtNum(bezierLength(e.ctrl()))} ${u}</span></div>`;
+        html += `<div class="hint">Drag the square handles to shape the curve. Select an end and its handle for Horizontal / Vertical, or the curve and a line for Tangent.</div>`;
+      } else if (e instanceof Point && e.bezierOwner) {
+        html += `<div class="hint">Handle of a curve: its direction is the curve's direction at that end, its length how far the curve keeps it.</div>`;
       }
     }
     if (curves.length) {
@@ -436,7 +449,7 @@ export class PanelsMixin {
     if (constr) {
       constr.indeterminate = constr.hasAttribute('data-mixed');
       constr.addEventListener('change', () => {
-        for (const x of geom) if (x instanceof Line || x instanceof Circle || x instanceof Arc) x.construction = constr.checked;
+        for (const x of geom) if (x instanceof Line || x instanceof Circle || x instanceof Arc || x instanceof Bezier) x.construction = constr.checked;
         this.commit();
         this.refreshUI();
       });

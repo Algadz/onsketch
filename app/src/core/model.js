@@ -1,4 +1,4 @@
-import { Arc, Circle, Line, Point, ensureIdAbove, newId } from './entities.js';
+import { Arc, Bezier, Circle, Line, Point, ensureIdAbove, newId } from './entities.js';
 import { Layer, cleanStyle, legacyFill } from './style.js';
 import { findClosedProfiles, interiorPoint, planarCycles } from './regions.js';
 
@@ -65,7 +65,7 @@ export function fillToJSON(f) {
   const o = { id: f.id, layerId: f.layerId, color: f.color, opacity: f.opacity ?? 1, seed: { x: f.seed.x, y: f.seed.y } };
   return o;
 }
-import { AngleConstraint, ArcEndpointArcEndpointCoincidentConstraint, ArcEndpointCoincidentConstraint, ArcEndpointFixConstraint, ArcEndpointMidpointConstraint, ArcEndpointOnCircleConstraint, ArcEndpointOnLineConstraint, CoincidentConstraint, CollinearConstraint, ConcentricConstraint, CurveDistanceConstraint, DirectedAngleConstraint, DistanceConstraint, EqualLengthConstraint, EqualRadiusConstraint, FixConstraint, HorizontalConstraint, MidpointConstraint, OffsetConstraint, OffsetDistanceConstraint, ParallelConstraint, PerpendicularConstraint, PointLineDistanceConstraint, PointOnCircleConstraint, PointOnLineConstraint, PointRefHorizontalConstraint, PointRefVerticalConstraint, RadiusConstraint, SymmetricConstraint, TangentCircleCircleConstraint, TangentLineCircleConstraint, VerticalConstraint } from './constraints.js';
+import { AngleConstraint, ArcEndpointArcEndpointCoincidentConstraint, ArcEndpointCoincidentConstraint, ArcEndpointFixConstraint, ArcEndpointMidpointConstraint, ArcEndpointOnCircleConstraint, ArcEndpointOnLineConstraint, CoincidentConstraint, CollinearConstraint, ConcentricConstraint, CurveDistanceConstraint, CurveTangentConstraint, DirectedAngleConstraint, DistanceConstraint, EqualLengthConstraint, EqualRadiusConstraint, SmoothConstraint, FixConstraint, HorizontalConstraint, MidpointConstraint, OffsetConstraint, OffsetDistanceConstraint, ParallelConstraint, PerpendicularConstraint, PointLineDistanceConstraint, PointOnCircleConstraint, PointOnCurveConstraint, PointOnLineConstraint, PointRefHorizontalConstraint, PointRefVerticalConstraint, RadiusConstraint, SymmetricConstraint, TangentCircleCircleConstraint, TangentLineCircleConstraint, VerticalConstraint } from './constraints.js';
 
 /* =============== 5. SKETCH / PROJECT MODEL ==================== */
 export class Sketch {
@@ -331,6 +331,7 @@ export class Project {
         else if (ej.type === 'line')   { const a = reviveEntity(ej.p1), b = reviveEntity(ej.p2); e = new Line(a, b); }
         else if (ej.type === 'circle') { const c = reviveEntity(ej.center); e = new Circle(c, ej.r); }
         else if (ej.type === 'arc')    { const c = reviveEntity(ej.center); e = new Arc(c, ej.r, ej.a0, ej.a1); }
+        else if (ej.type === 'bezier') { e = new Bezier(reviveEntity(ej.p1), reviveEntity(ej.c1), reviveEntity(ej.c2), reviveEntity(ej.p2)); }
         else return null;
         if (ej.id) e.id = ej.id;
         e.construction = !!ej.construction;
@@ -390,6 +391,9 @@ export class Project {
             cj.offsetKind === 'line' ? { l1: cj.l1, l2: cj.l2 } : { p1: cj.p1, p2: cj.p2 }); break;
           case 'offsetDistance': c = new OffsetDistanceConstraint(cj.pairs, cj.value); break;
           case 'pattern': c = PatternConstraint.fromJSON(cj); break;
+          case 'curveTangent': c = CurveTangentConstraint.fromJSON(cj); break;
+          case 'smooth': c = new SmoothConstraint(cj.anchorId, cj.h1, cj.h2); break;
+          case 'pointOnCurve': c = new PointOnCurveConstraint(cj.pointId, cj.curveId, cj.pts); break;
         }
         if (c && isSelfReferential(c)) c = null;   // e.g. a point "on" a line it is an end of
         if (c) {

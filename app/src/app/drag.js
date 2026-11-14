@@ -336,6 +336,27 @@ export class DragMixin {
     return ignore;
   }
 
+  /** Handles of the curves that start or end at point p. */
+  _curveHandlesAt(p) {
+    const sketch = this.activeSketch();
+    const out = [];
+    if (!sketch || !p) return out;
+    for (const e of sketch.entities) {
+      if (e.constructor.kind !== 'bezier') continue;
+      if (e.p1 === p) out.push(e.c1);
+      if (e.p2 === p) out.push(e.c2);
+    }
+    return out;
+  }
+
+  /** Dragging one point of a curve (an anchor or a handle) reshapes it,
+   *  even when nothing anchors the drawing (which would otherwise move it
+   *  as a whole). */
+  _isCurveShaping(hit, pts) {
+    if (!(hit instanceof Point) || pts.length !== 1) return false;
+    return !!hit.bezierOwner || this._curveHandlesAt(hit).length > 0;
+  }
+
   _dragJointConstraintKinds() {
     return new Set(['coincident', 'arcEndpointCoincident', 'arcEndpointArcEndpointCoincident']);
   }
@@ -576,6 +597,8 @@ export class DragMixin {
 
     if (hit instanceof Point) {
       addPointTargets(hit, 400);
+      // A curve's anchor carries its handles (the curve keeps its shape there).
+      for (const h of this._curveHandlesAt(hit)) if (!h.selected) addPointTargets(h, 60);
     } else if (hit instanceof Line) {
       addLineHandleTargets(hit, 400);
     } else if (pts.length === 1) {
@@ -945,6 +968,7 @@ export class DragMixin {
 
     if (!mirrorAxisLocks.length &&
         !isPointOnCircleHandleDrag &&
+        !this._isCurveShaping(hit, pts) &&
         components.length && components.every(c =>
           !this._componentIsAnchored(sketch, c, activeIds, pointById) &&
           !this._componentHasExternalJoint(sketch, c, jointKinds))) {

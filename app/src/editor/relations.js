@@ -1,4 +1,4 @@
-import { Arc, Circle, Line, Point } from '../core/entities.js';
+import { Arc, Bezier, Circle, Line, Point } from '../core/entities.js';
 import { CONSTRAINT_GLYPHS } from '../core/constraints.js';
 
 /* =============== 9. AVAILABLE-RELATIONS ENGINE ================ */
@@ -7,7 +7,8 @@ export function classifySelection(sel) {
   const lines   = sel.filter(e => e instanceof Line);
   const circles = sel.filter(e => e instanceof Circle);
   const arcs    = sel.filter(e => e instanceof Arc);
-  return { points, lines, circles, arcs, total: sel.length };
+  const curves  = sel.filter(e => e instanceof Bezier);
+  return { points, lines, circles, arcs, curves, total: sel.length };
 }
 
 export function sameLineRefs(line, ref) {
@@ -54,6 +55,9 @@ export function constraintAppliesToSelection(c, sel) {
       if (c.kind === 'arcEndpointOnCircle') return sameArcRef(c.ref);
       if (c.kind === 'concentric') return c.p1 === e.id || c.p2 === e.id;
       if (c.kind === 'symmetric') return c.p1 === e.id || c.p2 === e.id;
+      if (c.kind === 'smooth') return c.anchorId === e.id || c.h1 === e.id || c.h2 === e.id;
+      if (c.kind === 'curveTangent') return c.anchorId === e.id || c.handleId === e.id;
+      if (c.kind === 'pointOnCurve') return c.pointId === e.id;
       if ((c.kind === 'horizontal' || c.kind === 'vertical') &&
           selectedPoints.has(c.p1) && selectedPoints.has(c.p2)) return true;
     } else if (e instanceof Line) {
@@ -83,8 +87,12 @@ export function constraintAppliesToSelection(c, sel) {
       if (c.kind === 'coincident' && (refs.has(e.p1.id) || refs.has(e.p2.id))) return true;
     } else if (e instanceof Circle || e instanceof Arc) {
       if (refs.has(e.id) || refs.has(e.center.id)) return true;
+      if (c.kind === 'curveTangent' && c.circleId === e.id) return true;
+    } else if (e instanceof Bezier) {
+      if (refs.has(e.id) || e.children().some(p => refs.has(p.id))) return true;
     }
   }
+  if (c.kind === 'curveTangent' && c.line && hasLine(c.line)) return true;
 
   if ((c.kind === 'parallel' || c.kind === 'perpendicular' ||
        c.kind === 'collinear' || c.kind === 'equalLength' || c.kind === 'angle') &&
@@ -111,11 +119,22 @@ export function constraintAppliesToSelection(c, sel) {
 }
 
 export function availableRelations(sel) {
-  const { points, lines, circles, arcs, total } = classifySelection(sel);
+  const { points, lines, circles, arcs, curves, total } = classifySelection(sel);
   const out = [];
   const push = (kind, label) => out.push({ kind, label, glyph: CONSTRAINT_GLYPHS[kind] || '' });
 
   if (total === 0) return out;
+
+  // Bézier curves: tangent at an end, smooth joint, point on curve
+  if (curves.length) {
+    const roundish = circles.length + arcs.length;
+    if (total === 1) { push('fix', 'Fix'); return out; }
+    if (curves.length === 1 && total === 2 && (lines.length === 1 || roundish === 1)) { push('tangent', 'Tangent'); return out; }
+    if (curves.length === 2 && total === 2) { push('smooth', 'Smooth'); push('fix', 'Fix'); return out; }
+    if (curves.length === 1 && points.length === total - 1) { push('pointOnCurve', 'On curve'); return out; }
+    push('fix', 'Fix');
+    return out;
+  }
 
   // Single line: H, V, fix
   if (total === 1 && lines.length === 1) {

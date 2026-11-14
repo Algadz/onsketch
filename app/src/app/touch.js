@@ -285,7 +285,7 @@ export class TouchMixin {
   /* ---- Loupe ---- */
   _loupeWanted() {
     const n = this.toolName;
-    return ['line', 'centerLine', 'rectangle', 'centerRectangle', 'circle', 'threePointCircle', 'arc', 'hexagon', 'point', 'smartdim'].includes(n)
+    return ['line', 'centerLine', 'rectangle', 'centerRectangle', 'circle', 'threePointCircle', 'arc', 'hexagon', 'point', 'curve', 'smartdim'].includes(n)
       || (n === 'select' && !!this.tool?.dragging);
   }
   _loupeStart(ev) { this._loupeOn = true; this._loupeFollow(ev); }
