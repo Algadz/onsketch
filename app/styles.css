@@ -1251,6 +1251,28 @@
     color: var(--text-muted);
     font-size: 10px;
   }
+  /* Selection menu: relations, then chips to add one. */
+  #context-menu.cm-selection { max-height: min(72vh, 480px); max-width: 300px; }
+  .cm-rel .meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 120px; }
+  .cm-rel .cm-rel-name { white-space: nowrap; }
+  .cm-del {
+    flex: 0 0 auto; margin-left: auto; width: 26px; height: 26px; border: 0; border-radius: 6px;
+    background: transparent; color: var(--text-muted); font-size: 16px; line-height: 1; cursor: pointer;
+  }
+  .cm-rel .meta + .cm-del { margin-left: 4px; }
+  .cm-rel .meta:empty + .cm-del { margin-left: auto; }
+  .cm-del:hover { color: var(--overc); background: color-mix(in srgb, var(--overc) 10%, transparent); }
+  .cm-sub { padding-top: 8px; }
+  .cm-chips { display: flex; flex-wrap: wrap; gap: 5px; padding: 3px 5px 5px; }
+  .cm-chip {
+    display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 999px;
+    border: 1px solid var(--border); background: transparent; color: var(--text);
+    font: 12px ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif; cursor: pointer;
+  }
+  .cm-chip .glyph { color: var(--text-soft); font-weight: 700; }
+  .cm-chip.partial { border-style: dashed; }
+  .cm-chip:hover { background: var(--accent-softer); color: var(--accent); border-color: var(--accent-border, var(--accent)); }
+  .cm-none { padding: 4px 8px 6px; font-size: 11px; color: var(--text-muted); }
 
   /* ---------- Dark theme overrides for literal accent tints ---------- */
   :root[data-theme="dark"] .rel-btn:hover,
@@ -1756,6 +1778,9 @@
   .compact .fwin[data-win="equations"] { width: auto; }
   .compact .fwin[data-win="tools"], .compact .fwin[data-win="sketch"] { display: none; }
   .compact .context-menu-item { min-height: 44px; font-size: 14px; }
+  .compact .cm-chip { min-height: 38px; padding: 6px 12px; font-size: 14px; }
+  .compact .cm-del, .touch-ui .cm-del { width: 38px; height: 38px; font-size: 20px; }
+  .compact #context-menu.cm-selection { max-width: calc(100vw - 24px); }
   .compact .dim-input { font-size: 16px; padding: 6px 8px; }
   .compact.keypad-open .dim-input { top: 30% !important; }
   .compact #dimpad { bottom: 0; }

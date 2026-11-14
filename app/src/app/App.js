@@ -38,6 +38,7 @@ import { PatternsMixin } from './patterns.js';
 import { ExportMixin } from './export.js';
 import { GuideMixin } from './guide.js';
 import { InsertMixin } from './insert.js';
+import { ContextRelationsMixin } from './context-relations.js';
 import { onImageLoad } from '../core/images.js';
 import { setTextResolver, textLines } from '../core/strokes.js';
 import { projectLookup, resolveFields } from '../core/text-fields.js';
@@ -554,7 +555,15 @@ export class App {
     menu.addEventListener('pointerdown', e => e.stopPropagation());
     menu.addEventListener('mouseleave', () => this._setHoverTarget(null));
 
-    for (const item of items) {
+    // On something already selected: the selection's relations (see
+    // context-relations.js) instead of the list of what is under the cursor.
+    const onSelection = !ink && items.some(i => i.selected);
+    if (onSelection) {
+      menu.classList.add('cm-selection');
+      this._appendSelectionRelations(menu, () => this.showContextMenu(screen, world, ev));
+    }
+
+    for (const item of onSelection ? [] : items) {
       const row = document.createElement('button');
       row.type = 'button';
       row.className = 'context-menu-item';
@@ -604,7 +613,7 @@ export class App {
     menu.style.left = Math.max(margin, left) + 'px';
     menu.style.top = Math.max(margin, top) + 'px';
     this.contextMenuEl = menu;
-    if (items.length) this._setHoverTarget(items[0]);
+    if (items.length && !onSelection) this._setHoverTarget(items[0]);
 
     this.contextMenuDocPointerDown = (e) => {
       if (this.contextMenuEl && !this.contextMenuEl.contains(e.target)) this.hideContextMenu();
@@ -839,7 +848,7 @@ export class App {
 }
 
 /* Methods are grouped into mixins by concern; see src/app/*.js. */
-for (const Mixin of [ChromeMixin, EquationsMixin, LayersPanelMixin, FillsMixin, DimensionLabelsMixin, SelectionMixin, DragMixin, SolveMixin, OperationsMixin, ConstraintActionsMixin, RenderEventsMixin, PanelsMixin, PersistenceMixin, SketchWindowMixin, ReportMixin, DimLinksMixin, InkSelectMixin, InkLinksMixin, TextEditMixin, InkTransformMixin, TouchMixin, TouchUIMixin, CompactMixin, CloudMixin, ImageImportMixin, ClipboardMixin, PatternsMixin, ExportMixin, GuideMixin, InsertMixin]) {
+for (const Mixin of [ChromeMixin, EquationsMixin, LayersPanelMixin, FillsMixin, DimensionLabelsMixin, SelectionMixin, DragMixin, SolveMixin, OperationsMixin, ConstraintActionsMixin, RenderEventsMixin, PanelsMixin, PersistenceMixin, SketchWindowMixin, ReportMixin, DimLinksMixin, InkSelectMixin, InkLinksMixin, TextEditMixin, InkTransformMixin, TouchMixin, TouchUIMixin, CompactMixin, CloudMixin, ImageImportMixin, ClipboardMixin, PatternsMixin, ExportMixin, GuideMixin, InsertMixin, ContextRelationsMixin]) {
   for (const key of Object.getOwnPropertyNames(Mixin.prototype)) {
     if (key === 'constructor') continue;
     Object.defineProperty(App.prototype, key, Object.getOwnPropertyDescriptor(Mixin.prototype, key));

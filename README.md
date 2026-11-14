@@ -24,6 +24,7 @@ npm run test:layers  # layers as display only: editing, relations and dimensions
 npm run test:nosnap  # Alt = no snap while placing or dragging; Space-drag pans
 npm run test:pattern # linear / circular / point patterns: picks, linked copies, editing, equations, unlink
 npm run test:scissors # scissors: trim (click, drag), split, relations kept / moved / removed, undo
+npm run test:relmenu # right-click / long press on a selection: its relations, remove, add
 npm run test:curve   # Bézier curves: drawing, handles, tangent / smooth / on curve, fill, scissors, mirror, export
 npm run test:export  # Export (PNG, SVG, copy, DXF, print to scale) and the first-run steps, desktop and phone
 npm run test:formula # click a dimension to put it in an equation; variables driving tangents
@@ -339,7 +340,8 @@ Mouse input is handled exactly as on the desktop; touch and stylus input
 goes through `app/src/app/touch.js` first:
 
 - one finger: the current tool (a drag starts where the finger landed);
-  long press = right-click menu; double tap on empty canvas = zoom to fit;
+  long press = right-click menu (on a selection: its relations and the
+  ones to add); double tap on empty canvas = zoom to fit;
 - two fingers: pan and pinch-zoom; two-finger tap = Undo, three = Redo;
 - with a stylus, "Only the pencil draws": fingers pan and zoom only;
 - finger hit tolerances are 2.5× the mouse ones (pen 1.5×);
@@ -626,6 +628,21 @@ apply to all of them.
 Relations (coincident, horizontal, parallel, tangent, …) are shown as small
 badges where they act (toggle: Relations / `K`); click one to select it and
 Delete to remove it.
+
+Right-click (long press on a touch screen) **something already selected**
+for a shortcut to its relations, before the actions above:
+
+- one item: all its relations, with what they tie it to (*Parallel — with
+  Line e10*);
+- two or more: only the relations **between** them (a Horizontal on one of
+  them alone isn't listed);
+- each one: tap to select it, **×** to remove it (the menu stays, so several
+  can go in a row; Undo brings them back); past 6, *… more in Properties*;
+- then **Add**: the relations Properties would offer, as chips, without
+  the ones already holding (dashed: holds for part of the selection).
+
+On something not selected, the menu stays the list of what is under the
+cursor. Code: `app/context-relations.js`.
 
 Status colours (under, fully, over-defined) are for the whole drawing:
 layers don't change them.
