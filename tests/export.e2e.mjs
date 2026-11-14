@@ -1,4 +1,4 @@
-// End-to-end test of Export (images free; DXF and to-scale printing Pro),
+// End-to-end test of Export (every format free on every plan),
 // and of the first-run steps with their activation events, on desktop and
 // on a phone.
 //
@@ -55,7 +55,6 @@ const events = (page, name) => page.evaluate((n) => window.__ev.filter(e => e.ev
   await page.click('#menubar [data-action="export"]');
   await page.waitForSelector('#export-modal .export-preview canvas');
   check(await page.isChecked('#export-modal [data-opt="dimensions"]'), 'Export opens with a preview; dimensions on, as on screen');
-  check((await page.locator('#export-modal .pro-tag').count()) === 2, 'DXF and Print / PDF carry a Pro tag (accounts configured, not Pro)');
   if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + '/export-dialog.png' });
 
   // PNG: a real picture, 2×, white background.
@@ -90,23 +89,13 @@ const events = (page, name) => page.evaluate((n) => window.__ev.filter(e => e.ev
   const clip = await page.evaluate(async () => { try { const items = await navigator.clipboard.read(); return items.flatMap(i => i.types); } catch (e) { return ['error: ' + e.message]; } });
   check(clip.includes('image/png'), `Copy image puts a PNG on the clipboard (${clip.join(', ')})`);
 
-  // Pro formats: a prompt, nothing downloaded.
-  await page.click('#export-modal [data-format="dxf"]');
-  await page.waitForSelector('.app-dialog');
-  check(/DXF export is part of OnSketch Pro/.test(await page.textContent('.app-dialog h3')), 'DXF without Pro: says it is part of Pro');
-  await page.click('.app-dialog .btn:not(.primary)');
-  await page.waitForFunction(() => !document.querySelector('.app-dialog'));
-  check((await events(page, 'export-pro-prompt')).some(e => e.format === 'dxf') && (await events(page, 'export')).length === 4, 'events: export (png, svg ×2, copy) and export-pro-prompt');
+  check((await events(page, 'export')).length === 4, 'events: export (png, svg ×2, copy)');
 
-  // With Pro: DXF downloads, printing builds one sheet at a true scale.
-  await page.evaluate(() => { window._app.cloudPlan = { plan: 'premium', limit: null, canPrivate: true }; });
-  await page.click('#export-modal [data-a="close"]');
-  await page.click('#menubar [data-action="export"]');
-  await page.waitForSelector('#export-modal .export-preview canvas');
-  check((await page.locator('#export-modal .pro-tag').count()) === 0, 'Pro: no Pro tags');
+  // DXF and printing: free, no plan needed.
+  check(await page.evaluate(() => window._app.cloudPlan?.plan !== 'premium') && !(await page.$('#export-modal .pro-tag')), 'DXF and Print / PDF are offered without Pro');
   const [dxfDl] = await Promise.all([page.waitForEvent('download'), page.click('#export-modal [data-format="dxf"]')]);
   const dxf = (await readFile(await dxfDl.path())).toString();
-  check(/\.dxf$/.test(dxfDl.suggestedFilename()) && dxf.includes('ENTITIES') && dxf.includes('LINE') && dxf.includes('CIRCLE') && dxf.trim().endsWith('EOF'), 'Pro: DXF downloads (lines, circle, EOF)');
+  check(/\.dxf$/.test(dxfDl.suggestedFilename()) && dxf.includes('ENTITIES') && dxf.includes('LINE') && dxf.includes('CIRCLE') && dxf.trim().endsWith('EOF') && !(await page.$('.app-dialog')), 'free plan: DXF downloads straight away (lines, circle, EOF)');
   check(/\r\n700\r\n/.test(dxf) && /\r\n-700\r\n/.test(dxf), 'the DXF is at real size (the 1400 mm desk spans -700 to 700)');
   await page.evaluate(() => { window.__printed = null; window._app._printHook = (html, res) => { window.__printed = { html, pw: res.pw, ph: res.ph, scale: res.scale, fits: res.fits }; }; });
   check(/Auto \(1:10\)/.test(await page.textContent('#export-modal [data-opt="scale"]')), 'printing: Auto picks 1:10 for a 1.4 m desk on A4');

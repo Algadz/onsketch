@@ -698,8 +698,8 @@ await ctx.close();
   await p5.goto(base.replace('/app/', '/pricing/'));
   await p5.waitForFunction(() => window._pricing?.freePrivate === true);
   const priceText = await p5.evaluate(() => [...document.querySelectorAll('#pr-free li, #pr-pro li')].filter(li => !li.hidden).map(li => li.textContent.trim()).join(' | '));
-  check(/Private or public/.test(priceText) && !/Sketches are public/.test(priceText) && /DXF export/.test(priceText) && /PNG, SVG/.test(priceText),
-    'pricing (free private allowed): Free says private or public, Pro lists DXF and printing to scale');
+  check(/Private or public/.test(priceText) && !/Sketches are public/.test(priceText) && (await p5.evaluate(() => /DXF/.test(document.getElementById('pr-free').textContent) && !/DXF/.test(document.getElementById('pr-pro').textContent))) && /PNG, SVG/.test(priceText),
+    'pricing (free private allowed): Free says private or public and lists every export, DXF and PDF included');
   await p5.goto(base);
   await p5.waitForFunction(() => window._app);
   const b5 = await p5.locator('#canvas').boundingBox();

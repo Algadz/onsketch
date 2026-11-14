@@ -227,7 +227,7 @@ export class CloudMixin {
         ${this._avatarHTML()}
         <div class="am-who"><b>${p?.username ? '@' + esc(p.username) : 'No public username yet'}</b><span class="muted">${esc(u.email || '')}</span></div>
       </div>
-      <div class="am-plan muted">${plan ? (plan.plan === 'premium' ? '<b>OnSketch Pro</b> · unlimited sketches, real-size exports' : `<b>Free plan</b> · up to ${plan.limit} sketches`) : ''}</div>
+      <div class="am-plan muted">${plan ? (plan.plan === 'premium' ? '<b>OnSketch Pro</b> · unlimited sketches' : `<b>Free plan</b> · up to ${plan.limit} sketches`) : ''}</div>
       <a role="menuitem" class="am-item" href="projects/">My sketches</a>
       <a role="menuitem" class="am-item" href="/library/">Library</a>
       <button type="button" role="menuitem" class="am-item" data-a="profile">${p?.username ? 'Edit public profile…' : 'Choose a username…'}</button>

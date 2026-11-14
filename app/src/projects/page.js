@@ -86,7 +86,7 @@ class Page {
     const usage = $('usage');
     usage.hidden = false;
     if (plan === 'premium') {
-      usage.innerHTML = `<span><b>OnSketch Pro</b> · ${used} sketch${used === 1 ? '' : 'es'} · unlimited, with DXF and to-scale printing</span>
+      usage.innerHTML = `<span><b>OnSketch Pro</b> · ${used} sketch${used === 1 ? '' : 'es'} · unlimited</span>
         ${this.plan.hasSubscription ? '<button type="button" class="link" data-a="billing">Manage subscription</button>' : ''}`;
       usage.querySelector('[data-a="billing"]')?.addEventListener('click', (e) => this.manageSubscription(e.currentTarget));
     }
@@ -126,7 +126,7 @@ class Page {
     cards.push(this.full()
       ? `<li class="sketch-card upsell">
           <h2>You've used your ${limit} free sketches</h2>
-          <p>Delete one to make room, or go Pro for unlimited sketches${this.plan.canPrivate ? '' : ', private ones included'}, DXF export and printing to scale.</p>
+          <p>Delete one to make room, or go Pro for unlimited sketches${this.plan.canPrivate ? '' : ', private ones included'}.</p>
           <a class="btn primary" href="/pricing/">See OnSketch Pro</a>
         </li>`
       : `<li class="sketch-card new">

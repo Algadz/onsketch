@@ -6,21 +6,20 @@ import { track } from '../ui/analytics.js';
 /* =============== EXPORT ========================================
    Export… (menu bar, ⋯ menu): the drawing out of the editor.
 
-   Free, for slides, documents and messages:
+   Every format is free, on every plan.
+   Images, for slides, documents and messages:
      Copy image   PNG to the clipboard, ready to paste
      PNG          2× for sharp slides, white or transparent background
      SVG          vector, for documents and vector editors
-   OnSketch Pro, at real size for making things:
+   To scale, at real size for making things:
      DXF          shapes in millimetres, for CAD, CAM and laser cutters
      Print / PDF  one sheet at a true scale (1:1, 1:2, 1:5…) through the
                   browser's print dialog, where "Save as PDF" gives a PDF
 
    Options: dimensions (starts as shown on screen), construction lines,
-   transparent background (PNG and Copy). Without accounts configured
-   (self-hosted), everything is available.
+   transparent background (PNG and Copy).
    ============================================================ */
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-const PRO_FORMATS = new Set(['dxf', 'print']);
 
 export class ExportMixin {
   _exportSource() {
@@ -35,10 +34,6 @@ export class ExportMixin {
   _exportName() {
     return (this.project.name || 'sketch').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-').slice(0, 60) || 'sketch';
   }
-  /** Pro formats are open to Pro accounts, and to everyone where
-   *  accounts aren't configured. */
-  exportIsPro() { return !this.cloudEnabled || this.cloudPlan?.plan === 'premium'; }
-
   _download(blob, filename) {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -55,8 +50,6 @@ export class ExportMixin {
     this.refreshDrivenDimensions?.();
     const opts = this._exportOpts ||= { dimensions: null, construction: false, transparent: false, paper: 'A4', scale: 'auto' };
     if (opts.dimensions == null) opts.dimensions = this.showDimensions !== false && this._hasDimensions();
-    const pro = this.exportIsPro();
-    const tag = pro ? '' : ' <span class="pro-tag">Pro</span>';
     const back = document.createElement('div');
     back.className = 'modal-backdrop show';
     back.id = 'export-modal';
@@ -78,8 +71,8 @@ export class ExportMixin {
           </div>
           <h4>To scale <span class="muted">real size, for making things</span></h4>
           <div class="export-row">
-            <button type="button" class="btn" data-format="dxf">DXF${tag}</button>
-            <button type="button" class="btn" data-format="print">Print / PDF${tag}</button>
+            <button type="button" class="btn" data-format="dxf">DXF</button>
+            <button type="button" class="btn" data-format="print">Print / PDF</button>
           </div>
           <div class="export-row">
             <label class="opt">Paper <select data-opt="paper">${Object.keys(PAPERS).map(p => `<option${p === opts.paper ? ' selected' : ''}>${p}</option>`).join('')}</select></label>
@@ -143,17 +136,6 @@ export class ExportMixin {
   /** One export. @returns {Promise<string>} a short confirmation ('' when
    *  nothing happened). */
   async exportAs(format, opts = this._exportOpts || {}) {
-    if (PRO_FORMATS.has(format) && !this.exportIsPro()) {
-      track('export-pro-prompt', { format });
-      const go = await choose({
-        title: format === 'dxf' ? 'DXF export is part of OnSketch Pro' : 'To-scale printing is part of OnSketch Pro',
-        message: 'Pro adds DXF at real size and printing or PDF at a true scale, with unlimited sketches. Images (PNG, SVG, copy) stay free.',
-        cancelValue: false,
-        choices: [{ label: 'Not now', value: false }, { label: 'See OnSketch Pro', value: true, kind: 'primary' }],
-      });
-      if (go) { track('upgrade-click', { from: 'export-' + format }); this._writeLocal(); location.href = '/pricing/'; }
-      return '';
-    }
     const src = this._exportSource();
     const name = this._exportName();
     const info = { format, dimensions: !!opts.dimensions, construction: !!opts.construction };

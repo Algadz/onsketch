@@ -5,10 +5,9 @@
 | | Free | Pro ($9.99/month or $89/year) |
 |---|---|---|
 | Drawing tools | all | all |
-| Image export (PNG, SVG, copy) | yes | yes |
+| Export (PNG, SVG, copy, DXF, print / PDF to scale) | yes | yes |
 | Sketches in the account | 3 | unlimited |
 | Visibility | private or public, per sketch (after migration 0007; public only before) | private or public, per sketch |
-| Real-size export (DXF, print / PDF to scale) | no | yes |
 
 Enforced in the database (`projects_check` trigger): the limit counts all
 of a user's projects. Until migration 0007 is run, making a sketch private
@@ -19,9 +18,8 @@ always match what the server accepts. New sketches start private where
 there is a choice (then the last choice on that device); a username is
 asked for only when a sketch is made public.
 
-The real-size exports are checked in the app only (`exportIsPro()` in
-`app/src/app/export.js`): they run in the browser, so there is nothing for
-the server to refuse.
+Every export is free on every plan (DXF and to-scale printing were Pro
+for a few hours on 2026-11-14, then opened to all).
 `plan_of()` decides; the plan is stored in `account_plans`, which only the
 service role writes. The database name of Pro is `premium`.
 

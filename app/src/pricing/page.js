@@ -115,7 +115,7 @@ class Pricing {
     if (this.plan?.plan === 'premium') {
       banner.className = 'pr-banner ok';
       track('pro-activated');
-      banner.innerHTML = 'OnSketch Pro is on. Unlimited sketches, plus DXF and printing to scale from <b>Export</b> in the editor.';
+      banner.innerHTML = 'OnSketch Pro is on: unlimited sketches. Thank you for supporting OnSketch.';
     } else {
       banner.className = 'pr-banner warn';
       banner.textContent = 'Your payment went through, but Pro is taking longer than usual to switch on. Reload this page in a minute; if it still says Free, use “Report a problem” in the editor.';

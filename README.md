@@ -23,7 +23,7 @@ npm run test:linedim # Smart Dimension between two parallel lines
 npm run test:layers  # layers as display only: editing, relations and dimensions across layers, hiding
 npm run test:nosnap  # Alt = no snap while placing or dragging; Space-drag pans
 npm run test:pattern # linear / circular / point patterns: picks, linked copies, editing, equations, unlink
-npm run test:export  # Export (PNG, SVG, copy, DXF, print to scale, Pro gate) and the first-run steps, desktop and phone
+npm run test:export  # Export (PNG, SVG, copy, DXF, print to scale) and the first-run steps, desktop and phone
 node tests/style.e2e.mjs  # restyling arrows / texts after drawing, touch tap-through guard
 node tests/analytics.e2e.mjs  # Umami events: what is counted, once per visit, nothing sent from tests
 npm run test:mobile  # phone / tablet layout and touch input on emulated devices
@@ -215,11 +215,13 @@ work, signed in or not. Nothing in the UI calls this a save. With accounts disab
 and offers, with *Dimensions* (starts as on screen), *Construction lines*
 and *Transparent background* as options:
 
-- **Copy image**, **PNG** (2×), **SVG**: free. For slides, documents and
+All formats are free, on every plan.
+
+- **Copy image**, **PNG** (2×), **SVG**: for slides, documents and
   messages. Shapes are drawn in ink (no state colours, no end-point
   dots, no grid, relations or selection), with fills, ink, text, arrows
   and pictures, on the canvas colour or white.
-- **DXF** and **Print / PDF** to scale: OnSketch Pro. DXF holds the shapes
+- **DXF** and **Print / PDF** to scale, for making things. DXF holds the shapes
   (lines, circles, arcs, points) in millimetres at real size, on layers
   named after the drawing's, construction geometry on its own layer when
   included. Print / PDF lays the drawing on one A4, A3 or Letter sheet at
@@ -230,9 +232,7 @@ and *Transparent background* as options:
 The exported picture comes from the same renderer as the screen: SVG is
 produced by a drawing context that writes SVG instead of pixels
 (`render/svg-context.js`), so there is no second drawing code. Code:
-`render/export.js`, `core/dxf.js`, `app/export.js`. The Pro formats are
-checked in the app only (they run in the browser); with accounts
-disabled everything is available.
+`render/export.js`, `core/dxf.js`, `app/export.js`.
 
 ## Parts: a sketch inside another
 
@@ -293,7 +293,6 @@ browsers.
 | | `nav` | `to` (library / my-sketches) |
 | | `upgrade-click`, `billing-open` | `from` |
 | | `export-open`; `export` | `format` (png / svg / copy / dxf / print), `dimensions`, `construction` |
-| | `export-pro-prompt` | `format` (a Pro format asked for without Pro) |
 | | `sketch-insert` | `from` (account / library) |
 | | `guide` | `step` (shown / shape / dimension / fill / done / skipped / example) |
 | | `activation` (once per browser per step) | `step` (shape / dimension / fill), `guided` |
@@ -604,8 +603,8 @@ the stored session first.
   (preview, title, description, last change, Public / Private), a usage
   meter, and per card Open, Edit details, Duplicate, Download JSON,
   Delete. Open goes to `/app/?project=<id>`, New to `/app/?new`.
-- **Plans**: free = 3 sketches; Pro = unlimited, plus the real-size
-  exports. Free sketches are public only until migration
+- **Plans**: free = 3 sketches; Pro = unlimited. Every export is free.
+  Free sketches are public only until migration
   `0007_free_private.sql` is run, private or public after it: the app asks
   the database which rule applies (`plan_rules()`), so the two always
   agree. Where there is a choice, a new sketch starts private and a
@@ -642,8 +641,8 @@ the stored session first.
   out keeps the drawing in the browser.
 
 - **OnSketch Pro** ($9.99/month or $89/year, sold through Lemon Squeezy):
-  unlimited sketches, DXF export and printing to scale (and private
-  sketches, where the free plan is public only). `/pricing/` compares the plans
+  unlimited sketches (and private sketches, where the free plan is
+  public only). `/pricing/` compares the plans
   and starts the checkout; a Supabase Edge Function receives Lemon
   Squeezy's webhooks and sets the plan. Setup and design:
   `docs/pro-plan.md`; functions: `supabase/functions/`.
