@@ -2,7 +2,8 @@ import { TITLE_MIN, TITLE_MAX, DESC_MIN, DESC_MAX, BIO_MAX, LimitError, cleanTex
 import { countries, countryFlag } from '../ui/countries.js';
 
 /* =============== SKETCH DETAILS DIALOG ==========================
-   Title + description (+ visibility for Pro) for a cloud project.
+   Title + description + visibility (where the plan allows private
+   sketches: `canPrivate`) for a cloud project.
    Shared by the editor (first save, Edit details) and My sketches.
    Uses the .modal styles of app/styles.css.
 
@@ -14,12 +15,12 @@ import { countries, countryFlag } from '../ui/countries.js';
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
 export function openDetailsDialog({ heading = 'Sketch details', submitLabel = 'Save', name = '', description = '', visibility = 'public',
-  plan = 'free', preview = null, onSubmit }) {
+  plan = 'free', canPrivate = plan === 'premium', preview = null, onSubmit }) {
   return new Promise((resolve) => {
     const back = document.createElement('div');
     back.className = 'modal-backdrop show';
     back.id = 'details-modal';
-    const premium = plan === 'premium';
+    const premium = !!canPrivate;                 // may choose private or public
     back.innerHTML = `
       <form class="modal account details" role="dialog" aria-modal="true" aria-labelledby="details-heading" novalidate>
         <h3 id="details-heading">${esc(heading)}</h3>
@@ -30,7 +31,8 @@ export function openDetailsDialog({ heading = 'Sketch details', submitLabel = 'S
           <label for="details-desc">Description <span class="counter" data-for="description"></span></label>
           <textarea id="details-desc" name="description" maxlength="${DESC_MAX}" rows="3" placeholder="What it is, sizes, materials…">${esc(description)}</textarea>
           ${premium ? `
-            <label class="check"><input type="checkbox" name="private" ${visibility === 'private' ? 'checked' : ''} /> Private <span class="muted">(only you can see it)</span></label>`
+            <label class="check"><input type="checkbox" name="private" ${visibility === 'private' ? 'checked' : ''} /> Private <span class="muted">(only you can see it)</span></label>
+            <p class="muted details-note" data-note="visibility"></p>`
           : `<p class="muted details-note">Free sketches are <b>public</b>: they appear in the <a href="/library/" target="_blank" rel="noopener">library</a>. <a href="/pricing/" target="_blank" rel="noopener">OnSketch Pro</a> keeps sketches private.</p>`}
           <p class="account-msg" role="status"></p>
         </div>
@@ -56,6 +58,9 @@ export function openDetailsDialog({ heading = 'Sketch details', submitLabel = 'S
     });
     const validate = () => {
       const v = values();
+      const note = back.querySelector('[data-note="visibility"]');
+      if (note) note.innerHTML = v.visibility === 'private' ? 'Only you can open it. Untick to share it in the <a href="/library/" target="_blank" rel="noopener">library</a>.'
+        : 'Public: it appears in the <a href="/library/" target="_blank" rel="noopener">library</a> with your username, and anyone can open a copy.';
       const n = v.description.length;
       counter.textContent = n < DESC_MIN ? `${n} / ${DESC_MIN} minimum` : `${n} / ${DESC_MAX}`;
       counter.classList.toggle('short', n < DESC_MIN);
@@ -105,7 +110,7 @@ export function openProfileDialog({ username = '', picture = null, showPicture =
       <form class="modal account profile" role="dialog" aria-modal="true" aria-labelledby="profile-heading" novalidate>
         <h3 id="profile-heading">${firstTime ? 'Choose your public username' : 'Your public profile'}</h3>
         <div class="body">
-          <p class="muted">${esc(reason || 'Sketches on the free plan are public: the library shows them with this username. Your email address and your real name are never shown.')}</p>
+          <p class="muted">${esc(reason || 'The library shows your public sketches with this username. Your email address and your real name are never shown.')}</p>
           <label for="profile-username">Username</label>
           <div class="username-row"><span class="at">@</span><input type="text" id="profile-username" name="username" maxlength="24" autocomplete="username"
             autocapitalize="none" spellcheck="false" value="${esc(username)}" placeholder="e.g. woodshop_tom" /></div>

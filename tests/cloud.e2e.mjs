@@ -64,6 +64,8 @@ function installFake() {
         return { data: [{ user_id: p.user_id, username: p.username, avatar_url: p.avatar_url || null, bio: p.bio || null, country: p.country || null,
           website: p.website || null, joined_at: '2026-11-01T00:00:00Z', sketches: mine.length, likes }], error: null };
       }
+      // The database after migration 0007 (free sketches may be private): opt-in per test.
+      if (fn === 'plan_rules' && localStorage.getItem('fake-sb:free-private') === '1') return { data: { free_private: true, free_limit: 3 }, error: null };
       if (fn !== 'username_available') return { data: null, error: new Error('no such function') };
       const me = session()?.user?.id;
       const taken = JSON.parse(localStorage.getItem('fake-sb:t:public_profiles') || '[]')
@@ -182,7 +184,8 @@ const rowsOnServer = () => app(() => JSON.parse(localStorage.getItem('fake-sb:ro
 
 check(await page.isVisible('#account-btn') && (await page.textContent('#account-btn')).includes('Sign in'), 'account button says Sign in');
 check(await app(() => ['New', 'Open', 'Save'].every(t => [...document.querySelectorAll('#menubar .file-btn')].some(b => !b.hidden && b.textContent.trim() === t))), 'File: New, Open and Save buttons with their text');
-check(await app(() => !document.querySelector('[data-action="import"], [data-action="export"], #json-modal')), 'no Import / Export JSON any more');
+check(await app(() => !document.querySelector('[data-action="import"], #json-modal')), 'no Import / Export JSON any more');
+check(await app(() => { const b = document.querySelector('#menubar .file-btn[data-action="export"]'); return !!b && b.textContent.trim() === 'Export'; }), 'File: Export (images, DXF, print to scale)');
 
 // Draw a rectangle, then sign in with the emailed code.
 await page.keyboard.press('r');
@@ -286,6 +289,25 @@ await page.keyboard.press('Control+o');
 await page.waitForSelector('#account-modal.show .open-item');
 check((await page.textContent('#account-modal h3')) === 'Open a sketch' && await page.locator('#account-modal .open-item').count() === 1, 'Open lists the saved sketches');
 if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + '/open-dialog.png' });
+// Insert: the saved sketch as a part inside the open drawing.
+await page.click('#account-modal [data-insert]');
+await page.waitForFunction(() => window._app.activeSketch().entities.length > 0);
+const ins = await app(() => {
+  const a = window._app, s = a.activeSketch();
+  const ids = []; const seen = new Set();
+  const walk = (e) => { if (seen.has(e)) return; seen.add(e); ids.push(e.id); e.children().forEach(walk); };
+  s.entities.forEach(walk);
+  return { linked: !!a.cloudLink, name: a.project.name, layers: a.project.layers.map(l => l.name), n: s.entities.length,
+    selected: s.entities.filter(e => e.selected).length, unique: new Set(ids).size === ids.length, tool: a.toolName,
+    pinned: s.constraints.some(c => c.kind === 'fix'), dialog: document.querySelector('#account-modal.show') !== null };
+});
+check(ins.n > 0 && !ins.linked && ins.name !== 'Shelf v2' && ins.layers.includes('Shelf v2') && !ins.dialog,
+  `Open ▸ Insert: the sketch arrives as a part on its own layer, the drawing stays the open one (${ins.layers.join(', ')})`);
+check(ins.selected === ins.n && ins.unique && ins.tool === 'select' && !ins.pinned, 'the inserted part is selected, with fresh ids, and not pinned to the page');
+await page.keyboard.press('Control+z');
+check(await app(() => window._app.activeSketch().entities.length === 0 && window._app.project.layers.length === 1), 'one Undo removes the inserted part and its layer');
+await page.keyboard.press('Control+o');
+await page.waitForSelector('#account-modal.show .open-item');
 await page.click('#account-modal .open-item');
 await page.waitForFunction(() => window._app.cloudLink && window._app.project.name === 'Shelf v2');
 check(!(await page.isVisible('#account-modal.show')), 'clicking a sketch opens it and closes the dialog');
@@ -487,6 +509,16 @@ await page.click('#lib-detail a.btn.primary');
 await page.waitForFunction(() => window._app?.project?.name === 'Shelf v2');
 check(await app(() => window._app.cloudLink === null && window._app.project.toJSON().sketches[0].entities.some(e => e.type === 'circle')), 'Open a copy: the sketch opens in the editor, not linked to anyone\'s account');
 check(!/view=/.test(page.url()), 'view parameter cleaned');
+// Library ▸ Insert into my sketch: a public sketch as a part in the open drawing.
+const nBefore = await app(() => window._app.activeSketch().entities.length);
+await page.waitForTimeout(900);                       // the copy is saved in this browser
+await page.goto(base.replace('/app/', '/library/'));
+await page.locator('.lib-card .card-title a', { hasText: /^Shelf v2$/ }).click();
+await page.waitForSelector('#lib-detail [data-a="insert"]');
+await page.click('#lib-detail [data-a="insert"]');
+await page.waitForFunction((n) => window._app?.activeSketch().entities.length === 2 * n, nBefore);
+check(!/insert=/.test(page.url()) && await app(() => window._app.project.layers.length >= 2 && window._app.project.name === 'Shelf v2'),
+  'library ▸ Insert into my sketch: added to the open drawing, at real size, URL cleaned');
 
 // Thumbs-up: signed out it asks to sign in; another user can like, once, and undo.
 await page.goto(base.replace('/app/', '/library/'));
@@ -650,6 +682,66 @@ await ctx.close();
   await p2.waitForSelector('#site-account .site-acc-signin');
   check(fetched.length === 0 && await p2.evaluate(() => document.documentElement.scrollWidth <= 390), 'landing page signed out: Sign in, nothing loaded from Supabase, fits a phone');
   await c2.close();
+}
+
+// Once the database allows it (migration 0007, plan_rules()), free sketches
+// may be private: the app offers the choice, private by default, and asks
+// for a username only when publishing. Pro exports stay Pro.
+{
+  const c5 = await browser.newContext({ viewport: { width: 1400, height: 900 } });
+  await c5.route(/umami|jsdelivr|supabase\.co/, r => r.abort());
+  await c5.addInitScript(installFake);
+  await c5.addInitScript(() => { if (!sessionStorage.getItem('seeded')) { sessionStorage.setItem('seeded', '1'); localStorage.clear(); localStorage.setItem('fake-sb:free-private', '1'); } });
+  const p5 = await c5.newPage();
+  const errs5 = [];
+  p5.on('pageerror', e => errs5.push(String(e)));
+  await p5.goto(base.replace('/app/', '/pricing/'));
+  await p5.waitForFunction(() => window._pricing?.freePrivate === true);
+  const priceText = await p5.evaluate(() => [...document.querySelectorAll('#pr-free li, #pr-pro li')].filter(li => !li.hidden).map(li => li.textContent.trim()).join(' | '));
+  check(/Private or public/.test(priceText) && !/Sketches are public/.test(priceText) && /DXF export/.test(priceText) && /PNG, SVG/.test(priceText),
+    'pricing (free private allowed): Free says private or public, Pro lists DXF and printing to scale');
+  await p5.goto(base);
+  await p5.waitForFunction(() => window._app);
+  const b5 = await p5.locator('#canvas').boundingBox();
+  await p5.keyboard.press('r');
+  await p5.mouse.click(b5.x + b5.width / 2 - 100, b5.y + b5.height / 2 - 60); await p5.mouse.click(b5.x + b5.width / 2 + 80, b5.y + b5.height / 2 + 50);
+  await p5.keyboard.press('Escape');
+  await p5.keyboard.press('Control+s');
+  await p5.waitForSelector('#account-modal.show input[type=email]');
+  await p5.fill('#account-modal input[type=email]', 'newbie@example.com');
+  await p5.click('#account-modal button[type=submit]');
+  await p5.waitForSelector('#account-modal input[name=code]');
+  await p5.fill('#account-modal input[name=code]', '123456');
+  await p5.click('#account-modal button[type=submit]');
+  await p5.waitForSelector('#details-modal input[name=private]');
+  check(!(await p5.$('#profile-modal')), 'free, private allowed: saving doesn\'t ask for a public username first');
+  check(await p5.isChecked('#details-modal input[name=private]') && /Only you can open it/.test(await p5.textContent('#details-modal [data-note="visibility"]')),
+    'free, private allowed: the save form offers Private, ticked by default');
+  await p5.fill('#details-name', 'Bracket idea');
+  await p5.fill('#details-desc', 'A bracket for the lab bench, first idea.');
+  await p5.click('#details-modal [data-a="ok"]');
+  await p5.waitForFunction(() => !document.getElementById('details-modal'));
+  const saved5 = await p5.evaluate(() => JSON.parse(localStorage.getItem('fake-sb:rows') || '[]'));
+  check(saved5.length === 1 && saved5[0].visibility === 'private', 'free, private allowed: the sketch is saved private');
+  // Publishing asks for the username then.
+  await p5.goto(base + 'projects/');
+  await p5.waitForSelector('.sketch-card[data-id]');
+  await p5.locator('.sketch-card[data-id]').first().locator('.menu-btn').click();
+  check(await p5.isVisible('.card-menu [data-a="public"]') && !(await p5.$('.card-menu [data-a="private-pro"]')), 'My sketches (free): Make public, no "Make private (Pro)"');
+  await p5.click('.card-menu [data-a="public"]');
+  await p5.waitForSelector('#profile-modal input[name=username]');
+  check(true, 'making a sketch public asks for a username');
+  await p5.fill('#profile-modal input[name=username]', 'newbie_lab');
+  await p5.waitForFunction(() => !document.querySelector('#profile-modal [type=submit]').disabled);
+  await p5.click('#profile-modal [type=submit]');
+  await p5.waitForSelector('.sketch-card .tag.public');
+  check((await p5.evaluate(() => JSON.parse(localStorage.getItem('fake-sb:rows'))[0].visibility)) === 'public', '…then the sketch is public');
+  await p5.locator('.sketch-card[data-id]').first().locator('.menu-btn').click();
+  await p5.click('.card-menu [data-a="private"]');
+  await p5.waitForSelector('.sketch-card .tag.private');
+  check(true, 'a free account can make it private again');
+  check(errs5.length === 0, 'free private: no page errors' + (errs5.length ? ': ' + errs5.join(' | ') : ''));
+  await c5.close();
 }
 
 if (live) {

@@ -5,8 +5,9 @@
 // working offline-only. supabase-js is loaded from the CDN on first use,
 // so visitors who never sign in don't download it.
 //
-// The rules (title 3–80, description 10–500, 3 projects and public only
-// on the free plan) live in the database (supabase/migrations/0002_*);
+// The rules (title 3–80, description 10–500, 3 projects on the free plan,
+// and whether free sketches may be private: rules()) live in the database
+// (supabase/migrations/0002_* and 0007_*);
 // the checks here only give quicker, friendlier messages.
 import { SUPABASE_URL, SUPABASE_KEY } from './config.js';
 
@@ -99,10 +100,27 @@ export class Cloud {
     const { error } = await this.client.auth.signOut();
     if (error) throw error;
   }
+  /** What the plans allow, as the database says (plan_rules() in SQL):
+   *  { freePrivate }: whether free sketches may be private. A database
+   *  that doesn't have the function yet keeps the earlier rule (free =
+   *  public only), so the app never offers what the server would refuse. */
+  async rules() {
+    if (!this._rules) {
+      this._rules = (async () => {
+        try {
+          const { data, error } = await this.client.rpc('plan_rules');
+          const r = Array.isArray(data) ? data[0] : data;
+          return { freePrivate: !error && !!r?.free_private };
+        } catch { return { freePrivate: false }; }
+      })();
+    }
+    return this._rules;
+  }
   /** The signed-in user's plan: { plan: 'free' | 'premium' (= Pro), limit,
-   *  status, interval, renewsAt, endsAt, hasSubscription }. */
+   *  canPrivate, status, interval, renewsAt, endsAt, hasSubscription }. */
   async plan() {
     const user = await this.user();
+    const rules = await this.rules();
     let row = null;
     if (user) {
       const { data, error } = await this.client.from('account_plans')
@@ -112,7 +130,7 @@ export class Cloud {
     let plan = row && row.plan in PLAN_LIMITS ? row.plan : 'free';
     // Same rule as plan_of() in SQL: a cancelled subscription ends at ends_at.
     if (plan === 'premium' && row.status === 'cancelled' && row.ends_at && new Date(row.ends_at) < new Date()) plan = 'free';
-    return { plan, limit: PLAN_LIMITS[plan], status: row?.status || null, interval: row?.interval || null,
+    return { plan, limit: PLAN_LIMITS[plan], canPrivate: plan === 'premium' || rules.freePrivate, status: row?.status || null, interval: row?.interval || null,
       renewsAt: row?.renews_at || null, endsAt: row?.ends_at || null, hasSubscription: !!row?.subscription_id };
   }
   /** Lemon Squeezy through the "billing" Edge Function: 'checkout'

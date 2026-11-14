@@ -82,6 +82,7 @@ export class PersistenceMixin {
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const project = Project.fromJSON(await res.json());
       if (this._cloudUnlink) this._cloudUnlink();
+      this._guideOpened();
       this.project = project;
       this.selectionOrder = [];
       if (this.tool && this.tool.activate) this.tool.activate();
@@ -128,6 +129,9 @@ export class PersistenceMixin {
     if (this._cloudUnlink) this._cloudUnlink();
     this.project = new Project(); this.project.addSketch('Sketch 1');
     this.undoStack.length = 0; this.redoStack.length = 0;
+    // The empty sketch is the first undo state, so the first thing drawn
+    // (or inserted) after New can be undone.
+    this.undoStack.push(JSON.stringify(this.project.toJSON({ images: false })));
     this.selectionOrder = [];
     this.refreshUI(); this.solveAndRender();
     this._writeLocal();
@@ -177,6 +181,7 @@ export class PersistenceMixin {
     this.solveAndRender();
     this._primeFillRegions();
     this.scheduleAutosave();
+    this._guideCheck();
   }
 
   _setupResize() {

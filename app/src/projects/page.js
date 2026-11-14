@@ -86,7 +86,7 @@ class Page {
     const usage = $('usage');
     usage.hidden = false;
     if (plan === 'premium') {
-      usage.innerHTML = `<span><b>OnSketch Pro</b> · ${used} sketch${used === 1 ? '' : 'es'} · unlimited, private allowed</span>
+      usage.innerHTML = `<span><b>OnSketch Pro</b> · ${used} sketch${used === 1 ? '' : 'es'} · unlimited, with DXF and to-scale printing</span>
         ${this.plan.hasSubscription ? '<button type="button" class="link" data-a="billing">Manage subscription</button>' : ''}`;
       usage.querySelector('[data-a="billing"]')?.addEventListener('click', (e) => this.manageSubscription(e.currentTarget));
     }
@@ -126,7 +126,7 @@ class Page {
     cards.push(this.full()
       ? `<li class="sketch-card upsell">
           <h2>You've used your ${limit} free sketches</h2>
-          <p>Delete one to make room, or go Pro for unlimited and private sketches.</p>
+          <p>Delete one to make room, or go Pro for unlimited sketches${this.plan.canPrivate ? '' : ', private ones included'}, DXF export and printing to scale.</p>
           <a class="btn primary" href="/pricing/">See OnSketch Pro</a>
         </li>`
       : `<li class="sketch-card new">
@@ -150,7 +150,7 @@ class Page {
     if (wasOpen) return;
     const m = document.createElement('div');
     m.className = 'card-menu'; m.setAttribute('role', 'menu');
-    const pro = this.plan.plan === 'premium';
+    const pro = !!this.plan.canPrivate;          // may make sketches private
     const items = [['open', 'Open'], ['details', 'Edit details'],
       row.visibility === 'private' ? ['public', 'Make public'] : (pro ? ['private', 'Make private'] : ['private-pro', 'Make private (Pro)']),
       ['duplicate', 'Duplicate'], ['download', 'Download JSON'], ['delete', 'Delete']];
@@ -180,12 +180,18 @@ class Page {
     });
     if (saved) { this.profile = saved; this.render(); }
   }
+  /** Publishing shows a username: asks for one when there is none. */
+  async needUsername() {
+    if (this.profile?.username) return true;
+    await this.editName();
+    return !!this.profile?.username;
+  }
   async editDetails(row) {
     const thumb = this.thumbs.get(row.id);
     const updated = await openDetailsDialog({
-      heading: 'Sketch details', submitLabel: 'Save', plan: this.plan.plan,
+      heading: 'Sketch details', submitLabel: 'Save', plan: this.plan.plan, canPrivate: this.plan.canPrivate,
       name: row.name, description: row.description || '', visibility: row.visibility, preview: thumb || null,
-      onSubmit: (d) => this.cloud.updateDetails(row.id, d),
+      onSubmit: async (d) => { if (d.visibility === 'public' && row.visibility !== 'public' && !(await this.needUsername())) throw new Error('A public sketch needs a username. Choose one, or tick Private.'); return this.cloud.updateDetails(row.id, d); },
     });
     if (updated) { Object.assign(row, updated); this.render(); }
   }
@@ -224,6 +230,7 @@ class Page {
     catch (e) { notice(e.message || "Couldn't open the subscription page.", { kind: 'error' }); if (btn) { btn.disabled = false; btn.textContent = 'Manage subscription'; } }
   }
   async setVisibility(row, visibility) {
+    if (visibility === 'public' && !(await this.needUsername())) return;
     try { await this.cloud.setVisibility(row.id, visibility); row.visibility = visibility; this.render();
       notice(visibility === 'private' ? `"${row.name}" is private: only you can see it.` : `"${row.name}" is public: it appears in the library.`); }
     catch (e) { notice(e.message || "Couldn't change it.", { kind: 'error' }); }

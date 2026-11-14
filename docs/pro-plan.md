@@ -5,11 +5,23 @@
 | | Free | Pro ($9.99/month or $89/year) |
 |---|---|---|
 | Drawing tools | all | all |
+| Image export (PNG, SVG, copy) | yes | yes |
 | Sketches in the account | 3 | unlimited |
-| Visibility | public (library) | private or public, per sketch |
+| Visibility | private or public, per sketch (after migration 0007; public only before) | private or public, per sketch |
+| Real-size export (DXF, print / PDF to scale) | no | yes |
 
-Enforced in the database (`projects_check` trigger, migration 0002): the
-limit counts all of a user's projects; making a sketch private needs Pro.
+Enforced in the database (`projects_check` trigger): the limit counts all
+of a user's projects. Until migration 0007 is run, making a sketch private
+needs Pro; after it, free sketches may be private too. The app asks the
+database which rule applies (`plan_rules()`, added by 0007; without it the
+earlier rule holds), so the save form, My sketches and the pricing page
+always match what the server accepts. New sketches start private where
+there is a choice (then the last choice on that device); a username is
+asked for only when a sketch is made public.
+
+The real-size exports are checked in the app only (`exportIsPro()` in
+`app/src/app/export.js`): they run in the browser, so there is nothing for
+the server to refuse.
 `plan_of()` decides; the plan is stored in `account_plans`, which only the
 service role writes. The database name of Pro is `premium`.
 
@@ -58,7 +70,9 @@ a local PostgreSQL.
 
 ## Setup (once, by the owner)
 
-1. **Supabase SQL Editor**: run `supabase/migrations/0005_billing.sql`.
+1. **Supabase SQL Editor**: run `supabase/migrations/0005_billing.sql`,
+   then `supabase/migrations/0007_free_private.sql` (free sketches may be
+   private).
 2. **Lemon Squeezy → Settings → API**: create an API key. Note the store id
    (Settings → Stores, the number).
 3. **Supabase → Edge Functions → Secrets**, add:

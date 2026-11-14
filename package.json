@@ -19,7 +19,8 @@
     "test:linedim": "node tests/linedim.e2e.mjs",
     "test:layers": "node tests/layers.e2e.mjs",
     "test:nosnap": "node tests/nosnap.e2e.mjs",
-    "test:pattern": "node tests/pattern.e2e.mjs"
+    "test:pattern": "node tests/pattern.e2e.mjs",
+    "test:export": "node tests/export.e2e.mjs"
   },
   "devDependencies": {
     "eslint": "^9.39.0",

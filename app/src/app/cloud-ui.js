@@ -24,9 +24,10 @@ import { track } from '../ui/analytics.js';
 const LINK_KEY = 'onsketch:cloud';
 const PUSH_DELAY = 2500;
 const THUMB_EVERY = 30000;        // at most one thumbnail upload per 30 s
-const PAGE_PARAMS = ['project', 'view', 'new', 'signin', 'back'];
+const PAGE_PARAMS = ['project', 'view', 'insert', 'new', 'signin', 'back'];
 const BACK_KEY = 'onsketch:back-after-sign-in';   // sessionStorage: page to return to
 const PROFILE_ASKED = 'onsketch:profile-asked';   // sessionStorage: "Later" was clicked this session
+const VISIBILITY_KEY = 'onsketch:visibility';      // localStorage: 'private' | 'public', the last choice for a new sketch
 const PENDING_SAVE = 'onsketch:after-sign-in';   // sessionStorage: 'save' | 'open', survives the sign-in redirect
 const AUTH_PARAMS = ['code', 'error', 'error_code', 'error_description'];
 
@@ -61,7 +62,7 @@ export class CloudMixin {
 
     const params = new URLSearchParams(location.search);
     const returning = AUTH_PARAMS.some(k => params.has(k));
-    this._urlRequest = PAGE_PARAMS.find(k => params.has(k)) ? { what: PAGE_PARAMS.find(k => params.has(k)), id: params.get('project') || params.get('view') } : null;
+    this._urlRequest = PAGE_PARAMS.find(k => params.has(k)) ? { what: PAGE_PARAMS.find(k => params.has(k)), id: params.get('project') || params.get('view') || params.get('insert') } : null;
     const back = params.get('back');
     if (back && /^\/(?!\/)[\w\-./?=&%]*$/.test(back)) { try { sessionStorage.setItem(BACK_KEY, back); } catch { /* storage unavailable */ } }
     if (this._urlRequest) {
@@ -86,6 +87,7 @@ export class CloudMixin {
     if (!req) return;
     if (req.what === 'back') return;
     if (req.what === 'view') { if (this.cloud) await this.openPublicCopy(req.id); else this._hint("Couldn't reach the library. Check your connection."); return; }
+    if (req.what === 'insert') { if (this.cloud) await this.insertPublicSketch(req.id); else this._hint("Couldn't reach the library. Check your connection."); return; }
     if (!this.cloud || !this.cloudUser) { this.openAccount(); return; }
     if (req.what === 'signin') { this.openAccount(); return; }
     if (req.what === 'project' && req.id && this.cloudLink?.id !== req.id) await this.openCloudProject(req.id);
@@ -183,13 +185,26 @@ export class CloudMixin {
     }
     return saved;
   }
-  /** Saving publishes (free plan), so a username is needed first. */
-  async _ensureUsername() {
+  /** A public sketch is shown with a username, so one is needed before
+   *  publishing (before any save where the plan is public only). */
+  async _ensureUsername(reason = 'Sketches you save on the free plan are public in the library, shown with this username. Choose it before saving. Your email address and your real name are never shown.') {
     if (!this.cloudProfile) this.cloudProfile = await this.cloud.profile().catch(() => null);
     if (this.cloudProfile?.username) return true;
-    const saved = await this.editProfile({ firstTime: true,
-      reason: 'Sketches you save on the free plan are public in the library, shown with this username. Choose it before saving. Your email address and your real name are never shown.' });
+    const saved = await this.editProfile({ firstTime: true, reason });
     return !!saved;
+  }
+  /** Private or public for the next new sketch: the last choice made on
+   *  this device, private the first time (nothing is published unasked). */
+  _defaultVisibility() {
+    try { return localStorage.getItem(VISIBILITY_KEY) === 'public' ? 'public' : 'private'; } catch { return 'private'; }
+  }
+  /** Before a sketch is saved as `details` says: publishing needs a
+   *  username. Throws (shown in the dialog) when none is chosen. */
+  async _beforePublish(details) {
+    if (details.visibility !== 'public') return;
+    if (!(await this._ensureUsername('Public sketches appear in the library with this username. Your email address and your real name are never shown.'))) {
+      throw new Error('A public sketch needs a username. Choose one, or tick Private.');
+    }
   }
 
   /* ---- Account menu (avatar, top right) ---- */
@@ -212,7 +227,7 @@ export class CloudMixin {
         ${this._avatarHTML()}
         <div class="am-who"><b>${p?.username ? '@' + esc(p.username) : 'No public username yet'}</b><span class="muted">${esc(u.email || '')}</span></div>
       </div>
-      <div class="am-plan muted">${plan ? (plan.plan === 'premium' ? '<b>OnSketch Pro</b> · unlimited sketches' : `<b>Free plan</b> · up to ${plan.limit} sketches`) : ''}</div>
+      <div class="am-plan muted">${plan ? (plan.plan === 'premium' ? '<b>OnSketch Pro</b> · unlimited sketches, real-size exports' : `<b>Free plan</b> · up to ${plan.limit} sketches`) : ''}</div>
       <a role="menuitem" class="am-item" href="projects/">My sketches</a>
       <a role="menuitem" class="am-item" href="/library/">Library</a>
       <button type="button" role="menuitem" class="am-item" data-a="profile">${p?.username ? 'Edit public profile…' : 'Choose a username…'}</button>
@@ -536,6 +551,7 @@ export class CloudMixin {
     const linked = this.cloudLink;
     box.innerHTML = `<h3>Open a sketch</h3>
       <div class="body">
+        <p class="muted open-tip"><b>Insert</b> places a sketch inside the one you're drawing, at real size, as a part you can move.</p>
         <ul class="open-list"><li class="muted">Loading…</li></ul>
         <p class="account-msg" role="status"></p>
       </div>
@@ -564,8 +580,17 @@ export class CloudMixin {
         <span class="open-thumb">${t ? `<img src="${esc(t)}" alt="" loading="lazy">` : ''}</span>
         <span class="open-text"><b>${esc(r.name)}</b><span class="muted">${esc(r.description || '')}</span></span>
         <span class="open-when muted">${current ? 'open now' : esc(when(r.updated_at))}</span>
-      </button></li>`;
+      </button>${current ? '' : `<button type="button" class="btn open-insert" data-insert="${esc(r.id)}" title="Place this sketch inside the current one, as a part">Insert</button>`}</li>`;
     }).join('');
+    const msg = box.querySelector('.account-msg');
+    list.querySelectorAll('[data-insert]').forEach(b => b.addEventListener('click', async () => {
+      b.disabled = true; msg.textContent = 'Inserting…';
+      try {
+        const row = await this.cloud.load(b.dataset.insert);
+        this.closeAccount();
+        this.insertSketchData(row.data, row.name, 'account');
+      } catch (e) { b.disabled = false; msg.textContent = "Couldn't load this sketch: " + (e.message || e); }
+    }));
     list.querySelectorAll('.open-item').forEach(b => b.addEventListener('click', () => {
       if (linked && linked.id === b.dataset.id) { this.closeAccount(); return; }
       this.openCloudProject(b.dataset.id);
@@ -585,16 +610,19 @@ export class CloudMixin {
   async saveToAccount() {
     this.closeAccount();
     const plan = this.cloudPlan || await this.cloud.plan().catch(() => ({ plan: 'free', limit: 3 }));
-    if (plan.plan !== 'premium' && !(await this._ensureUsername())) { this._hint('Not saved: a public username is needed to save on the free plan.'); return; }
+    // Public-only plan: every save publishes, so the username comes first.
+    if (!plan.canPrivate && !(await this._ensureUsername())) { this._hint('Not saved: a public username is needed to save on the free plan.'); return; }
     const name = (this.project.name || '').trim();
     this.closeAccount();
     const row = await openDetailsDialog({
-      heading: 'Save to my account', submitLabel: 'Save', plan: plan.plan,
+      heading: 'Save to my account', submitLabel: 'Save', plan: plan.plan, canPrivate: plan.canPrivate,
+      visibility: plan.canPrivate ? this._defaultVisibility() : 'public',
       name: name.length >= TITLE_MIN && name !== 'Untitled' ? name : '',
       preview: renderThumbnail(this.project, this.fillDisplay(), { width: 320, height: 200, scale: 2 }),
-      onSubmit: (details) => this.cloud.create(this.project.toJSON(), details),
+      onSubmit: async (details) => { await this._beforePublish(details); return this.cloud.create(this.project.toJSON(), details); },
     });
     if (!row) return;
+    if (plan.canPrivate) try { localStorage.setItem(VISIBILITY_KEY, row.visibility === 'public' ? 'public' : 'private'); } catch { /* storage unavailable */ }
     track('sketch-saved-account', { first: true, plan: plan.plan, visibility: row.visibility });
     this._setProjectName(row.name);
     this._cloudLinkTo(row);
@@ -607,9 +635,9 @@ export class CloudMixin {
     const plan = this.cloudPlan || { plan: 'free' };
     this.closeAccount();
     const updated = await openDetailsDialog({
-      heading: 'Sketch details', submitLabel: 'Save', plan: plan.plan,
+      heading: 'Sketch details', submitLabel: 'Save', plan: plan.plan, canPrivate: plan.canPrivate,
       name: row.name, description: row.description || '', visibility: row.visibility,
-      onSubmit: (details) => this.cloud.updateDetails(row.id, details),
+      onSubmit: async (details) => { await this._beforePublish(details); return this.cloud.updateDetails(row.id, details); },
     });
     if (updated && this.cloudLink?.id === updated.id) { this._setProjectName(updated.name); this._writeLocal(); }
   }
@@ -648,6 +676,7 @@ export class CloudMixin {
       const p = Project.fromJSON(row.data);
       p.name = row.name || p.name;
       this._cloudUnlink();
+      this._guideOpened();
       this.project = p;
       this.selectionOrder = [];
       if (this.tool && this.tool.activate) this.tool.activate();
@@ -661,6 +690,7 @@ export class CloudMixin {
 
   /** Makes `row` the open drawing, linked to it. */
   _openCloudRow(row, { keepUndo = false } = {}) {
+    this._guideOpened();                       // a saved sketch opened: no first-run steps
     const p = Project.fromJSON(row.data);
     p.name = row.name || p.name;
     this.project = p;

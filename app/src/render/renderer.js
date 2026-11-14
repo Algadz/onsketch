@@ -105,7 +105,10 @@ export class Renderer {
     if (construction)    color = t.construction;
     if (entity.hover)    color = t.hover;
     if (entity.selected) color = t.selected;
-    const width = st.lineWidth + (entity.selected ? 0.6 : 0);
+    // Export (render/export.js): a drawing to show, not to edit. No state
+    // colours: shapes in ink, construction geometry in grey.
+    if (this.exportMode) color = construction ? t.inactive : t.ink;
+    const width = st.lineWidth + (entity.selected && !this.exportMode ? 0.6 : 0);
     return {
       color,
       width,
@@ -149,8 +152,11 @@ export class Renderer {
         ctx.globalAlpha = alpha;
         const paint = s === paintSketch ? fillDisplay.get(layer.id) : null;
         if (paint) for (const p of paint.painted) this._drawPaint(p);
+        const ex = this.exportMode;
         for (const e of ents) {
+          if (ex && e.construction && !ex.construction) continue;
           e.draw(ctx, v, this.styleFor(e, isActive));
+          if (ex) continue;                    // no end-point dots on an exported drawing
           for (const c of e.children()) c.draw(ctx, v, this.styleFor(c, isActive, e));
         }
         if (s === paintSketch) for (const st of inkByLayer.get(layer.id) || []) this.drawStroke(st);

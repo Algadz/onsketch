@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>OnSketch - Paint, but to scale. Free 2D sketching with real dimensions</title>
-<meta name="description" content="Sketch ideas to scale, colour them in and present concepts that already fit: floor plans, PCB layouts, engineering parts, DIY and laser-cut projects, garden plans, packaging dielines. Free, in your browser, no install." />
+<title>OnSketch - Paint, but to scale. Concept sketches with real dimensions</title>
+<meta name="description" content="Concept sketches for engineers: lock the few sizes that matter, play with the rest, colour and annotate, then paste the drawing into your slides. PCB layouts, mechanical parts, laser-cut and DIY plans, floor plans. Free, in your browser, no install." />
 <link rel="canonical" href="https://onsketch.io/" />
 <meta name="robots" content="index, follow" />
 <meta name="theme-color" content="#eef1f4" />
@@ -15,7 +15,7 @@
 <meta property="og:site_name" content="OnSketch" />
 <meta property="og:url" content="https://onsketch.io/" />
 <meta property="og:title" content="OnSketch - Paint, but to scale" />
-<meta property="og:description" content="Concept visuals with real dimensions. Sketch to scale, colour it in, present an idea that already fits." />
+<meta property="og:description" content="Concept sketches with real dimensions. Lock the sizes that matter, colour it in, present an idea that already fits." />
 <meta property="og:image" content="https://onsketch.io/assets/app-preview.png" />
 <meta property="og:image:alt" content="A studio floor plan drawn to scale in the OnSketch editor" />
 <meta name="twitter:card" content="summary_large_image" />
@@ -30,7 +30,7 @@
   "url": "https://onsketch.io/",
   "applicationCategory": "DesignApplication",
   "operatingSystem": "Web browser",
-  "description": "Free browser-based 2D sketching with real dimensions: draw to scale, colour areas, and present concept visuals such as floor plans, PCB layouts, engineering parts, DIY plans, laser-cut parts, garden plans, packaging dielines and booth layouts.",
+  "description": "Free browser-based 2D concept sketching with real dimensions and constraints: lock the sizes that matter, colour and annotate, export for slides (PNG, SVG) or for making (DXF). PCB layouts, engineering parts, laser-cut and DIY plans, floor plans, garden plans, packaging dielines and booth layouts.",
   "offers": {
     "@type": "Offer",
     "price": "0",
@@ -210,6 +210,8 @@
     font: 12px var(--mono); color: var(--text-soft);
   }
   .kicker span + span::before { content: "·"; margin-right: 10px; color: var(--text-muted); }
+  .kicker { flex-wrap: wrap; row-gap: 2px; }
+  .kicker span { white-space: nowrap; }
   h1 {
     margin: 0;
     max-width: 14ch;
@@ -474,13 +476,13 @@
       <div class="wrap">
         <div class="hero-grid">
         <div class="hero-copy">
-        <p class="kicker"><span>2D sketcher</span><span>free</span><span>runs in your browser</span></p>
+        <p class="kicker"><span>Concept sketches for engineers</span><span>free</span><span>in your browser</span></p>
         <h1 id="hero-title">Paint, but <span class="dimmed">to scale.<svg viewBox="0 0 100 28" preserveAspectRatio="none" aria-hidden="true">
           <path d="M1 2v24M99 2v24" stroke="currentColor" stroke-width="1" vector-effect="non-scaling-stroke"/>
           <path d="M1 14h98" stroke="currentColor" stroke-width="1" vector-effect="non-scaling-stroke"/>
           <path d="M1 14l4 -2.4v4.8zM99 14l-4 -2.4v4.8z" fill="currentColor"/>
         </svg></span></h1>
-        <p class="lede">Give shapes real dimensions, tie them together with equations and constraints, then colour them in. Change one number and the whole concept follows.</p>
+        <p class="lede">For the concept you have to show before it is designed. Lock the few sizes that matter, leave the rest free to play with, then colour and annotate it. Change one number and the whole sketch follows.</p>
         <div class="actions">
           <a class="btn primary" href="/app/" data-umami-event="landing-cta" data-umami-event-where="hero">Start drawing</a>
           <a class="btn" href="#examples" data-umami-event="landing-see-examples">See examples</a>
@@ -542,7 +544,7 @@
         <div class="head">
           <p class="eyebrow">Why OnSketch</p>
           <h2 id="why-title">Pretty or precise. You shouldn't have to pick.</h2>
-          <p class="sub">The first question about any concept is "does it fit?". Drawing apps can't answer it, and CAD answers it in a drawing nobody else wants to look at.</p>
+          <p class="sub">Early in a design, a few sizes are fixed and everything else is still open. A slide can't hold the fixed ones. CAD wants every size defined, and answers in a drawing nobody outside the team wants to read.</p>
         </div>
         <table class="compare">
           <thead>
@@ -552,6 +554,7 @@
             <tr><th scope="row">Real dimensions</th><td class="no">No<small>sizes are eyeballed</small></td><td class="yes hide-sm">Yes</td><td class="yes us">Yes<small>mm, cm, m, in, ft</small></td></tr>
             <tr><th scope="row">Easy to present</th><td class="yes">Yes</td><td class="no hide-sm">Hard<small>technical look, special viewers</small></td><td class="yes us">Yes<small>colours, layers, ink</small></td></tr>
             <tr><th scope="row">Change a size later</th><td class="no">Redraw it</td><td class="yes hide-sm">Yes</td><td class="yes us">Yes<small>colours follow the shapes</small></td></tr>
+            <tr><th scope="row">Into a slide or a document</th><td class="yes">Yes</td><td class="no hide-sm">Screenshot<small>or a drawing export</small></td><td class="yes us">Yes<small>copy, PNG, SVG; DXF with Pro</small></td></tr>
             <tr><th scope="row">Time to start</th><td class="yes">Seconds</td><td class="no hide-sm">Install, licence, training</td><td class="yes us">Seconds<small>a browser tab</small></td></tr>
           </tbody>
         </table>
@@ -568,9 +571,11 @@
           <div class="feature"><span class="tool on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7v10M20 7v10"/><path d="M4 12h16"/><path d="M7 9.5L4 12l3 2.5M17 9.5l3 2.5-3 2.5"/></svg></span><div><h3>Dimensions in the units you think in</h3><p>Type <code>2.4m</code>, <code>35cm</code>, <code>4in</code> or <code>1in + 4mm</code>. The shape resizes to match.</p></div></div>
           <div class="feature"><span class="tool"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 11l7-7 7 7-7 7z"/><path d="M5 11h14"/><path d="M19.5 15.5s1.5 2 1.5 3a1.5 1.5 0 0 1-3 0c0-1 1.5-3 1.5-3z" fill="currentColor"/></svg></span><div><h3>Fill any closed area</h3><p>Click inside a shape to colour it. Move or resize the shape and the colour stays where it belongs.</p></div></div>
           <div class="feature"><span class="tool"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20l1-4L16 5l3 3L8 19z"/><path d="M14 7l3 3"/><path d="M4 20l4-1"/></svg></span><div><h3>Freehand ink and highlights</h3><p>Circle a detail, mark a path, add a note. Ink sits on its layer and never disturbs the geometry.</p></div></div>
-          <div class="feature"><span class="tool"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4l9 5-9 5-9-5z"/><path d="M3 14l9 5 9-5"/></svg></span><div><h3>Layers</h3><p>Walls, furniture and notes on separate layers, each with its own visibility, opacity and order.</p></div></div>
+          <div class="feature"><span class="tool"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4l9 5-9 5-9-5z"/><path d="M3 14l9 5 9-5"/></svg></span><div><h3>Layers</h3><p>Board, parts and notes on separate layers, each with its own visibility, opacity and order.</p></div></div>
           <div class="feature"><span class="tool"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 5H7l6 7-6 7h10"/></svg></span><div><h3>Named dimensions and equations</h3><p>Link sizes with formulas like <code>=width / 2</code> and change a whole concept by editing one value.</p></div></div>
-          <div class="feature"><span class="tool"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9h18"/></svg></span><div><h3>Nothing to install</h3><p>Runs in the browser, saves as you go, and exports your project as a file you keep.</p></div></div>
+          <div class="feature"><span class="tool"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4"/><path d="M8 8l4-4 4 4"/><path d="M5 14v5h14v-5"/></svg></span><div><h3>Out of the editor in one click</h3><p>Copy the drawing straight into a slide, or export PNG and SVG, with or without dimensions. Pro adds DXF at real size and printing to scale.</p></div></div>
+          <div class="feature"><span class="tool"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/><path d="M11 7h4a2 2 0 0 1 2 2v4"/></svg></span><div><h3>Parts you draw once</h3><p>Insert a saved sketch, or one from the library, at real size: a connector, a standard part, a desk. It arrives on its own layer, ready to place.</p></div></div>
+          <div class="feature"><span class="tool"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="12" r="2.2"/><circle cx="12" cy="12" r="2.2"/><circle cx="18" cy="12" r="2.2"/></svg></span><div><h3>Patterns</h3><p>Repeat a shape along a line, in a grid or around a centre. Linked copies follow the original when it changes.</p></div></div>
         </div>
       </div>
     </section>
@@ -595,33 +600,24 @@
         <div class="head">
           <p class="eyebrow">Examples</p>
           <h2 id="examples-title">Made for ideas that have to fit.</h2>
-          <p class="sub">Each example was drawn in OnSketch with real dimensions.</p>
+          <p class="sub">Engineering concepts first, but anything with real sizes works: a room, a shelf, a garden. Each example was drawn in OnSketch with real dimensions.</p>
         </div>
         <div class="fwin carousel" aria-roledescription="carousel" aria-label="OnSketch examples">
           <div class="fwin-head">
             <span class="fwin-title">Examples</span>
             <nav class="carousel-tabs" aria-label="Choose an example">
-            <a href="#ex-floor-plan" data-slide="0" aria-current="true">Floor plan</a>
-            <a href="#ex-pcb" data-slide="1">PCB</a>
-            <a href="#ex-engineering" data-slide="2">Engineering</a>
+            <a href="#ex-pcb" data-slide="0" aria-current="true">PCB</a>
+            <a href="#ex-engineering" data-slide="1">Engineering</a>
+            <a href="#ex-laser-cut" data-slide="2">Laser cut</a>
             <a href="#ex-diy" data-slide="3">DIY</a>
-            <a href="#ex-laser-cut" data-slide="4">Laser cut</a>
-            <a href="#ex-garden" data-slide="5">Garden</a>
-            <a href="#ex-packaging" data-slide="6">Packaging</a>
-            <a href="#ex-booth" data-slide="7">Booth</a>
+            <a href="#ex-floor-plan" data-slide="4">Floor plan</a>
+            <a href="#ex-packaging" data-slide="5">Packaging</a>
+            <a href="#ex-booth" data-slide="6">Booth</a>
+            <a href="#ex-garden" data-slide="7">Garden</a>
           </nav>
           </div>
           <ul class="track" tabindex="0" aria-live="polite">
-            <li class="slide" id="ex-floor-plan" aria-roledescription="slide" aria-label="1 of 8: Floor plan and room layout">
-              <figure>
-                <img src="assets/examples/floor-plan.jpg" width="2560" height="1492" alt="Floor plan of a 6 by 4 metre studio drawn to scale in OnSketch, with coloured furniture and dimensions in millimetres" decoding="async" />
-                <figcaption>
-                  <h3>Floor plan and room layout</h3>
-                  <p>A 6 × 4 m studio with bed, sofa, kitchen and dining table, every piece at its real size. Check that the furniture fits and the walkways stay clear before you buy or move anything.</p>
-                </figcaption>
-              </figure>
-            </li>
-            <li class="slide" id="ex-pcb" aria-roledescription="slide" aria-label="2 of 8: PCB layout concept">
+            <li class="slide" id="ex-pcb" aria-roledescription="slide" aria-label="1 of 8: PCB layout concept">
               <figure>
                 <img src="assets/examples/pcb.jpg" width="2560" height="1492" alt="Printed circuit board concept drawn to scale in OnSketch: green 100 by 64 mm board with copper pads, traces, a chip, a header and mounting holes" decoding="async" loading="lazy" />
                 <figcaption>
@@ -630,12 +626,21 @@
                 </figcaption>
               </figure>
             </li>
-            <li class="slide" id="ex-engineering" aria-roledescription="slide" aria-label="3 of 8: Engineering part sketch">
+            <li class="slide" id="ex-engineering" aria-roledescription="slide" aria-label="2 of 8: Engineering part sketch">
               <figure>
                 <img src="assets/examples/engineering.jpg" width="2560" height="1492" alt="Mechanical engineering sketch in OnSketch: a flange with six bolt holes on a pitch circle and a keyway, and a link arm with two bosses, fully dimensioned" decoding="async" loading="lazy" />
                 <figcaption>
                   <h3>Engineering part sketch</h3>
                   <p>A flange with a bolt circle and keyway, and a link arm with tangent bosses. Diameters, pitch circle and centre distance are real dimensions you can change.</p>
+                </figcaption>
+              </figure>
+            </li>
+            <li class="slide" id="ex-laser-cut" aria-roledescription="slide" aria-label="3 of 8: Laser-cut box with finger joints">
+              <figure>
+                <img src="assets/examples/laser-cut.jpg" width="2560" height="1492" alt="Laser cutting layout in OnSketch: three plywood box panels with 3 millimetre finger joints, a finger hole and engraved star, diamond and label shapes" decoding="async" loading="lazy" />
+                <figcaption>
+                  <h3>Laser-cut box with finger joints</h3>
+                  <p>Box panels with 3 mm finger joints, a lid hole and engraving areas, laid out side by side as they would go on the sheet.</p>
                 </figcaption>
               </figure>
             </li>
@@ -648,25 +653,16 @@
                 </figcaption>
               </figure>
             </li>
-            <li class="slide" id="ex-laser-cut" aria-roledescription="slide" aria-label="5 of 8: Laser-cut box with finger joints">
+            <li class="slide" id="ex-floor-plan" aria-roledescription="slide" aria-label="5 of 8: Floor plan and room layout">
               <figure>
-                <img src="assets/examples/laser-cut.jpg" width="2560" height="1492" alt="Laser cutting layout in OnSketch: three plywood box panels with 3 millimetre finger joints, a finger hole and engraved star, diamond and label shapes" decoding="async" loading="lazy" />
+                <img src="assets/examples/floor-plan.jpg" width="2560" height="1492" alt="Floor plan of a 6 by 4 metre studio drawn to scale in OnSketch, with coloured furniture and dimensions in millimetres" decoding="async" />
                 <figcaption>
-                  <h3>Laser-cut box with finger joints</h3>
-                  <p>Box panels with 3 mm finger joints, a lid hole and engraving areas, laid out side by side as they would go on the sheet.</p>
+                  <h3>Floor plan and room layout</h3>
+                  <p>A 6 × 4 m studio with bed, sofa, kitchen and dining table, every piece at its real size. Check that the furniture fits and the walkways stay clear before you buy or move anything.</p>
                 </figcaption>
               </figure>
             </li>
-            <li class="slide" id="ex-garden" aria-roledescription="slide" aria-label="6 of 8: Garden and landscape plan">
-              <figure>
-                <img src="assets/examples/garden.jpg" width="2560" height="1492" alt="Garden plan drawn to scale in OnSketch: lawn, patio, stepping stones, round pond, three raised beds, shed and trees on a 12 by 8 metre plot" decoding="async" loading="lazy" />
-                <figcaption>
-                  <h3>Garden and landscape plan</h3>
-                  <p>A 12 × 8 m garden with a patio, stepping stones, a pond, raised beds, a shed and trees. Sizes are in millimetres, so you can work out materials straight from the plan.</p>
-                </figcaption>
-              </figure>
-            </li>
-            <li class="slide" id="ex-packaging" aria-roledescription="slide" aria-label="7 of 8: Packaging dieline">
+            <li class="slide" id="ex-packaging" aria-roledescription="slide" aria-label="6 of 8: Packaging dieline">
               <figure>
                 <img src="assets/examples/packaging.jpg" width="2560" height="1492" alt="Packaging dieline in OnSketch: unfolded tuck-end box with front, back and side panels, dust flaps, glue tab, dashed fold lines and front label artwork" decoding="async" loading="lazy" />
                 <figcaption>
@@ -675,12 +671,21 @@
                 </figcaption>
               </figure>
             </li>
-            <li class="slide" id="ex-booth" aria-roledescription="slide" aria-label="8 of 8: Trade-show booth layout">
+            <li class="slide" id="ex-booth" aria-roledescription="slide" aria-label="7 of 8: Trade-show booth layout">
               <figure>
                 <img src="assets/examples/booth.jpg" width="2560" height="1492" alt="Trade-show booth floor plan in OnSketch: 6 by 3 metre stand with a curved counter, back wall screen, shelving, meeting table with chairs and plants" decoding="async" loading="lazy" />
                 <figcaption>
                   <h3>Trade-show booth layout</h3>
                   <p>A 6 × 3 m stand with a curved reception counter, a screen wall, shelving and a meeting corner, planned before you book the furniture.</p>
+                </figcaption>
+              </figure>
+            </li>
+            <li class="slide" id="ex-garden" aria-roledescription="slide" aria-label="8 of 8: Garden and landscape plan">
+              <figure>
+                <img src="assets/examples/garden.jpg" width="2560" height="1492" alt="Garden plan drawn to scale in OnSketch: lawn, patio, stepping stones, round pond, three raised beds, shed and trees on a 12 by 8 metre plot" decoding="async" loading="lazy" />
+                <figcaption>
+                  <h3>Garden and landscape plan</h3>
+                  <p>A 12 × 8 m garden with a patio, stepping stones, a pond, raised beds, a shed and trees. Sizes are in millimetres, so you can work out materials straight from the plan.</p>
                 </figcaption>
               </figure>
             </li>
@@ -711,7 +716,7 @@
           <li><b>Relations</b><span>Horizontal, vertical, parallel, perpendicular, tangent, equal, coincident, midpoint, symmetric.</span></li>
           <li><b>Equations</b><span>Every dimension has a name (<code>D1</code>, <code>D2</code>…). Rename it, reference it, build on it.</span></li>
           <li><b>Units</b><span>Typed values take units and arithmetic. Everything is stored in millimetres and degrees.</span></li>
-          <li><b>Your files</b><span>Projects save in the browser as you work and export as JSON you can back up and reopen anywhere.</span></li>
+          <li><b>Your files</b><span>Sketches save in this browser as you work, and in your account once you sign in. Export PNG or SVG for documents; DXF and printing to scale come with Pro.</span></li>
         </ul>
       </div>
     </section>
@@ -721,7 +726,7 @@
         <div>
           <h2 id="cta-title">Your next idea, to scale.</h2>
           <p>Open the editor and draw your first concept in a couple of minutes.</p>
-          <p class="note">Coming next: image export for slides and documents, text labels, share links.</p>
+          <p class="note">New: image export for slides (copy, PNG, SVG), DXF and printing to scale, parts from the library, patterns. Coming next: share links.</p>
         </div>
         <a class="btn primary" href="/app/" data-umami-event="landing-cta" data-umami-event-where="bottom">Open the editor</a>
       </div>
@@ -922,39 +927,43 @@
 <script type="importmap">
 {
   "imports": {
-    "app/src/app/App.js": "app/src/app/App.js?v=f06f013892",
-    "app/src/app/chrome.js": "app/src/app/chrome.js?v=9ab374758f",
+    "app/src/app/App.js": "app/src/app/App.js?v=69ac759d54",
+    "app/src/app/chrome.js": "app/src/app/chrome.js?v=e257542c39",
     "app/src/app/clipboard.js": "app/src/app/clipboard.js?v=67aba21197",
-    "app/src/app/cloud-ui.js": "app/src/app/cloud-ui.js?v=b97c3a4034",
-    "app/src/app/compact.js": "app/src/app/compact.js?v=673532c7fb",
+    "app/src/app/cloud-ui.js": "app/src/app/cloud-ui.js?v=20850d7d80",
+    "app/src/app/compact.js": "app/src/app/compact.js?v=276c2920db",
     "app/src/app/constraint-actions.js": "app/src/app/constraint-actions.js?v=b0dd1f3e27",
     "app/src/app/dim-links.js": "app/src/app/dim-links.js?v=8cb971394d",
     "app/src/app/dimensions.js": "app/src/app/dimensions.js?v=d02f549fb9",
     "app/src/app/drag.js": "app/src/app/drag.js?v=5c4d3457ed",
     "app/src/app/equations-ui.js": "app/src/app/equations-ui.js?v=d29c02f62c",
+    "app/src/app/export.js": "app/src/app/export.js?v=5ab4bd5d27",
     "app/src/app/fills.js": "app/src/app/fills.js?v=065293b28a",
+    "app/src/app/guide.js": "app/src/app/guide.js?v=b2e1fce8ba",
     "app/src/app/image-import.js": "app/src/app/image-import.js?v=a4e71ca829",
     "app/src/app/ink-links.js": "app/src/app/ink-links.js?v=1067f53d6c",
     "app/src/app/ink-select.js": "app/src/app/ink-select.js?v=8abb34db7e",
     "app/src/app/ink-transform.js": "app/src/app/ink-transform.js?v=9b066fda29",
+    "app/src/app/insert.js": "app/src/app/insert.js?v=a231c56528",
     "app/src/app/layers-panel.js": "app/src/app/layers-panel.js?v=c8682944e1",
     "app/src/app/operations.js": "app/src/app/operations.js?v=82aa8c5bd6",
     "app/src/app/panels.js": "app/src/app/panels.js?v=5faa6524e9",
     "app/src/app/patterns.js": "app/src/app/patterns.js?v=abf9966345",
-    "app/src/app/persistence.js": "app/src/app/persistence.js?v=25b69b78ff",
-    "app/src/app/render-events.js": "app/src/app/render-events.js?v=88f0f97825",
+    "app/src/app/persistence.js": "app/src/app/persistence.js?v=1fb79a26de",
+    "app/src/app/render-events.js": "app/src/app/render-events.js?v=1073db098c",
     "app/src/app/report.js": "app/src/app/report.js?v=ff38fcdec7",
     "app/src/app/selection.js": "app/src/app/selection.js?v=abcd1fcf39",
     "app/src/app/sketch-window.js": "app/src/app/sketch-window.js?v=20e8c05d9e",
-    "app/src/app/solve.js": "app/src/app/solve.js?v=b18a4d1075",
+    "app/src/app/solve.js": "app/src/app/solve.js?v=b9d61e55b5",
     "app/src/app/text-edit.js": "app/src/app/text-edit.js?v=5398a97991",
     "app/src/app/touch-ui.js": "app/src/app/touch-ui.js?v=022cd01c3d",
     "app/src/app/touch.js": "app/src/app/touch.js?v=7cfbee5ca6",
-    "app/src/cloud/cloud.js": "app/src/cloud/cloud.js?v=20b070fa35",
+    "app/src/cloud/cloud.js": "app/src/cloud/cloud.js?v=0a0b95daf2",
     "app/src/cloud/config.js": "app/src/cloud/config.js?v=76ceeb7132",
-    "app/src/cloud/details-dialog.js": "app/src/cloud/details-dialog.js?v=814fdd4a33",
+    "app/src/cloud/details-dialog.js": "app/src/cloud/details-dialog.js?v=5e25d37c46",
     "app/src/core/arrows.js": "app/src/core/arrows.js?v=0a9ff13d80",
     "app/src/core/constraints.js": "app/src/core/constraints.js?v=2e2f29b67e",
+    "app/src/core/dxf.js": "app/src/core/dxf.js?v=63120255ca",
     "app/src/core/entities.js": "app/src/core/entities.js?v=ba2fac54b4",
     "app/src/core/equations.js": "app/src/core/equations.js?v=3d0423dba6",
     "app/src/core/expr.js": "app/src/core/expr.js?v=8103966da7",
@@ -962,6 +971,7 @@
     "app/src/core/ink-clipboard.js": "app/src/core/ink-clipboard.js?v=3adcff46eb",
     "app/src/core/ink-links.js": "app/src/core/ink-links.js?v=3b5506785f",
     "app/src/core/ink-transform.js": "app/src/core/ink-transform.js?v=a6e866fbf9",
+    "app/src/core/insert.js": "app/src/core/insert.js?v=e0697d4f09",
     "app/src/core/math.js": "app/src/core/math.js?v=be4d428cc3",
     "app/src/core/model.js": "app/src/core/model.js?v=b08f9e1326",
     "app/src/core/patterns.js": "app/src/core/patterns.js?v=d44aec8e6c",
@@ -971,11 +981,13 @@
     "app/src/core/style.js": "app/src/core/style.js?v=7bda2ffda5",
     "app/src/editor/relations.js": "app/src/editor/relations.js?v=88fb4e8ac4",
     "app/src/editor/snap.js": "app/src/editor/snap.js?v=5abff656ee",
-    "app/src/library/page.js": "app/src/library/page.js?v=80dae97b35",
+    "app/src/library/page.js": "app/src/library/page.js?v=6e50f604a1",
     "app/src/main.js": "app/src/main.js?v=81dd2e155a",
-    "app/src/pricing/page.js": "app/src/pricing/page.js?v=248ec737ab",
-    "app/src/projects/page.js": "app/src/projects/page.js?v=8702a55aad",
-    "app/src/render/renderer.js": "app/src/render/renderer.js?v=15f4fca625",
+    "app/src/pricing/page.js": "app/src/pricing/page.js?v=c4ad21737f",
+    "app/src/projects/page.js": "app/src/projects/page.js?v=465225f94b",
+    "app/src/render/export.js": "app/src/render/export.js?v=d462e42954",
+    "app/src/render/renderer.js": "app/src/render/renderer.js?v=234791400b",
+    "app/src/render/svg-context.js": "app/src/render/svg-context.js?v=308a7411e2",
     "app/src/render/theme.js": "app/src/render/theme.js?v=1d78b95fbb",
     "app/src/render/thumbnail.js": "app/src/render/thumbnail.js?v=2d3261ac0a",
     "app/src/render/view.js": "app/src/render/view.js?v=71099d9900",
@@ -994,7 +1006,7 @@
     "app/src/ui/dialogs.js": "app/src/ui/dialogs.js?v=adcc3370ba",
     "app/src/ui/icons.js": "app/src/ui/icons.js?v=060fb55608",
     "app/src/ui/tap-guard.js": "app/src/ui/tap-guard.js?v=95b4f25589",
-    "app/src/ui/tool-defs.js": "app/src/ui/tool-defs.js?v=7e0ea3de3f",
+    "app/src/ui/tool-defs.js": "app/src/ui/tool-defs.js?v=966b9e03e4",
     "app/src/ui/windows.js": "app/src/ui/windows.js?v=d5d559d167"
   }
 }

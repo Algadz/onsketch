@@ -240,10 +240,12 @@ class Library {
       <div class="footer">
         <button type="button" class="link lib-report" data-a="report">Report</button>
         <button type="button" class="btn" data-a="copy">Copy link</button>
+        <a class="btn" data-a="insert" href="/app/?insert=${encodeURIComponent(row.id)}" title="Place it inside the sketch you are drawing, at real size, as a part">Insert into my sketch</a>
         <a class="btn primary" href="/app/?view=${encodeURIComponent(row.id)}">Open a copy in the editor</a>
       </div>`;
     const msg = back.querySelector('.account-msg');
     back.querySelector('a.btn.primary').addEventListener('click', () => track('library-open-copy', { id: row.id }));
+    back.querySelector('[data-a="insert"]').addEventListener('click', () => track('library-insert', { id: row.id }));
     back.querySelector('[data-a="copy"]').addEventListener('click', async () => {
       track('library-copy-link');
       try { await navigator.clipboard.writeText(link); msg.textContent = 'Link copied.'; }

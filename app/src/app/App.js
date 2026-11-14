@@ -35,6 +35,9 @@ import { CloudMixin } from './cloud-ui.js';
 import { ImageImportMixin } from './image-import.js';
 import { ClipboardMixin } from './clipboard.js';
 import { PatternsMixin } from './patterns.js';
+import { ExportMixin } from './export.js';
+import { GuideMixin } from './guide.js';
+import { InsertMixin } from './insert.js';
 import { onImageLoad } from '../core/images.js';
 import { trackOnce } from '../ui/analytics.js';
 
@@ -103,6 +106,7 @@ export class App {
     this.refreshUI();
     this.solveAndRender();
     if (restored) { this._primeFillRegions(); this.zoomFit(); }
+    this._setupGuide(restored);
     this._loop();
   }
 
@@ -811,7 +815,7 @@ export class App {
 }
 
 /* Methods are grouped into mixins by concern; see src/app/*.js. */
-for (const Mixin of [ChromeMixin, EquationsMixin, LayersPanelMixin, FillsMixin, DimensionLabelsMixin, SelectionMixin, DragMixin, SolveMixin, OperationsMixin, ConstraintActionsMixin, RenderEventsMixin, PanelsMixin, PersistenceMixin, SketchWindowMixin, ReportMixin, DimLinksMixin, InkSelectMixin, InkLinksMixin, TextEditMixin, InkTransformMixin, TouchMixin, TouchUIMixin, CompactMixin, CloudMixin, ImageImportMixin, ClipboardMixin, PatternsMixin]) {
+for (const Mixin of [ChromeMixin, EquationsMixin, LayersPanelMixin, FillsMixin, DimensionLabelsMixin, SelectionMixin, DragMixin, SolveMixin, OperationsMixin, ConstraintActionsMixin, RenderEventsMixin, PanelsMixin, PersistenceMixin, SketchWindowMixin, ReportMixin, DimLinksMixin, InkSelectMixin, InkLinksMixin, TextEditMixin, InkTransformMixin, TouchMixin, TouchUIMixin, CompactMixin, CloudMixin, ImageImportMixin, ClipboardMixin, PatternsMixin, ExportMixin, GuideMixin, InsertMixin]) {
   for (const key of Object.getOwnPropertyNames(Mixin.prototype)) {
     if (key === 'constructor') continue;
     Object.defineProperty(App.prototype, key, Object.getOwnPropertyDescriptor(Mixin.prototype, key));

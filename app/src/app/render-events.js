@@ -125,6 +125,7 @@ export class RenderEventsMixin {
     if (this._refreshSketchWindow) this._refreshSketchWindow();
     if (this._syncColorTarget) this._syncColorTarget();
     if (this.compact) this._renderMobileBar();
+    if (this._guide) this._guideRender(this._guideState());   // the first-run card follows the tool
     this._refreshOptionsBar();
     document.getElementById('status-hint').textContent = (this.tool.hint && this.tool.hint()) || '';
     this._updateCanvasCursor();

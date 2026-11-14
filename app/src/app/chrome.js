@@ -20,7 +20,7 @@ export const ALT_KEY = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.tes
 export class ChromeMixin {
   _setupChrome() {
     // Menu bar icons + labels.
-    const labels = { new: 'New', open: 'Open', save: 'Save', grid: 'Grid', snap: 'Snap', dimensions: 'Dimensions', relations: 'Relations' };
+    const labels = { new: 'New', open: 'Open', save: 'Save', export: 'Export', grid: 'Grid', snap: 'Snap', dimensions: 'Dimensions', relations: 'Relations' };
     document.querySelectorAll('#menubar [data-action]').forEach(b => {
       const a = b.dataset.action;
       b.innerHTML = (ACTION_ICONS[a] || '') + (labels[a] ? `<span class="btn-label">${labels[a]}</span>` : '');
@@ -57,6 +57,7 @@ export class ChromeMixin {
       case 'new':          this.newProject(); break;
       case 'save':         this.save(); break;
       case 'open':         this.openSketch?.(); break;
+      case 'export':       this.openExport(); break;
       case 'undo':         this.undo(); break;
       case 'redo':         this.redo(); break;
       case 'solve':        this.solveAndRender(); break;

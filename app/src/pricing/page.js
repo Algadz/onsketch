@@ -15,6 +15,7 @@ const PRICES = {
   month: { price: '$9.99', per: 'per month', sub: 'Billed monthly. Cancel any time.' },
   year: { price: '$89', per: 'per year', sub: 'That is $7.42 a month, billed yearly. Cancel any time.' },
 };
+const RULES_KEY = 'onsketch:free-private';       // localStorage: '1' once the database allowed free private sketches
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const day = (iso) => new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
@@ -28,13 +29,27 @@ class Pricing {
     this.user = null; this.plan = null; this.cloud = null;
   }
 
+  /** The page words the plans as the database applies them: free
+   *  sketches public only (the default), or private or public once
+   *  plan_rules() says so (remembered, so the next visit doesn't flicker). */
+  applyRules(freePrivate) {
+    document.querySelectorAll('[data-rule]').forEach(el => { el.hidden = (el.dataset.rule === 'free-private') !== !!freePrivate; });
+    this.freePrivate = !!freePrivate;
+  }
+
   async start() {
+    let known = false;
+    try { known = localStorage.getItem(RULES_KEY) === '1'; } catch { /* storage unavailable */ }
+    this.applyRules(known);
     mountAccount($('#site-account'));
     document.querySelectorAll('.pr-toggle [data-interval]').forEach(b => b.addEventListener('click', () => { this.interval = b.dataset.interval; track('pricing-interval', { interval: this.interval }); this.render(); }));
     this.render();
     if (!isConfigured()) return;
     try {
       this.cloud = await openCloud({ createClient: window.__onsketchCreateClient || null });
+      const rules = await this.cloud.rules();
+      this.applyRules(rules.freePrivate);
+      try { localStorage.setItem(RULES_KEY, rules.freePrivate ? '1' : '0'); } catch { /* storage unavailable */ }
       this.user = await this.cloud.user();
       if (this.user) this.plan = await this.cloud.plan();
     } catch { /* offline: the page still explains the plans */ }
@@ -100,7 +115,7 @@ class Pricing {
     if (this.plan?.plan === 'premium') {
       banner.className = 'pr-banner ok';
       track('pro-activated');
-      banner.innerHTML = 'OnSketch Pro is on. Unlimited sketches, and you can make sketches private from <a href="/app/projects/">My sketches</a>.';
+      banner.innerHTML = 'OnSketch Pro is on. Unlimited sketches, plus DXF and printing to scale from <b>Export</b> in the editor.';
     } else {
       banner.className = 'pr-banner warn';
       banner.textContent = 'Your payment went through, but Pro is taking longer than usual to switch on. Reload this page in a minute; if it still says Free, use “Report a problem” in the editor.';

@@ -39,6 +39,7 @@ export class SolveMixin {
     this.redoStack.length = 0;
     if (this._refreshLayerPanel) this._refreshLayerPanel();   // entity counts
     this.scheduleAutosave();
+    this._guideCheck();                       // first-run steps, activation counts
   }
 
 
