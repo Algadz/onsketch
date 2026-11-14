@@ -79,13 +79,16 @@ export class CompactMixin {
     if (!fly.hidden && fly.dataset.kind === kind) { this._closeFlyout(); return; }
     let items = [];
     if (kind === 'draw') items = TOOLS.filter(x => x.group === 'sketch').map(x => ({ id: x.id, icon: TOOL_ICONS[x.id], label: x.label, on: this.toolName === x.id }));
+    // …then the operations on what is selected (Tools window on larger screens).
+    if (kind === 'draw') items.push(...[['mirror', 'Mirror'], ['offset', 'Offset'], ['linear-pattern', 'Linear pattern'], ['circular-pattern', 'Circular pattern'], ['point-pattern', 'Point pattern']]
+      .map(([id, label], i) => ({ id: 'action:' + id, icon: ACTION_ICONS[id], label, on: false, sep: i === 0 })));
     if (kind === 'paint') {
       items = PAINT_TOOLS.map(id => ({ id, icon: TOOL_ICONS[id], label: toolDef(id).label, on: this.toolName === id }));
       items.push({ id: 'panel:colors', icon: WINDOW_ICONS.colors, label: 'Colours', on: this.windows.isOpen('colors') });
     }
     if (kind === 'panels') items = PANELS.map(([id, label]) => ({ id: 'panel:' + id, icon: WINDOW_ICONS[id], label, on: this.windows.isOpen(id) }));
     fly.dataset.kind = kind;
-    fly.innerHTML = items.map(i => `<button type="button" class="fly-item${i.on ? ' on' : ''}" data-id="${i.id}">${i.icon}<span>${i.label}</span></button>`).join('');
+    fly.innerHTML = items.map(i => `${i.sep ? '<div class="fly-sep"></div>' : ''}<button type="button" class="fly-item${i.on ? ' on' : ''}" data-id="${i.id}">${i.icon}<span>${i.label}</span></button>`).join('');
     fly.hidden = false;
     const r = anchor.getBoundingClientRect(), fr = fly.getBoundingClientRect();
     if (document.documentElement.classList.contains('compact-land')) {
@@ -101,6 +104,7 @@ export class CompactMixin {
       const id = b.dataset.id;
       this._closeFlyout();
       if (id.startsWith('panel:')) this.windows.toggle(id.slice(6));
+      else if (id.startsWith('action:')) this._runAction(id.slice(7));
       else this.setTool(id);
       this._renderMobileBar();
     }));

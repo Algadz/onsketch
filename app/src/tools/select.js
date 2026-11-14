@@ -77,6 +77,23 @@ export class SelectTool extends Tool {
       this.app.handleMirrorPick(hit);
       return;
     }
+    if (this.app.operationName === 'pattern' && this.app.pattern) {
+      // Empty canvas: a box (seeds, targets) or a click (new centre / target).
+      const pick = this.app.pattern.pick;
+      if (!hit && (pick === 'seeds' || pick === 'targets')) {
+        this.boxMode = 'pattern';
+        this.box = {
+          x0: world.x, y0: world.y, x1: world.x, y1: world.y,
+          replace: pick === 'seeds' && !isAdd && !isToggle,
+          toggle: isToggle,
+          sx0: sx, sy0: sy
+        };
+        this.app.requestRender();
+        return;
+      }
+      this.app.handlePatternPick(hit, world);
+      return;
+    }
     if (this.app.operationName === 'offset') {
       if (this.app.offsetPhase === 'typing') return;
       if (!hit) {
@@ -260,6 +277,7 @@ export class SelectTool extends Tool {
     if (this.box) {
       const wasOffsetBox = this.boxMode === 'offset';
       const wasMirrorBox = this.boxMode === 'mirror';
+      const wasPatternBox = this.boxMode === 'pattern';
       const box = this.box;
       const x0 = Math.min(this.box.x0, this.box.x1);
       const y0 = Math.min(this.box.y0, this.box.y1);
@@ -277,9 +295,14 @@ export class SelectTool extends Tool {
         return;
       }
       if (wasMirrorBox && movedPx <= 3) return;
+      if (wasPatternBox && movedPx <= 3) {
+        // A click on empty canvas: a new target (or nothing for seeds).
+        if (this.app.pattern?.pick === 'targets') this.app.handlePatternPick(null, { x: box.x0, y: box.y0 });
+        return;
+      }
 
       if (wasOffsetBox && box.replace) this.app.offsetEntityIds = [];
-      else if (!wasMirrorBox && box.replace) this.app.clearSelection();
+      else if (!wasMirrorBox && !wasPatternBox && box.replace) this.app.clearSelection();
 
       const mirrorHits = [];
       for (const s of this.app.activeVisibleSketches()) {
@@ -298,18 +321,22 @@ export class SelectTool extends Tool {
             }
           } else if (wasMirrorBox) {
             if (e instanceof Point || e instanceof Line || e instanceof Circle) mirrorHits.push(e);
+          } else if (wasPatternBox) {
+            mirrorHits.push(e);
           } else {
             this.app.setSelected(e, true);
           }
         }
       }
-      if (!wasOffsetBox && !wasMirrorBox) for (const st of this.app.strokesInBox(x0, y0, x1, y1)) this.app.setStrokeSelected(st, true);
+      if (!wasOffsetBox && !wasMirrorBox && !wasPatternBox) for (const st of this.app.strokesInBox(x0, y0, x1, y1)) this.app.setStrokeSelected(st, true);
       if (wasOffsetBox) {
         this.app.offsetAnchorId = this.app.offsetEntityIds[0] || null;
         this.app.offsetPhase = this.app.offsetEntityIds.length ? 'placing' : 'selecting';
         this.app._syncOffsetSelection();
       } else if (wasMirrorBox) {
         this.app.handleMirrorBoxPick(mirrorHits, { replace: box.replace, toggle: box.toggle });
+      } else if (wasPatternBox) {
+        this.app.handlePatternBoxPick(mirrorHits, { replace: box.replace, toggle: box.toggle });
       } else {
         this.app.refreshUI();
       }

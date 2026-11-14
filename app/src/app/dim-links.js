@@ -1,5 +1,5 @@
 import { Arc, Circle, Line, Point } from '../core/entities.js';
-import { DistanceConstraint, MidpointConstraint, RadiusConstraint } from '../core/constraints.js';
+import { DistanceConstraint, MidpointConstraint, RadiusConstraint, constraintLabel } from '../core/constraints.js';
 import { allDimensions, ensureDimensionNames } from '../core/equations.js';
 
 /* =============== LINKED DIMENSIONS + FEATURE ACTIONS ===========
@@ -166,6 +166,9 @@ export class DimLinksMixin {
           this.refreshUI();
         },
       });
+    }
+    for (const c of this.patternsOf?.([item]) || []) {
+      out.push({ id: 'edit-pattern', label: `Edit ${constraintLabel(c).toLowerCase()}…`, run: () => this.editPattern(c) });
     }
     const lines = targets.filter(e => e instanceof Line);
     if (lines.length) {

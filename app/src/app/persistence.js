@@ -136,6 +136,8 @@ export class PersistenceMixin {
   }
   /* ---- Undo / redo ---- */
   undo() {
+    if (this.operationName === 'pattern' && this.pattern?.mode === 'edit') { this.cancelPatternEdit(); return; }
+    if (this.operationName === 'pattern') this.cancelOperation();
     if (this.undoStack.length < 2) return;
     trackOnce('undo');
     const cur = this.undoStack.pop();
@@ -145,6 +147,7 @@ export class PersistenceMixin {
     this._afterStateSwap();
   }
   redo() {
+    if (this.operationName === 'pattern') return;      // finish or cancel the pattern first
     if (!this.redoStack.length) return;
     const next = this.redoStack.pop();
     this.undoStack.push(next);

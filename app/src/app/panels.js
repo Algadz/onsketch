@@ -41,6 +41,10 @@ export class PanelsMixin {
       this._refreshOffsetOptions(section, body);
       return;
     }
+    if (this.operationName === 'pattern' && this.pattern) {
+      this._refreshPatternOptions(section, body);
+      return;
+    }
     section.hidden = true;
     body.innerHTML = '';
     document.getElementById('tool-options-title').textContent = 'Tool Options';
@@ -87,6 +91,7 @@ export class PanelsMixin {
       html = this._constraintSectionHTML(cons);
     } else {
       html += this._selHeaderHTML(geom, cons);
+      html += this._patternBlockHTML(geom);
       html += this._geomPropsHTML(geom, sketch);
       html += this._relationsHTML(geom, sketch);
       html += this._dimensionsHTML(geom, sketch);
@@ -94,6 +99,7 @@ export class PanelsMixin {
     body.innerHTML = html + this._inkSectionHTML(ink);
     this._bindInkSection(body);
     this._bindSelectionPanel(body, geom, sketch);
+    this._bindPatternBlock(body);
   }
 
   _glyphOf(e) {
@@ -303,6 +309,7 @@ export class PanelsMixin {
       return html + `</div><button class="rel-btn danger full ps-delete" data-delete-sel>Delete ${cons.length}</button>`;
     }
     const c = cons[0];
+    if (c.kind === 'pattern') return this._patternConstraintHTML(c);
     const dim = isDimension(c);
     const parts = this._relationParticipants(c, byId);
     let html = `<div class="ps-head">
@@ -368,6 +375,7 @@ export class PanelsMixin {
       ev.stopPropagation();
       const id = b.dataset.del;
       const gone = sketch.constraints.filter(c => c.id === id);
+      for (const c of gone) if (c.kind === 'pattern') this.unlinkPattern(c, { commit: false });   // copies stay
       sketch.constraints = sketch.constraints.filter(c => c.id !== id);
       this._syncFixFlags([], gone);
       this.commit();

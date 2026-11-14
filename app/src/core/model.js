@@ -23,6 +23,7 @@ function convertLegacyFills(items, sketch) {
   return out;
 }
 import { ensureDimensionNames } from './equations.js';
+import { PatternConstraint } from './patterns.js';
 import { reviveStroke, strokeToJSON } from './strokes.js';
 import { imageSource, registerImage, usedImageIds } from './images.js';
 
@@ -113,7 +114,15 @@ export class Sketch {
       for (const c of x.children()) walkLive(c);
     }
     const staleIds = new Set([...ids].filter(id => !liveIds.has(id)));
-    this.constraints = this.constraints.filter(c => !c.refs().some(r => staleIds.has(r)));
+    // Patterns lose the deleted copies / seeds but carry on (and freeze a
+    // deleted centre or target where it was).
+    const removed = new Map();
+    const note = (x) => { if (staleIds.has(x.id)) removed.set(x.id, { x: x.x, y: x.y }); for (const c of x.children()) note(c); };
+    note(e);
+    this.constraints = this.constraints.filter(c => {
+      if (c.prune && c.refs().some(r => staleIds.has(r))) return c.prune(staleIds, removed);
+      return !c.refs().some(r => staleIds.has(r));
+    });
     this.features = (this.features || []).filter(f => {
       const refs = []
         .concat(f.sourceEntityIds || [])
@@ -380,6 +389,7 @@ export class Project {
           case 'offset': c = new OffsetConstraint(cj.sourceEntityId, cj.targetEntityId, cj.offsetKind,
             cj.offsetKind === 'line' ? { l1: cj.l1, l2: cj.l2 } : { p1: cj.p1, p2: cj.p2 }); break;
           case 'offsetDistance': c = new OffsetDistanceConstraint(cj.pairs, cj.value); break;
+          case 'pattern': c = PatternConstraint.fromJSON(cj); break;
         }
         if (c && isSelfReferential(c)) c = null;   // e.g. a point "on" a line it is an end of
         if (c) {

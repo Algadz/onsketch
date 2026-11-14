@@ -62,6 +62,7 @@ export class Solver {
       if (c.driven) continue;
       const refs = c.refs().filter(Boolean);
       for (const id of refs) add(id);
+      if (c.graphLinks) { for (const [a, b] of c.graphLinks()) link(a, b); continue; }
       for (let i = 0; i < refs.length; i++) {
         for (let j = i + 1; j < refs.length; j++) link(refs[i], refs[j]);
       }

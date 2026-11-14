@@ -289,6 +289,12 @@ export class DragMixin {
 
   _offsetLinkedSnapIgnoreIds(sketch, seedIds) {
     const ignore = new Set(seedIds || []);
+    // A pattern moves as one: its seed and copies never snap to each other.
+    for (const c of sketch.constraints) {
+      if (c.kind !== 'pattern') continue;
+      const members = c.memberIds();
+      if ([...ignore].some(id => members.has(id))) for (const id of members) ignore.add(id);
+    }
     let touchesOffset = false;
     for (const c of sketch.constraints) {
       if (c.kind === 'offset' && c.refs().some(id => ignore.has(id))) {
@@ -358,6 +364,7 @@ export class DragMixin {
       const refs = c.refs().filter(Boolean);
       for (const id of refs) add(id);
       if (skipKinds && skipKinds.has(c.kind)) continue;
+      if (c.graphLinks) { for (const [a, b] of c.graphLinks()) link(a, b); continue; }
       for (let i = 0; i < refs.length; i++) {
         for (let j = i + 1; j < refs.length; j++) link(refs[i], refs[j]);
       }
@@ -385,6 +392,7 @@ export class DragMixin {
       if (c.driven) continue;
       const refs = c.refs().filter(Boolean);
       for (const id of refs) add(id);
+      if (c.graphLinks) { for (const [a, b] of c.graphLinks()) link(a, b); continue; }
       for (let i = 0; i < refs.length; i++) {
         for (let j = i + 1; j < refs.length; j++) link(refs[i], refs[j]);
       }

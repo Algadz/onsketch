@@ -646,6 +646,7 @@ export class ArcEndpointOnCircleConstraint extends Constraint {
 /** Display name of a constraint (horizontal / vertical distances by axis). */
 export function constraintLabel(c) {
   if (c && c.kind === 'distance' && c.axis) return c.axis === 'x' ? 'Horizontal distance' : 'Vertical distance';
+  if (c && c.kind === 'pattern') return { linear: 'Linear pattern', circular: 'Circular pattern', points: 'Point pattern' }[c.type] || 'Pattern';
   return CONSTRAINT_LABELS[c?.kind] || c?.kind;
 }
 
@@ -661,7 +662,7 @@ export const CONSTRAINT_LABELS = {
   distance:'Distance', radius:'Radius', curveDistance:'Curve distance', angle:'Angle', directedAngle:'Central angle',
   pointLineDistance:'Pt-Line dist',
   pointOnLine:'On line', pointOnCircle:'On circle',
-  offset:'Offset', offsetDistance:'Offset dist'
+  offset:'Offset', offsetDistance:'Offset dist', pattern:'Pattern'
 };
 
 export const CONSTRAINT_GLYPHS = {
@@ -676,5 +677,5 @@ export const CONSTRAINT_GLYPHS = {
   distance:'↔', radius:'R', diameter:'⌀', curveDistance:'↔', angle:'∠',
   pointLineDistance:'↔',
   pointOnLine:'⊥•', pointOnCircle:'○•',
-  offset:'⊿', offsetDistance:'↔'
+  offset:'⊿', offsetDistance:'↔', pattern:'▦'
 };

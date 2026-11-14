@@ -500,6 +500,62 @@ export class Renderer {
     ctx.restore();
   }
 
+  /** Guides of a pattern being made or edited: centre, origin, targets
+   *  (rings), directions (arrows), the sweep of a circular pattern. */
+  drawPatternMarks(marks) {
+    const v = this.view, ctx = this.ctx, t = this.theme;
+    ctx.save();
+    ctx.lineWidth = 1.4;
+    for (const m of marks) {
+      ctx.strokeStyle = t.preview;
+      ctx.fillStyle = t.preview;
+      ctx.setLineDash([]);
+      if (m.kind === 'center' || m.kind === 'origin' || m.kind === 'target') {
+        const p = v.worldToScreen(m);
+        ctx.fillStyle = t.previewHalo;
+        ctx.beginPath(); ctx.arc(p.x, p.y, m.kind === 'target' ? 6 : 7, 0, TAU); ctx.fill(); ctx.stroke();
+        if (m.kind === 'center' || m.kind === 'origin') {
+          ctx.beginPath();
+          ctx.moveTo(p.x - 11, p.y); ctx.lineTo(p.x + 11, p.y);
+          ctx.moveTo(p.x, p.y - 11); ctx.lineTo(p.x, p.y + 11);
+          ctx.stroke();
+        }
+        ctx.fillStyle = t.preview;
+        ctx.beginPath(); ctx.arc(p.x, p.y, 2, 0, TAU); ctx.fill();
+      } else if (m.kind === 'leader') {
+        const a = v.worldToScreen(m.a), b = v.worldToScreen(m.b);
+        ctx.globalAlpha = 0.5;
+        ctx.setLineDash([2, 4]);
+        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+        ctx.globalAlpha = 1;
+      } else if (m.kind === 'arrow') {
+        const a = v.worldToScreen(m.a), b = v.worldToScreen(m.b);
+        const ang = Math.atan2(b.y - a.y, b.x - a.x);
+        ctx.setLineDash([6, 4]);
+        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.moveTo(b.x, b.y);
+        ctx.lineTo(b.x - 10 * Math.cos(ang - 0.4), b.y - 10 * Math.sin(ang - 0.4));
+        ctx.lineTo(b.x - 10 * Math.cos(ang + 0.4), b.y - 10 * Math.sin(ang + 0.4));
+        ctx.closePath(); ctx.fill();
+      } else if (m.kind === 'sweep') {
+        // dashed arc from the seed round the centre, with an arrow head
+        const c = v.worldToScreen(m.center), f = v.worldToScreen(m.from);
+        const r = Math.hypot(f.x - c.x, f.y - c.y);
+        if (r < 4 || !m.angle) continue;
+        const a0 = Math.atan2(f.y - c.y, f.x - c.x);
+        const sweep = -m.angle * Math.PI / 180;           // screen y is down
+        const a1 = a0 + sweep;
+        ctx.globalAlpha = 0.55;
+        ctx.setLineDash([3, 5]);
+        ctx.beginPath(); ctx.arc(c.x, c.y, r, a0, a1, sweep < 0); ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+    }
+    ctx.restore();
+  }
+
   drawTempPoint(point) {
     if (!point) return;
     const v = this.view, ctx = this.ctx;
@@ -602,8 +658,46 @@ export class Renderer {
       case 'equalRadius': return [...atCircle(c.c1), ...atCircle(c.c2)];
       case 'tangent': return [...atLine(L(c.l)), ...atCircle(c.circleId)];
       case 'tangentCC': return [...atCircle(c.c1), ...atCircle(c.c2)];
+      case 'pattern': {                       // one badge, on the seed
+        const e = entMap.get(c.seeds?.[0]);
+        if (e instanceof Line) return atLine({ a: e.p1, b: e.p2 });
+        if (e && e.center) return atCircle(e.id);
+        return atPoint(e);
+      }
     }
     return [];
+  }
+
+  /** A selected / hovered pattern outlines each of its copies (a dashed
+   *  box around every instance). */
+  _ringPatternCopies(c, entMap) {
+    const ctx = this.ctx, v = this.view;
+    const seeds = new Set(c.seeds);
+    ctx.save();
+    ctx.setLineDash([3, 3]);
+    ctx.lineWidth = 1;
+    for (const inst of c.instances) {
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      const acc = (p, r = 0) => {
+        const q = v.worldToScreen(p), rr = r * v.zoom;
+        x0 = Math.min(x0, q.x - rr); y0 = Math.min(y0, q.y - rr); x1 = Math.max(x1, q.x + rr); y1 = Math.max(y1, q.y + rr);
+      };
+      for (const [s, d] of inst.pairs) {
+        if (!seeds.has(s)) continue;
+        const e = entMap.get(d);
+        if (!e) continue;
+        if (e.p1) { acc(e.p1); acc(e.p2); }
+        else if (e.center) acc(e.center, e.r);
+        else acc(e);
+      }
+      if (x0 === Infinity) continue;
+      ctx.beginPath();
+      const pad = 5;
+      if (ctx.roundRect) ctx.roundRect(x0 - pad, y0 - pad, x1 - x0 + 2 * pad, y1 - y0 + 2 * pad, 4);
+      else ctx.rect(x0 - pad, y0 - pad, x1 - x0 + 2 * pad, y1 - y0 + 2 * pad);
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   drawRelations(sketch, entMap, redundantIds, layerState = () => 'active') {
@@ -647,6 +741,7 @@ export class Renderer {
         ctx.fillText(glyph, x + size / 2, y + size / 2 + 0.5);
         if (lit) {                            // show what it ties
           ctx.beginPath(); ctx.arc(sp.x, sp.y, 5, 0, TAU); ctx.stroke();
+          if (c.kind === 'pattern') this._ringPatternCopies(c, entMap);
         }
         if (st === 'active') this.lastRelRects.push({ constraint: c, x, y, w: size, h: size });
       }

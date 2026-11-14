@@ -56,12 +56,14 @@ export class RenderEventsMixin {
     // Touch has no hover: mark the placed first point of a two-point tool.
     if (this.touchUI && this._twoPointAnchor) this.renderer.drawTempPoint(this._twoPointAnchor());
     const opPrev = (this.getMirrorPreview && this.getMirrorPreview())
-      || (this.getOffsetPreview && this.getOffsetPreview());
+      || (this.getOffsetPreview && this.getOffsetPreview())
+      || (this.getPatternPreview && this.getPatternPreview());
     if (opPrev) {
       if (opPrev.paths)   for (const p of opPrev.paths) this.renderer.drawTempPath(p, true);
       if (opPrev.circles) for (const c of opPrev.circles) this.renderer.drawTempCircle(c.center, c.r);
       if (opPrev.arcs)    for (const a of opPrev.arcs) this.renderer.drawTempArc(a.center, a.r, a.a0, a.a1, !!a.clockwise);
       if (opPrev.points)  for (const p of opPrev.points) this.renderer.drawTempPoint(p);
+      if (opPrev.marks)   this.renderer.drawPatternMarks(opPrev.marks);
     }
 
     if (this._drawLoupe) queueMicrotask(() => this._drawLoupe());
@@ -346,6 +348,12 @@ export class RenderEventsMixin {
       }
       if (ev.key === 'Escape' && this.operationName && this.cancelOperation()) {
         ev.preventDefault();
+        return;
+      }
+      // Enter creates the pattern (or finishes editing it).
+      if (ev.key === 'Enter' && this.operationName === 'pattern' && this.pattern && !ev.target.matches('button')) {
+        ev.preventDefault();
+        if (this.pattern.mode === 'edit') this.finishPatternEdit(); else this.createPattern();
         return;
       }
       const k = ev.key.toLowerCase();

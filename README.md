@@ -22,6 +22,7 @@ npm run test:clipboard # Ctrl+C / X / V for ink, across tabs and from other apps
 npm run test:linedim # Smart Dimension between two parallel lines
 npm run test:layers  # layers as display only: editing, relations and dimensions across layers, hiding
 npm run test:nosnap  # Alt = no snap while placing or dragging; Space-drag pans
+npm run test:pattern # linear / circular / point patterns: picks, linked copies, editing, equations, unlink
 node tests/style.e2e.mjs  # restyling arrows / texts after drawing, touch tap-through guard
 node tests/analytics.e2e.mjs  # Umami events: what is counted, once per visit, nothing sent from tests
 npm run test:mobile  # phone / tablet layout and touch input on emulated devices
@@ -55,7 +56,7 @@ cached modules after a deploy. `npm test` fails if the stamp is out of date.
   per-device preference.
 - **Options bar** (second row): settings for the active tool, as in Paint.NET.
   Line weight, line type and construction while drawing; a short hint with
-  Select (Mirror and Offset are in the Tools window); step-by-step help for
+  Select (Mirror, Offset and the patterns are in the Tools window); step-by-step help for
   Smart Dimension; Fill / Erase for the Fill tool.
 - **Floating windows** over the canvas, dragged by their title bar and
   remembered per browser: Tools, Colors, Layers, Properties, Equations.
@@ -229,6 +230,8 @@ browsers.
 | | `dimension`, `relation` (once) | `kind` |
 | | `equation-used`, `undo`, `copy`, `cut` (once) | |
 | | `relation-refused` (once) | `kind`, `reason` (conflict / implied) |
+| | `pattern` (once) | `type` (linear / circular / points), `linked` |
+| | `pattern-edit` (once) | `type` |
 | | `paste` (once) | `what` (ink / image / text) |
 | | `image-import` (once) | `via` (picker / drop) |
 | | `theme` | `to` |
@@ -385,6 +388,57 @@ exactly as if it were one layer.
 
 Layers have a name, visibility, opacity and order.
 
+## Patterns
+
+Three buttons under Mirror and Offset in the Tools window (on a phone, at
+the end of Draw ▸) repeat the selected shapes, as in SolidWorks:
+
+- **Linear pattern**: *Instances* (the seed counts as one), *Spacing* and
+  an *Angle*, or **Line…** to follow a line's direction (the copies turn
+  when the line turns); ⇄ reverses. *Direction 2* (switch) makes a grid.
+- **Circular pattern**: pick the **centre** (a point, a circle or arc for
+  its centre, or empty canvas: a new point is made there), *Instances*,
+  *Total angle* with *Equal spacing* (360° shares a full turn; less puts
+  the last copy at the end), or the *Step angle* without it; CCW / CW.
+  Arcs turn with their copies.
+- **Point pattern** ("sketch-driven"): the **origin** (a point of the
+  seed, by default its first corner or centre) lands on each **target**:
+  click points, box-select many, or click empty canvas for new ones;
+  click a target again (or ×) to remove it.
+
+The operation runs with the Select tool and its panel is in Properties:
+a type switch (while creating), what canvas clicks pick (seed shapes,
+centre, origin, targets, direction line), the parameters, **Keep linked**
+and Create / Cancel; a dashed preview shows the copies, the centre, the
+targets and the directions. Enter creates, Esc cancels. Fields take units
+and arithmetic (`1in`, `30/2`); a field starting with `=` or naming a
+dimension or variable keeps an **equation** (`=D1*2`, `=pitch`), so the
+pattern follows when D1 changes (counts too, `=floor(D3/D4)`). Arrow keys
+step a value. At most 200 copies per pattern (every copy is solved).
+
+**Keep linked** (on by default; the last choice is remembered for the
+visit):
+- *on*: a **pattern relation** (▦ badge on the seed) ties every copy to
+  its seed through the transform. The solver keeps them together: drag or
+  dimension the seed, the centre, a target or the direction line and the
+  copies follow; drag or resize a copy and the seed (so all of them)
+  moves. Copies add no degrees of freedom. Selecting a copy shows a
+  pattern card in Properties (**Edit**); right-click → *Edit … pattern…*;
+  the relation itself offers Edit pattern, **Unlink** and **Delete copies**.
+  **Edit** reopens the panel and applies every change at once (copies keep
+  their ids, so relations, fills and ink on them survive a new spacing or
+  count); **Done** is one undo step, **Cancel** / Esc / Ctrl+Z put it all
+  back. Deleting a copy leaves that instance out from then on; deleting a
+  centre, origin, target or direction line freezes it where it was;
+  deleting the seed ends the pattern. Deleting the relation = Unlink.
+- *off*, or **Unlink** later: plain copies that carry the seed's own
+  relations (horizontal, coincident, equal…; not dimensions or Fix), each
+  edited on its own. Spots clicked on empty canvas don't become points.
+
+Saved as a `pattern` constraint: `{ type, params, seeds, instances:
+[{ key, pairs: [[seedId, copyId, 'p' | 'r' | 'a' | 'e']] }], skipped }`
+(`core/patterns.js`, UI in `app/patterns.js`).
+
 Right-click a line, circle or arc for **Set as construction** (or back to
 normal geometry) and, on lines, **Create midpoint** (a point held at the
 middle by a midpoint relation). With several shapes selected, the actions
@@ -419,7 +473,7 @@ Project
 └─ sketches[0]     the single parametric sketch
    ├─ entities[]   Point / Line / Circle / Arc, each with layerId and style
    │               (line weight, line type)
-   ├─ constraints[]
+   ├─ constraints[] relations, dimensions, linked patterns (`core/patterns.js`)
    ├─ fills[]      fill-tool paint: colour, opacity, layer, a point inside the area
    └─ strokes[]    ink, in drawing order: pen / marker strokes (colour, opacity, width,
                    points), arrows (tail, tip, tips, head, dash, attached ends `at`:

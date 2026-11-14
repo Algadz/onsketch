@@ -17,6 +17,9 @@ export class OperationsMixin {
   /* ---- Operations ---- */
   _clearOperationState() {
     if (this.offsetInputEl) { this.offsetInputEl.remove(); this.offsetInputEl = null; }
+    // Leaving a pattern edit another way than Cancel keeps the changes.
+    if (this.pattern?.mode === 'edit' && this.pattern.dirty) { this.pattern = null; this.commit(); }
+    this.pattern = null;
     this.operationName = null;
     this.mirrorPickMode = 'entities';
     this.mirrorEntityIds = [];
@@ -29,6 +32,7 @@ export class OperationsMixin {
 
   cancelOperation() {
     if (!this.operationName) return false;
+    if (this.operationName === 'pattern' && this.pattern?.mode === 'edit') return this.cancelPatternEdit();
     this._clearOperationState();
     document.getElementById('status-hint').textContent = (this.tool.hint && this.tool.hint()) || '';
     this.refreshToolOptions();

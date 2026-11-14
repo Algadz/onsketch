@@ -414,6 +414,57 @@
   }
   .op-actions { margin-top: 10px; }
 
+  /* Patterns (Properties window while making / editing one) */
+  .pat-types { display: flex; width: 100%; margin-bottom: 8px; }
+  .pat-types button { flex: 1 1 0; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 5px 4px 4px; color: var(--text); min-width: 0; }
+  .pat-types button svg { width: 18px; height: 18px; flex: 0 0 18px; }
+  .pat-types button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+  .pat-count { font-size: 11.5px; color: var(--text-soft); margin: 0 0 8px; }
+  .pat-count b { color: var(--text); font-variant-numeric: tabular-nums; }
+  .pat-count span { color: var(--text-muted); margin: 0 2px; }
+  .pat-types button:not(.on):hover { background: var(--accent-softer); color: var(--accent); }
+  .pat-field, .pat-stepper { display: flex; align-items: center; gap: 4px; min-width: 0; }
+  .pat-field input, .pat-stepper input {
+    flex: 1 1 auto; min-width: 0; width: 100%; padding: 5px 7px; border: 1px solid var(--border);
+    border-radius: 5px; background: var(--field); color: var(--text); font: inherit; font-variant-numeric: tabular-nums;
+  }
+  .pat-field input:focus, .pat-stepper input:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+  .pat-field input.bad, .pat-stepper input.bad { border-color: var(--overc); box-shadow: 0 0 0 2px color-mix(in srgb, var(--overc) 25%, transparent); }
+  .pat-stepper input { text-align: center; }
+  .pat-unit { color: var(--text-muted); font-size: 11px; flex: 0 0 auto; min-width: 16px; }
+  .pat-step, .pat-flip, .pat-pickline, .pat-x {
+    flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+    border: 1px solid var(--border); background: var(--field); color: var(--text-soft);
+    border-radius: 5px; cursor: pointer; font: inherit;
+  }
+  .pat-step { width: 26px; height: 27px; font-size: 15px; line-height: 1; }
+  .pat-flip { width: 27px; height: 27px; }
+  .pat-flip svg, .pat-x svg { width: 14px; height: 14px; }
+  .pat-pickline { height: 27px; padding: 0 7px; font-size: 11px; }
+  .pat-step:hover, .pat-flip:hover, .pat-pickline:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-softer); }
+  .pat-flip.on, .pat-pickline.on { border-color: var(--accent); background: var(--accent); color: #fff; }
+  .pat-x { width: 20px; height: 20px; border-color: transparent; background: none; margin-left: auto; }
+  .pat-x:hover { color: var(--overc); border-color: var(--border-soft); }
+  .pat-chip {
+    flex: 1 1 auto; min-width: 0; display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 4px 3px 8px; border: 1px solid var(--accent-border); border-radius: 999px;
+    background: var(--accent-softer); color: var(--accent-strong); font-size: 11px; white-space: nowrap; overflow: hidden;
+  }
+  .pat-head { display: flex; align-items: center; justify-content: space-between; }
+  .pat-targets { max-height: 140px; overflow-y: auto; margin: -2px 0 6px; }
+  .pat-targets .sel-item .glyph { font-size: 10px; }
+  .pat-card {
+    display: flex; align-items: center; gap: 8px; padding: 7px 8px; margin-bottom: 6px;
+    border: 1px solid var(--accent-border); border-radius: 6px; background: var(--accent-softer);
+  }
+  .pat-card-icon { display: inline-flex; color: var(--accent); }
+  .pat-card-icon svg { width: 20px; height: 20px; }
+  .pat-card-text { flex: 1 1 auto; min-width: 0; display: grid; }
+  .pat-card-text strong { font-size: 12px; color: var(--text); }
+  .pat-card-text span { font-size: 11px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pat-card .rel-btn { flex: 0 0 auto; min-height: 26px; padding: 3px 10px; justify-content: center; }
+  .rel-btn svg:not(.ui-icon) { width: 15px; height: 15px; flex: 0 0 15px; }
+
   /* Existing constraint pills */
   .constraint-pill {
     display: inline-flex;
@@ -1612,6 +1663,7 @@
   }
   .fly-item svg { width: 22px; height: 22px; }
   .fly-item.on { background: var(--accent); color: #fff; }
+  .fly-sep { grid-column: 1 / -1; height: 1px; background: var(--border-soft); margin: 2px 6px; }
   .compact #more-menu { top: calc(46px + env(safe-area-inset-top)); right: 8px; min-width: 230px; max-height: 75dvh; overflow-y: auto; }
   .more-item {
     display: flex; align-items: center; gap: 10px; min-height: 42px; padding: 0 10px;

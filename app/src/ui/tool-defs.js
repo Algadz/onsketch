@@ -46,6 +46,9 @@ export const ACTION_ICONS = {
   'zoom-reset': svg('<circle cx="11" cy="11" r="6"/><path d="M16 16l4 4"/><path d="M11 8v6"/>'),
   mirror: svg('<path d="M12 4v16"/><path d="M5 7l5 5-5 5z"/><path d="M19 7l-5 5 5 5z"/>'),
   offset: svg('<path d="M5 17c4-8 10-8 14 0"/><path d="M7 12c3-5 7-5 10 0"/><path d="M5 17h14"/>'),
+  'linear-pattern': svg('<rect x="2.5" y="8" width="5" height="8" rx="1"/><rect x="9.5" y="8" width="5" height="8" rx="1" stroke-dasharray="2.2 1.8"/><rect x="16.5" y="8" width="5" height="8" rx="1" stroke-dasharray="2.2 1.8"/>'),
+  'circular-pattern': svg('<circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="12" cy="4.5" r="2.3"/><circle cx="18.5" cy="8.3" r="2.3" stroke-dasharray="2 1.6"/><circle cx="18.5" cy="15.7" r="2.3" stroke-dasharray="2 1.6"/><circle cx="12" cy="19.5" r="2.3" stroke-dasharray="2 1.6"/><circle cx="5.5" cy="15.7" r="2.3" stroke-dasharray="2 1.6"/><circle cx="5.5" cy="8.3" r="2.3" stroke-dasharray="2 1.6"/>'),
+  'point-pattern': svg('<rect x="3" y="3" width="6" height="6" rx="1"/><rect x="14" y="7" width="6" height="6" rx="1" stroke-dasharray="2 1.6"/><rect x="5" y="15" width="6" height="6" rx="1" stroke-dasharray="2 1.6"/><circle cx="14" cy="7" r="1.3" fill="currentColor" stroke="none"/><circle cx="5" cy="15" r="1.3" fill="currentColor" stroke="none"/><path d="M9 9l4 -1.5M7 11l-1 3" stroke-dasharray="1.2 1.6" opacity="0.6"/>'),
   construction: svg('<path d="M4 17h16" stroke-dasharray="3 3"/><path d="M6 7h12"/>'),
   'reset-layout': svg('<rect x="3" y="4" width="7" height="7" rx="1"/><rect x="14" y="4" width="7" height="16" rx="1"/><rect x="3" y="14" width="7" height="6" rx="1"/>'),
 };

@@ -27,6 +27,7 @@ export class EquationsMixin {
       else c.value = internalValue(c, v);
       changed++;
     });
+    changed += this._applyPatternEquations?.() || 0;
     if (errors) document.getElementById('status-hint').textContent = `${errors} equation error${errors > 1 ? 's' : ''}: see the Equations window.`;
     return { errors, changed };
   }

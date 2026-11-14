@@ -62,6 +62,9 @@ export class ChromeMixin {
       case 'solve':        this.solveAndRender(); break;
       case 'mirror':       this.startMirrorOperation(); break;
       case 'offset':       this.startOffsetOperation(); break;
+      case 'linear-pattern':   this.startPatternOperation('linear'); break;
+      case 'circular-pattern': this.startPatternOperation('circular'); break;
+      case 'point-pattern':    this.startPatternOperation('points'); break;
       case 'construction': this.constructionMode = !this.constructionMode; this._refreshOptionsBar(); break;
       case 'grid':         this.setGridVisible(!this.gridOn); break;
       case 'snap':         this.setSnapOn(!this.snapOn); break;
@@ -167,6 +170,9 @@ export class ChromeMixin {
       <div class="tool-grid">
         <button class="tool-btn" data-action="mirror" title="Mirror selection about a line">${ACTION_ICONS.mirror}</button>
         <button class="tool-btn" data-action="offset" title="Offset selected line, circle or arc">${ACTION_ICONS.offset}</button>
+        <button class="tool-btn" data-action="linear-pattern" title="Linear pattern: repeat the selection in a row or a grid">${ACTION_ICONS['linear-pattern']}</button>
+        <button class="tool-btn" data-action="circular-pattern" title="Circular pattern: repeat the selection around a centre">${ACTION_ICONS['circular-pattern']}</button>
+        <button class="tool-btn" data-action="point-pattern" title="Point pattern: copy the selection onto points you pick">${ACTION_ICONS['point-pattern']}</button>
       </div>`;
     body.querySelectorAll('[data-tool]').forEach(b => b.addEventListener('click', () => this.setTool(b.dataset.tool)));
     body.querySelectorAll('[data-action]').forEach(b => b.addEventListener('click', () => this._runAction(b.dataset.action, b)));

@@ -60,6 +60,9 @@ export class SelectionMixin {
       return;
     }
     const gone = sketch.constraints.filter(c => c.selected);
+    // Deleting a pattern relation unlinks it: the copies stay, as shapes
+    // of their own with the seed's relations.
+    for (const c of gone) if (c.kind === 'pattern') this.unlinkPattern(c, { commit: false });
     sketch.constraints = sketch.constraints.filter(c => !c.selected);
     this._syncFixFlags([], gone);
     for (const e of toDelete) sketch.removeEntity(e);

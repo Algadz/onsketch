@@ -34,6 +34,7 @@ import { CompactMixin } from './compact.js';
 import { CloudMixin } from './cloud-ui.js';
 import { ImageImportMixin } from './image-import.js';
 import { ClipboardMixin } from './clipboard.js';
+import { PatternsMixin } from './patterns.js';
 import { onImageLoad } from '../core/images.js';
 import { trackOnce } from '../ui/analytics.js';
 
@@ -60,6 +61,7 @@ export class App {
     this.offsetDistance = 10;
     this.offsetSide = 1;
     this.offsetInputEl = null;
+    this.pattern = null;           // pattern being created / edited (patterns.js)
     this.polygonSides = 6;
     this.gridOn = true; this.snapOn = true; this.constructionMode = false;
     this.lastSnap = null; this.lastWorldCursor = { x:0, y:0 };
@@ -754,7 +756,7 @@ export class App {
 }
 
 /* Methods are grouped into mixins by concern; see src/app/*.js. */
-for (const Mixin of [ChromeMixin, EquationsMixin, LayersPanelMixin, FillsMixin, DimensionLabelsMixin, SelectionMixin, DragMixin, SolveMixin, OperationsMixin, ConstraintActionsMixin, RenderEventsMixin, PanelsMixin, PersistenceMixin, SketchWindowMixin, ReportMixin, DimLinksMixin, InkSelectMixin, InkLinksMixin, TextEditMixin, InkTransformMixin, TouchMixin, TouchUIMixin, CompactMixin, CloudMixin, ImageImportMixin, ClipboardMixin]) {
+for (const Mixin of [ChromeMixin, EquationsMixin, LayersPanelMixin, FillsMixin, DimensionLabelsMixin, SelectionMixin, DragMixin, SolveMixin, OperationsMixin, ConstraintActionsMixin, RenderEventsMixin, PanelsMixin, PersistenceMixin, SketchWindowMixin, ReportMixin, DimLinksMixin, InkSelectMixin, InkLinksMixin, TextEditMixin, InkTransformMixin, TouchMixin, TouchUIMixin, CompactMixin, CloudMixin, ImageImportMixin, ClipboardMixin, PatternsMixin]) {
   for (const key of Object.getOwnPropertyNames(Mixin.prototype)) {
     if (key === 'constructor') continue;
     Object.defineProperty(App.prototype, key, Object.getOwnPropertyDescriptor(Mixin.prototype, key));
