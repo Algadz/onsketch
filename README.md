@@ -446,6 +446,19 @@ touch input. Plan and audit: `docs/mobile-plan.md`.
 
 ## Solving and conflicts
 
+- **Speed.** Constraint systems are sparse: a corner's coordinates appear
+  in a handful of relations, not in all of them. The solver and the drag
+  code use that (`core/jacobian.js`): the numerical Jacobian re-evaluates
+  only the constraints a parameter feeds (learned by recording what each
+  constraint reads, with a full fallback if a constraint changes shape);
+  elimination skips zeros; drags find the free directions from a sparse
+  row reduction (`nullSpaceOf`) instead of a full row-space basis; the
+  redundancy check uses the left null space once instead of re-ranking the
+  Jacobian per constraint; and a drag frame searches from the drag start
+  only when the short step from the previous frame didn't reach the cursor.
+  On a 59-line enclosure (98 relations, 22 DOF) a drag frame went from
+  ~550 ms to ~25 ms.
+
 - **Angle dimensions** measure between the two lines' directions, in the
   sector where the dimension was placed: 60° and 120° are different, and
   any value from 0° to 180° can be reached (an equation like `360/n` moves

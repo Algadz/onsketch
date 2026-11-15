@@ -10,23 +10,42 @@ export const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 /** Solve A x = b where A is square (n×n). Naive Gaussian elimination
  *  with partial pivoting. Returns x or null if singular. */
 export function solveLinear(A, b) {
-  const n = A.length;
-  const M = A.map((row, i) => [...row, b[i]]);
+  // Gaussian elimination with partial pivoting on a flat Float64Array.
+  // Constraint systems are sparse: rows whose multiplier is 0 are skipped,
+  // and each pivot row is swept only over its non-zero columns.
+  const n = A.length, w = n + 1;
+  const M = new Float64Array(n * w);
   for (let i = 0; i < n; i++) {
-    let p = i;
-    for (let k = i + 1; k < n; k++) if (Math.abs(M[k][i]) > Math.abs(M[p][i])) p = k;
-    if (Math.abs(M[p][i]) < 1e-14) return null;
-    [M[i], M[p]] = [M[p], M[i]];
+    const row = A[i], o = i * w;
+    for (let j = 0; j < n; j++) M[o + j] = row[j];
+    M[o + n] = b[i];
+  }
+  const cols = new Int32Array(w);
+  for (let i = 0; i < n; i++) {
+    let p = i, best = Math.abs(M[i * w + i]);
+    for (let k = i + 1; k < n; k++) { const v = Math.abs(M[k * w + i]); if (v > best) { best = v; p = k; } }
+    if (best < 1e-14) return null;
+    if (p !== i) {
+      const oi = i * w, op = p * w;
+      for (let j = i; j < w; j++) { const t = M[oi + j]; M[oi + j] = M[op + j]; M[op + j] = t; }
+    }
+    const oi = i * w, piv = M[oi + i];
+    let nc = 0;
+    for (let j = i; j < w; j++) if (M[oi + j] !== 0) cols[nc++] = j;
     for (let k = i + 1; k < n; k++) {
-      const f = M[k][i] / M[i][i];
-      for (let j = i; j <= n; j++) M[k][j] -= f * M[i][j];
+      const ok = k * w;
+      const a = M[ok + i];
+      if (a === 0) continue;
+      const f = a / piv;
+      for (let c = 0; c < nc; c++) { const j = cols[c]; M[ok + j] -= f * M[oi + j]; }
     }
   }
   const x = new Array(n).fill(0);
   for (let i = n - 1; i >= 0; i--) {
-    let s = M[i][n];
-    for (let j = i + 1; j < n; j++) s -= M[i][j] * x[j];
-    x[i] = s / M[i][i];
+    const oi = i * w;
+    let s = M[oi + n];
+    for (let j = i + 1; j < n; j++) { const v = M[oi + j]; if (v !== 0) s -= v * x[j]; }
+    x[i] = s / M[oi + i];
   }
   return x;
 }
@@ -134,16 +153,102 @@ export function nullSpaceBasis(rowBasis, n, tol = 1e-8) {
   return basis;
 }
 
+/** Orthonormal basis of the null space of A (m × n): the directions
+ *  that keep A·x unchanged. Row reduction with partial pivoting, skipping
+ *  zeros (constraint Jacobians are sparse): each column without a pivot
+ *  gives one null vector, and only those few are orthonormalised. Much
+ *  cheaper than a row-space basis followed by projecting every unit
+ *  vector (n³), with the same subspace.
+ *  @returns {Float64Array[]} */
+export function nullSpaceOf(A, n, tol = 1e-7) {
+  const m = A.length;
+  const R = [];
+  for (let i = 0; i < m; i++) R.push(Float64Array.from(A[i]));
+  const pivotCol = [];                    // pivot column of each reduced row
+  const isPivot = new Uint8Array(n);
+  let r = 0;
+  for (let c = 0; c < n && r < m; c++) {
+    let p = -1, best = tol;
+    for (let i = r; i < m; i++) { const v = Math.abs(R[i][c]); if (v > best) { best = v; p = i; } }
+    if (p < 0) continue;                  // no pivot: a free column
+    if (p !== r) { const t = R[p]; R[p] = R[r]; R[r] = t; }
+    const pr = R[r], inv = 1 / pr[c];
+    for (let j = c; j < n; j++) if (pr[j] !== 0) pr[j] *= inv;
+    const nz = [];
+    for (let j = c; j < n; j++) if (pr[j] !== 0) nz.push(j);
+    for (let i = 0; i < m; i++) {
+      if (i === r) continue;
+      const row = R[i], f = row[c];
+      if (f === 0) continue;
+      for (const j of nz) row[j] -= f * pr[j];
+      row[c] = 0;
+    }
+    pivotCol.push(c); isPivot[c] = 1; r++;
+  }
+  // x_free = e_f, x_pivot = −(reduced row)[f]
+  const vecs = [];
+  for (let f = 0; f < n; f++) {
+    if (isPivot[f]) continue;
+    const v = new Float64Array(n);
+    v[f] = 1;
+    for (let k = 0; k < pivotCol.length; k++) { const a = R[k][f]; if (a !== 0) v[pivotCol[k]] = -a; }
+    vecs.push(v);
+  }
+  // orthonormalise (modified Gram–Schmidt, twice for accuracy)
+  const basis = [];
+  for (const v of vecs) {
+    for (let pass = 0; pass < 2; pass++) {
+      for (const b of basis) {
+        let d = 0;
+        for (let k = 0; k < n; k++) d += v[k] * b[k];
+        if (d !== 0) for (let k = 0; k < n; k++) v[k] -= d * b[k];
+      }
+    }
+    let norm = 0;
+    for (let k = 0; k < n; k++) norm += v[k] * v[k];
+    norm = Math.sqrt(norm);
+    if (norm > 1e-12) { for (let k = 0; k < n; k++) v[k] /= norm; basis.push(v); }
+  }
+  return basis;
+}
+
 export function solveLeastSquares(A, b, damping = 1e-8) {
   if (!A.length || !A[0]?.length) return null;
-  const n = A[0].length;
+  const m = A.length, n = A[0].length;
+  // Sparse rows: constraint Jacobians are mostly zeros.
+  const nz = A.map(row => { const out = []; for (let j = 0; j < n; j++) if (row[j] !== 0) out.push(j); return out; });
+  if (m < n) {
+    // Fewer equations than unknowns: the same damped least-squares step
+    // through the smaller m × m system, x = Aᵀ (A Aᵀ + λI)⁻¹ b
+    // (identical to (AᵀA + λI)⁻¹ Aᵀ b; the minimum-norm move).
+    const G = Array.from({ length: m }, () => new Array(m).fill(0));
+    for (let i = 0; i < m; i++) {
+      const ri = A[i];
+      for (let k = i; k < m; k++) {
+        const rk = A[k];
+        let s = 0;
+        const a = nz[i], c = nz[k];
+        if (a.length <= c.length) { for (const j of a) s += ri[j] * rk[j]; }
+        else { for (const j of c) s += ri[j] * rk[j]; }
+        G[i][k] = s; G[k][i] = s;
+      }
+      G[i][i] += damping;
+    }
+    const y = solveLinear(G, b.slice());
+    if (!y) return null;
+    const x = new Array(n).fill(0);
+    for (let i = 0; i < m; i++) { const yi = y[i]; if (yi === 0) continue; for (const j of nz[i]) x[j] += A[i][j] * yi; }
+    return x;
+  }
   const normal = Array.from({ length:n }, () => new Array(n).fill(0));
   const rhs = new Array(n).fill(0);
-  for (let i = 0; i < A.length; i++) {
-    for (let j = 0; j < n; j++) {
-      const aij = A[i][j];
+  for (let i = 0; i < m; i++) {
+    const row = A[i], cols = nz[i];
+    for (const j of cols) {
+      const aij = row[j];
       rhs[j] += aij * b[i];
-      for (let k = 0; k < n; k++) normal[j][k] += aij * A[i][k];
+      const out = normal[j];
+      for (const k of cols) out[k] += aij * row[k];
     }
   }
   for (let j = 0; j < n; j++) normal[j][j] += damping;

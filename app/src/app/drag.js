@@ -1,7 +1,8 @@
-import { EPS, TAU, clamp, directedArcSpan, dist, nullSpaceBasis, rowSpaceBasis, solveLeastSquares, unwrapAngleNear } from '../core/math.js';
+import { EPS, TAU, clamp, directedArcSpan, dist, nullSpaceOf, solveLeastSquares, unwrapAngleNear } from '../core/math.js';
 import { Arc, Circle, Line, Point } from '../core/entities.js';
 import { DistanceConstraint, FixConstraint, ParamFixConstraint } from '../core/constraints.js';
 import { sameLineRefs } from '../editor/relations.js';
+import { buildJacobianPlan, numericJacobian } from '../core/jacobian.js';
 
 export class DragMixin {
 
@@ -522,28 +523,17 @@ export class DragMixin {
   }
 
   _constraintSystem(rows, constraints, L = null) {
-    const activeConstraints = constraints.filter(c => !c.driven);
     L = L || this._lookupFn();
-    const computeF = () => {
-      const f = [];
-      for (const c of activeConstraints) for (const r of c.residuals(L)) f.push(r);
-      return f;
-    };
-    const f = computeF();
-    const m = f.length, n = rows.length;
-    const J = Array.from({ length:m }, () => new Array(n).fill(0));
-    for (let j = 0; j < n; j++) {
-      const r = rows[j];
-      const x0 = r.ent[r.key];
-      const step = Math.max(1e-6, Math.abs(x0) * 1e-7);
-      r.ent[r.key] = x0 + step;
-      const fp = computeF();
-      r.ent[r.key] = x0;
-      const inv = 1 / step;
-      for (let i = 0; i < m; i++) J[i][j] = (fp[i] - f[i]) * inv;
+    // The plan (which constraints each parameter feeds) is made once per
+    // rows / constraints pair: a drag reuses it on every frame.
+    const plans = this._jacobianPlans ||= new WeakMap();
+    let cached = plans.get(rows);
+    if (!cached || cached.src !== constraints || cached.n !== rows.length) {
+      const active = constraints.filter(c => !c.driven);
+      cached = { src: constraints, n: rows.length, active, plan: buildJacobianPlan(rows, active, L) };
+      plans.set(rows, cached);
     }
-    const residual = Math.sqrt(f.reduce((s, v) => s + v*v, 0));
-    return { f, J, residual };
+    return numericJacobian(rows, cached.active, L, cached.plan);
   }
 
   _applyParamStep(rows, step) {
@@ -557,19 +547,19 @@ export class DragMixin {
 
   _projectConstraintResidual(rows, constraints, passes = 2, L = null) {
     L = L || this._lookupFn();
+    let sys = this._constraintSystem(rows, constraints, L);
     for (let pass = 0; pass < passes; pass++) {
-      const sys = this._constraintSystem(rows, constraints, L);
       if (sys.residual < 1e-7 || !sys.J.length) return sys;
       const step = solveLeastSquares(sys.J, sys.f.map(v => -v), 1e-6);
       if (!step) return sys;
       const before = this._captureParamValues(rows);
       this._applyParamStep(rows, step);
       const next = this._constraintSystem(rows, constraints, L);
-      if (next.residual <= sys.residual) continue;
+      if (next.residual <= sys.residual) { sys = next; continue; }   // next pass starts from it
       this._applyParamValues(rows, before);
       return sys;
     }
-    return this._constraintSystem(rows, constraints, L);
+    return sys;
   }
 
   _makeDragIntent(startWorld, pts, hit, rows) {
@@ -744,8 +734,7 @@ export class DragMixin {
     if (sys.residual > 1e-4) return null;
     const intent = this._makeDragIntent(startWorld, pts, hit, localState);
     if (!intent) return null;
-    const rowBasis = rowSpaceBasis(sys.J, 1e-7);
-    const nullBasis = nullSpaceBasis(rowBasis, localState.length, 1e-7);
+    const nullBasis = nullSpaceOf(sys.J, localState.length, 1e-7);
     if (!nullBasis.length) {
       return {
         mode:'locked',
@@ -792,12 +781,15 @@ export class DragMixin {
    *  (short step, follows curved paths smoothly). The result closer to
    *  the cursor wins, so the handle can't hop to a far-off solution. */
   _solveDofDrag(drag, dx, dy) {
-    const previous = this._captureParamValues(drag.state);
-    this._restoreSketchParams(drag.state);
-    const fromStart = this._dofDragFrom(drag, dx, dy);
-    this._applyParamValues(drag.state, previous);
+    // From the previous frame first (a short step); the search from the
+    // drag start only when that one didn't reach the cursor.
     const fromPrevious = this._dofDragFrom(drag, dx, dy);
-    const best = fromPrevious.error <= fromStart.error ? fromPrevious : fromStart;
+    let best = fromPrevious;
+    if (fromPrevious.error > 1e-5) {
+      this._restoreSketchParams(drag.state);
+      const fromStart = this._dofDragFrom(drag, dx, dy);
+      if (fromStart.error < fromPrevious.error) best = fromStart;
+    }
 
     this._applyParamValues(drag.state, best.values);
     const sys = this._constraintSystem(drag.state, drag.constraints, drag.lookup);
@@ -820,8 +812,7 @@ export class DragMixin {
     for (let iter = 0; iter < 20; iter++) {
       iterations = iter + 1;
       const sys = this._constraintSystem(drag.state, drag.constraints, drag.lookup);
-      const rowBasis = rowSpaceBasis(sys.J, 1e-7);
-      const nullBasis = nullSpaceBasis(rowBasis, drag.state.length, 1e-7);
+      const nullBasis = nullSpaceOf(sys.J, drag.state.length, 1e-7);
       if (!nullBasis.length) break;
       const { A, b } = this._intentLeastSquares(drag, nullBasis, dx, dy);
       if (!A.length) break;

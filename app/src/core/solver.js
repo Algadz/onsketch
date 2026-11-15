@@ -1,5 +1,6 @@
-import { paramPinnedFromBasis, rowSpaceBasis, solveLinear } from './math.js';
+import { nullSpaceOf, paramPinnedFromBasis, rowSpaceBasis, solveLinear } from './math.js';
 import { markTangentContacts } from './constraints.js';
+import { buildJacobianPlan, numericJacobian, rowNonZeros } from './jacobian.js';
 
 /* =============== 4. SOLVER ==================================== */
 export class Solver {
@@ -209,31 +210,29 @@ export class Solver {
     let lambda = this.lambda0;
     let lastJ = null;
 
+    // Which constraints each parameter feeds (core/jacobian.js): a nudge
+    // re-evaluates only those.
+    const plan = buildJacobianPlan(params, constraints, L);
     let iters;
     for (iters = 0; iters < this.maxIter; iters++) {
-      // numerical Jacobian
-      const J = Array.from({ length: m }, () => new Array(n).fill(0));
-      for (let j = 0; j < n; j++) {
-        const x0 = x[j];
-        const step = Math.max(1e-6, Math.abs(x0) * 1e-7);
-        x[j] = x0 + step; setX(x);
-        const fp = computeF();
-        x[j] = x0; setX(x);
-        const inv = 1.0 / step;
-        for (let i = 0; i < m; i++) J[i][j] = (fp[i] - f[i]) * inv;
-      }
+      // numerical Jacobian (sparse)
+      const J = numericJacobian(params, constraints, L, plan).J;
       lastJ = J;
 
       const sumSq = f.reduce((s, v) => s + v*v, 0);
       if (Math.sqrt(sumSq) < this.tol) { iters++; break; }
 
+      // JᵀJ from each row's non-zeros only
+      const nz = rowNonZeros(J);
       const JtJ = Array.from({ length: n }, () => new Array(n).fill(0));
       const Jtf = new Array(n).fill(0);
       for (let i = 0; i < m; i++) {
-        for (let j = 0; j < n; j++) {
-          const Jij = J[i][j]; if (Jij === 0) continue;
+        const row = J[i], cols = nz[i];
+        for (const j of cols) {
+          const Jij = row[j];
           Jtf[j] += Jij * f[i];
-          for (let k = 0; k < n; k++) JtJ[j][k] += Jij * J[i][k];
+          const out = JtJ[j];
+          for (const k of cols) out[k] += Jij * row[k];
         }
       }
       for (let j = 0; j < n; j++) JtJ[j][j] += lambda;
@@ -322,20 +321,38 @@ export class Solver {
     }
 
     // Per-constraint redundancy: a constraint is redundant if removing its
-    // rows from J leaves the rank unchanged. We compute row offsets while
-    // walking constraints in their original order.
+    // rows from J leaves the rank unchanged, i.e. its rows are combinations
+    // of the others. Computed once for all constraints from the left null
+    // space K of J (combinations of rows that cancel, yᵀJ = 0): removing a
+    // set of rows S keeps the rank exactly when K restricted to S has rank
+    // |S|. (Re-ranking J once per constraint was m² n work: seconds on a
+    // 60-line sketch after every drag.)
     const redundantIds = new Set();
-    if (lastJ && rank > 0 && constraints.length > 1) {
+    if (lastJ && rank > 0 && constraints.length > 1 && redundant > 0) {
+      const Jt = Array.from({ length: n }, (_, j) => lastJ.map(row => row[j]));
+      const K = nullSpaceOf(Jt, lastJ.length, 1e-7);
+      const TOL = 1e-6;
       let off = 0;
       for (const c of constraints) {
         const rows = c.residuals(L).length;
         if (rows === 0) continue;
-        const Jminus = [];
-        for (let i = 0; i < lastJ.length; i++) {
-          if (i < off || i >= off + rows) Jminus.push(lastJ[i]);
+        // rank of the |S| × dim K block, by elimination
+        const B = [];
+        for (let r = 0; r < rows; r++) B.push(K.map(y => y[off + r]));
+        let rk = 0;
+        const cols = K.length;
+        for (let col = 0; col < cols && rk < rows; col++) {
+          let p = -1, best = TOL;
+          for (let i = rk; i < rows; i++) if (Math.abs(B[i][col]) > best) { best = Math.abs(B[i][col]); p = i; }
+          if (p < 0) continue;
+          [B[rk], B[p]] = [B[p], B[rk]];
+          for (let i = rk + 1; i < rows; i++) {
+            const f = B[i][col] / B[rk][col];
+            if (f) for (let k = col; k < cols; k++) B[i][k] -= f * B[rk][k];
+          }
+          rk++;
         }
-        const rWithout = rowSpaceBasis(Jminus, 1e-7).length;
-        if (rWithout >= rank) redundantIds.add(c.id);
+        if (rk === rows) redundantIds.add(c.id);
         off += rows;
       }
     }

@@ -115,3 +115,77 @@ test('an arc endpoint reads under-defined while its angle is free', () => {
   assert.equal(r.entityStatus.get(a.end.id), 'under');
   assert.equal(r.entityStatus.get(a.id), 'under');
 });
+
+test('nullSpaceOf spans the same null space as the row-space route', async () => {
+  const { nullSpaceOf, nullSpaceBasis, rowSpaceBasis } = await import('../../app/src/core/math.js');
+  // a sparse, rank-deficient 5 × 7 matrix (a redundant row)
+  const A = [
+    [1, -1, 0, 0, 0, 0, 0],
+    [0, 0, 2, 0, -2, 0, 0],
+    [1, -1, 0, 0, 0, 0, 0],
+    [0, 3, 0, 0, 0, 0, -1],
+    [0, 0, 0, 1, 1, 1, 0],
+  ];
+  const N = nullSpaceOf(A, 7);
+  const ref = nullSpaceBasis(rowSpaceBasis(A, 1e-9), 7, 1e-9);
+  assert.equal(N.length, ref.length);
+  for (const v of N) {
+    for (const row of A) assert.ok(Math.abs(row.reduce((s, a, j) => s + a * v[j], 0)) < 1e-12, 'A·v = 0');
+    // v lies in span(ref)
+    const proj = new Array(7).fill(0);
+    for (const b of ref) { const d = b.reduce((s, x, j) => s + x * v[j], 0); for (let j = 0; j < 7; j++) proj[j] += d * b[j]; }
+    assert.ok(proj.every((x, j) => Math.abs(x - v[j]) < 1e-9));
+  }
+  for (let i = 0; i < N.length; i++) for (let k = 0; k < N.length; k++) {
+    const d = N[i].reduce((s, x, j) => s + x * N[k][j], 0);
+    assert.ok(Math.abs(d - (i === k ? 1 : 0)) < 1e-12, 'orthonormal');
+  }
+});
+
+test('solveLeastSquares: the wide (dual) and tall (normal) forms agree with the definition', async () => {
+  const { solveLeastSquares } = await import('../../app/src/core/math.js');
+  const A = [[1, 2, 0, 0], [0, 1, -1, 0]], b = [3, 1];
+  const x = solveLeastSquares(A, b, 1e-10);
+  assert.ok(Math.abs(x[0] + 2 * x[1] - 3) < 1e-8 && Math.abs(x[1] - x[2] - 1) < 1e-8);
+  assert.ok(Math.abs(x[3]) < 1e-12, 'minimum norm: untouched unknowns stay 0');
+  const T = [[1, 0], [0, 1], [1, 1]], c = [1, 2, 4];   // least squares: (4/3, 7/3)
+  const y = solveLeastSquares(T, c, 1e-12);
+  assert.ok(Math.abs(y[0] - 4 / 3) < 1e-9 && Math.abs(y[1] - 7 / 3) < 1e-9);
+});
+
+test('redundant constraints: the left-null-space check matches re-ranking without each one', async () => {
+  const { rowSpaceBasis } = await import('../../app/src/core/math.js');
+  const { numericJacobian } = await import('../../app/src/core/jacobian.js');
+  const { Solver } = await import('../../app/src/core/solver.js');
+  const s = sketch();
+  const a = line(s, 0, 0, 40, 0), b = line(s, 40, 0, 40, 20), c = line(s, 40, 20, 0, 20), d = line(s, 0, 20, 0, 0);
+  const cs = [
+    new C.CoincidentConstraint(a.p2.id, b.p1.id), new C.CoincidentConstraint(b.p2.id, c.p1.id),
+    new C.CoincidentConstraint(c.p2.id, d.p1.id), new C.CoincidentConstraint(d.p2.id, a.p1.id),
+    new C.HorizontalConstraint(a.id, a.p1.id, a.p2.id), new C.HorizontalConstraint(c.id, c.p1.id, c.p2.id),
+    new C.VerticalConstraint(b.id, b.p1.id, b.p2.id), new C.VerticalConstraint(d.id, d.p1.id, d.p2.id),
+    new C.ParallelConstraint(ref(a), ref(c)),                 // implied by the two horizontals
+    new C.DistanceConstraint(a.p1.id, a.p2.id, 40), new C.EqualLengthConstraint(ref(a), ref(c)),   // implied by the rectangle
+    new C.FixConstraint(a.p1.id, 0, 0),
+  ];
+  s.constraints.push(...cs);
+  const r = new Solver().solve(s, [s], [], { diagnostics: true, componentize: false });
+  // brute force on the same Jacobian
+  const params = [];
+  const seen = new Set();
+  for (const e of s.entities) for (const x of [...e.children(), e]) if (!seen.has(x)) { seen.add(x); for (const k of x.paramKeys()) params.push({ ent: x, key: k }); }
+  const byId = new Map(); for (const e of s.entities) { byId.set(e.id, e); for (const ch of e.children()) byId.set(ch.id, ch); }
+  const L = (id, k) => byId.get(id)?.[k] ?? 0;
+  const J = numericJacobian(params, s.constraints, L).J;
+  const rank = rowSpaceBasis(J, 1e-7).length;
+  const expected = new Set();
+  let off = 0;
+  for (const c of s.constraints) {
+    const rows = c.residuals(L).length;
+    const without = J.filter((_, i) => i < off || i >= off + rows);
+    if (rowSpaceBasis(without, 1e-7).length >= rank) expected.add(c.id);
+    off += rows;
+  }
+  assert.ok(expected.size >= 2, 'the sketch has redundant constraints');
+  assert.deepEqual([...r.redundantIds].sort(), [...expected].sort());
+});
