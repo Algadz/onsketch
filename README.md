@@ -344,7 +344,8 @@ goes through `app/src/app/touch.js` first:
 - one finger: the current tool (a drag starts where the finger landed);
   long press = right-click menu (on a selection: its relations and the
   ones to add); double tap on empty canvas = zoom to fit;
-- two fingers: pan and pinch-zoom; two-finger tap = Undo, three = Redo;
+- two fingers: pan and pinch-zoom (a two-finger tap does nothing: Undo is
+  in the top bar); three-finger tap = Redo;
 - with a stylus, "Only the pencil draws": fingers pan and zoom only;
 - finger hit tolerances are 2.5× the mouse ones (pen 1.5×);
 - a loupe shows the area under the finger while placing or dragging points;

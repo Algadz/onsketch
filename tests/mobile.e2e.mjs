@@ -101,7 +101,7 @@ const lineMidOnScreen = (page, t = 0.5) => app(page, (t) => {
   check(await app(page, () => window._app.activeSketch().strokes.length) === s0 + 1, 'phone: pinching does not draw');
   await page.tap('#more-btn'); await page.tap('[data-more="zoom-fit"]');
 
-  // Tap to select, Delete in the options bar, two-finger tap undo.
+  // Tap to select, Delete in the options bar; a two-finger tap doesn't undo, the Undo button does.
   await page.tap('[data-slot="select"]');
   let lm = await lineMidOnScreen(page);
   await page.touchscreen.tap(lm.x + 2, lm.y + 5);
@@ -115,7 +115,9 @@ const lineMidOnScreen = (page, t = 0.5) => app(page, (t) => {
   const e1 = await count();
   await touch('touchStart', [[120, 200], [200, 210]]); await touch('touchEnd', []);
   const e2 = await count();
-  check(e1 < e0 && e2 === e0, `phone: Delete removes, two-finger tap undoes (${e0} → ${e1} → ${e2})`);
+  await page.tap('[data-action="undo"]');
+  const e3 = await count();
+  check(e1 < e0 && e2 === e1 && e3 === e0, `phone: Delete removes, a two-finger tap leaves it, Undo brings it back (${e0} → ${e1} → ${e2} → ${e3})`);
 
   // Long press: context menu with the shape actions, Delete included
   // (at 75%: the rest of this edge carries dimension labels).

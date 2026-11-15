@@ -12,7 +12,8 @@ import { track } from '../ui/analytics.js';
      finger after that drags nothing).
    - A second finger turns it into a gesture: pan + pinch-zoom around the
      two fingers. If the tool had already started (a drag), that action is
-     undone first. Two-finger tap = Undo, three-finger tap = Redo.
+     undone first. A two-finger tap does nothing (it fired by mistake on
+     quick pinches: Undo is in the top bar); three-finger tap = Redo.
    - Double tap on empty canvas with Select = zoom to fit.
    - Stylus mode (on once a pen is seen, can be turned off): the pen draws,
      fingers only pan and zoom, which also ignores a resting palm.
@@ -281,8 +282,7 @@ export class TouchMixin {
     const g = T.gesture;
     T.gesture = null;
     if (!g.moved && performance.now() - g.t0 < TAP_MS + 100) {
-      if (g.maxFingers === 2) this.undo();
-      else if (g.maxFingers >= 3) this.redo();
+      if (g.maxFingers >= 3) this.redo();
     }
   }
 
