@@ -128,7 +128,7 @@ const lineMidOnScreen = (page, t = 0.5) => app(page, (t) => {
   const beforeDel = await count();
   await page.tap('#context-menu [data-action="delete"]');
   check(await count() < beforeDel, 'phone: Delete in the long-press menu removes the shape');
-  await touch('touchStart', [[120, 200], [200, 210]]); await touch('touchEnd', []);
+  await page.tap('[data-action="undo"]');
 
   // Dimensions: tap the label then Delete; long press the label for its menu.
   await app(page, () => { window._app.clearSelection(); window._app.requestRender(); });
@@ -142,7 +142,7 @@ const lineMidOnScreen = (page, t = 0.5) => app(page, (t) => {
   await page.tap('#context-menu [data-action="delete"]');
   const gone = await app(page, () => !window._app.activeSketch().constraints.some(c => c.name === 'D4'));
   check(gone, 'phone: Delete dimension removes it');
-  await touch('touchStart', [[120, 200], [200, 210]]); await touch('touchEnd', []);
+  await page.tap('[data-action="undo"]');
   await page.waitForTimeout(100);
   da = await dimAt();
   await page.touchscreen.tap(da.x, da.y);
