@@ -29,6 +29,7 @@ npm run test:curve   # Bézier curves: drawing, handles, tangent / smooth / on c
 npm run test:export  # Export (PNG, SVG, copy, DXF, print to scale) and the first-run steps, desktop and phone
 npm run test:formula # click a dimension to put it in an equation; variables driving tangents
 npm run test:units   # document unit (km: Earth to Moon), typed units, print scale, formulas in text
+npm run test:axis    # horizontal / vertical guess when a line end snaps to a shape or a point
 node tests/style.e2e.mjs  # restyling arrows / texts after drawing, touch tap-through guard
 node tests/analytics.e2e.mjs  # Umami events: what is counted, once per visit, nothing sent from tests
 npm run test:mobile  # phone / tablet layout and touch input on emulated devices
@@ -425,6 +426,13 @@ touch input. Plan and audit: `docs/mobile-plan.md`.
   circles and the grid while you draw or drag, and a snap becomes a
   relation (coincident, on line…); the Line tool also makes a nearly flat
   or upright line horizontal / vertical.
+- The horizontal / vertical guess also works when the end snaps: onto a
+  line, circle, arc or curve, a nearly flat or upright line's end slides to
+  where that shape crosses the horizontal / vertical through the start (when
+  that is near the cursor) and gets both relations, on the shape and
+  horizontal / vertical; the cursor says e.g. *on-line · horizontal*. Onto a
+  point (an end, a centre, a midpoint) it is added only when the point is
+  already in line, so nothing is pulled.
 - **Hold Alt (⌥ Option on a Mac) to place without snapping**, while
   drawing or dragging: no snap marker, no relation from a snap, no
   horizontal / vertical guess; the point goes exactly under the cursor.

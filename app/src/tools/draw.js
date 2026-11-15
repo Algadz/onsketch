@@ -1,7 +1,88 @@
 import { EPS, TAU, centerRectangleCorners, circleFrom3Points, dist, normAngle, regularPolygonFromCenterEdge, signedAngleDelta } from '../core/math.js';
-import { Arc, Circle, Line, Point } from '../core/entities.js';
+import { Arc, Bezier, Circle, Line, Point } from '../core/entities.js';
+import { bezierLineHits } from '../core/bezier.js';
 import { DirectedAngleConstraint, EqualLengthConstraint, HorizontalConstraint, MidpointConstraint, PointOnCircleConstraint, VerticalConstraint } from '../core/constraints.js';
 import { Tool } from './tool.js';
+
+/* ---- Horizontal / vertical guess ----
+   A line drawn nearly flat or upright (within 8 px over at least 16 px)
+   comes out horizontal or vertical, with that relation. It also works when
+   the end snaps to a shape:
+     - on a line, circle, arc or curve (the end can slide along it): the
+       end goes where the shape crosses the horizontal / vertical through
+       the start, when that is near the cursor, and gets both relations
+       (on the shape, and horizontal / vertical);
+     - on a point (end, centre, midpoint…) it can't slide: the relation is
+       added only when the point is already in line (within a pixel), so
+       nothing is pulled.
+   Alt turns the guess off with the snapping. */
+const AXIS_ALONG = 16, AXIS_ACROSS = 8, AXIS_REACH = 14;
+
+function axisKind(from, to, zoom) {
+  const adx = Math.abs(to.x - from.x) * zoom, ady = Math.abs(to.y - from.y) * zoom;
+  if (Math.max(adx, ady) < AXIS_ALONG || Math.min(adx, ady) > AXIS_ACROSS) return null;
+  return ady <= adx ? 'horizontal' : 'vertical';
+}
+
+/** Where a snapped shape meets the horizontal / vertical through `from`,
+ *  nearest to `near`, or null. */
+function crossing(snap, from, kind, near) {
+  const e = snap.entity;
+  const dir = kind === 'horizontal' ? { x: 1, y: 0 } : { x: 0, y: 1 };
+  let pts = [];
+  if (snap.kind === 'on-line' && e instanceof Line) {
+    const ax = e.p1.x, ay = e.p1.y, ux = e.p2.x - ax, uy = e.p2.y - ay;
+    const den = ux * dir.y - uy * dir.x;
+    if (Math.abs(den) < 1e-12) return null;                 // parallel to the axis
+    const s = ((from.x - ax) * dir.y - (from.y - ay) * dir.x) / den;
+    pts = [{ x: ax + ux * s, y: ay + uy * s }];
+  } else if ((snap.kind === 'on-circle') && (e instanceof Circle || e instanceof Arc)) {
+    const c = e.center, r = e.r;
+    if (kind === 'horizontal') {
+      const h = r * r - (from.y - c.y) ** 2; if (h < 0) return null;
+      pts = [{ x: c.x - Math.sqrt(h), y: from.y }, { x: c.x + Math.sqrt(h), y: from.y }];
+    } else {
+      const h = r * r - (from.x - c.x) ** 2; if (h < 0) return null;
+      pts = [{ x: from.x, y: c.y - Math.sqrt(h) }, { x: from.x, y: c.y + Math.sqrt(h) }];
+    }
+  } else if (snap.kind === 'on-curve' && e instanceof Bezier) {
+    pts = bezierLineHits(e.ctrl(), from, { x: from.x + dir.x, y: from.y + dir.y }).map(h => ({ x: h.x, y: h.y }));
+  } else return null;
+  let best = null, bd = Infinity;
+  for (const p of pts) { const d = Math.hypot(p.x - near.x, p.y - near.y); if (d < bd) { bd = d; best = p; } }
+  return best;
+}
+
+/** The end point for a line from `from` towards the cursor, with the
+ *  horizontal / vertical guess applied to the snap too (see above).
+ *  May move `snap` onto the crossing (its marker follows) and tags it with
+ *  `axisKind`. @returns {{ point, kind }} */
+export function axisGuess(app, from, world, snap) {
+  if (!from || app.snapSuppressed()) return { point: snap ? { x: snap.x, y: snap.y } : world, kind: null };
+  const zoom = app.view.zoom;
+  if (!snap) {
+    const kind = axisKind(from, world, zoom);
+    if (!kind) return { point: world, kind: null };
+    return { point: kind === 'horizontal' ? { x: world.x, y: from.y } : { x: from.x, y: world.y }, kind };
+  }
+  const at = { x: snap.x, y: snap.y };
+  const curve = snap.kind === 'on-line' || snap.kind === 'on-circle' || snap.kind === 'on-curve';
+  if (curve) {
+    const kind = axisKind(from, world, zoom);
+    if (!kind) return { point: at, kind: null };
+    const p = crossing(snap, from, kind, at);
+    if (!p || Math.hypot(p.x - world.x, p.y - world.y) * zoom > AXIS_REACH) return { point: at, kind: null };
+    snap.x = p.x; snap.y = p.y; snap.axisKind = kind;
+    return { point: p, kind };
+  }
+  // A point: only when it is already in line.
+  const kind = axisKind(from, at, zoom);
+  if (!kind) return { point: at, kind: null };
+  const off = kind === 'horizontal' ? Math.abs(at.y - from.y) : Math.abs(at.x - from.x);
+  if (off * zoom > 1) return { point: at, kind: null };
+  snap.axisKind = kind;
+  return { point: at, kind };
+}
 
 export class LineTool extends Tool {
   constructor(app) {
@@ -14,15 +95,7 @@ export class LineTool extends Tool {
   }
   hint() { return 'Click to place start, click again for end. Esc to finish.'; }
   activate() { this.startPt = null; this.axisIntent = null; this.invalidEnd = false; this._lastPlaced = null; }
-  _axisSnapFor(target, snap) {
-    if (!this.startPt || snap || this.app.snapSuppressed()) return { point: target, kind: null };
-    const dx = (target.x - this.startPt.x) * this.app.view.zoom;
-    const dy = (target.y - this.startPt.y) * this.app.view.zoom;
-    const adx = Math.abs(dx), ady = Math.abs(dy);
-    if (Math.max(adx, ady) < 16 || Math.min(adx, ady) > 8) return { point: target, kind: null };
-    if (ady <= adx) return { point: { x: target.x, y: this.startPt.y }, kind: 'horizontal' };
-    return { point: { x: this.startPt.x, y: target.y }, kind: 'vertical' };
-  }
+  _axisSnapFor(world, snap) { return axisGuess(this.app, this.startPt, world, snap); }
   _invalidEndFor(point, sketch) {
     if (!this.startPt || !point) return false;
     const minLen = 4 / this.app.view.zoom;
@@ -63,7 +136,7 @@ export class LineTool extends Tool {
       this._pendingStartSnap = reused ? null : snap;
       this._lastPlaced = null;
     } else {
-      const axis = this._axisSnapFor(raw, snap);
+      const axis = this._axisSnapFor(world, snap);
       const { point: endPt, reused: endReused } = this.app.makeOrReusePoint(axis.point, snap, sketch);
       if (this._invalidEndFor(endPt, sketch)) {
         this.cursor = axis.point;
@@ -101,8 +174,7 @@ export class LineTool extends Tool {
     this.app.requestRender();
   }
   onPointerMove(world, snap) {
-    const raw = snap ? { x:snap.x, y:snap.y } : world;
-    const axis = this._axisSnapFor(raw, snap);
+    const axis = this._axisSnapFor(world, snap);
     this.cursor = axis.point;
     this.axisIntent = axis.kind;
     if (this.startPt) {
@@ -141,15 +213,7 @@ export class CenterLineTool extends Tool {
     this._centerReused = false;
     this.axisIntent = null;
   }
-  _axisSnapFor(target, snap) {
-    if (!this.center || snap || this.app.snapSuppressed()) return { point: target, kind: null };
-    const dx = (target.x - this.center.x) * this.app.view.zoom;
-    const dy = (target.y - this.center.y) * this.app.view.zoom;
-    const adx = Math.abs(dx), ady = Math.abs(dy);
-    if (Math.max(adx, ady) < 16 || Math.min(adx, ady) > 8) return { point: target, kind: null };
-    if (ady <= adx) return { point: { x: target.x, y: this.center.y }, kind: 'horizontal' };
-    return { point: { x: this.center.x, y: target.y }, kind: 'vertical' };
-  }
+  _axisSnapFor(world, snap) { return axisGuess(this.app, this.center, world, snap); }
   onPointerDown(world, snap) {
     const sketch = this.app.activeSketch(); if (!sketch) return;
     const raw = snap ? { x:snap.x, y:snap.y } : world;
@@ -159,7 +223,7 @@ export class CenterLineTool extends Tool {
       this._centerSnap = info.reused ? null : snap;
       this._centerReused = info.reused;
     } else {
-      const axis = this._axisSnapFor(raw, snap);
+      const axis = this._axisSnapFor(world, snap);
       const w = axis.point;
       const dx = w.x - this.center.x;
       const dy = w.y - this.center.y;
@@ -194,8 +258,7 @@ export class CenterLineTool extends Tool {
     this.app.requestRender();
   }
   onPointerMove(world, snap) {
-    const raw = snap ? { x:snap.x, y:snap.y } : world;
-    const axis = this._axisSnapFor(raw, snap);
+    const axis = this._axisSnapFor(world, snap);
     this.cursor = axis.point;
     this.axisIntent = axis.kind;
     this.app.requestRender();

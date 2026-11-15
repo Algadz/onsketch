@@ -242,7 +242,7 @@ export class RenderEventsMixin {
         hint.style.top = screen.y + 'px';
         hint.style.display = 'block';
       } else if (snap && !snap.rejected) {
-        hint.textContent = snap.kind;
+        hint.textContent = snap.axisKind ? `${snap.kind} · ${snap.axisKind}` : snap.kind;
         hint.style.left = screen.x + 'px';
         // Above the finger on touch, so the finger doesn't hide it.
         hint.style.top  = (ev.pointerType === 'touch' ? screen.y - 44 : screen.y) + 'px';
