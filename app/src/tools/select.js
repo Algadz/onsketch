@@ -1,6 +1,5 @@
 import { Arc, Bezier, Circle, Line, Point } from '../core/entities.js';
 import { bezierBBox } from '../core/bezier.js';
-import { collapsedShapes } from '../core/solver.js';
 import { Tool } from './tool.js';
 
 export class SelectTool extends Tool {
@@ -142,7 +141,8 @@ export class SelectTool extends Tool {
       this.dragging = canDrag ? this.app.beginLocalizedDrag(world, pts, hit, rigidLines) : null;
       if (this.dragging) {
         this.dragging.restShapes = this.app._captureRestShapes();   // drag snaps skip what moves
-        this.dragging.collapsedAtStart = collapsedShapes(this.app.activeSketch()?.entities);   // a drag may not collapse a shape
+        this.dragging.sizesAtStart = this.app._shapeSizes(this.app.activeSketch());   // a drag may not squash a shape
+        this.dragging.lastOkDelta = { dx: 0, dy: 0 };
       }
       this.inkDrag = this.app.beginInkDrag(world);           // selected ink moves along
       this.app.refreshUI();
@@ -221,6 +221,21 @@ export class SelectTool extends Tool {
         }
       }
       if (!result) result = this.app.solveLocalizedDrag(this.dragging, dx, dy);
+      // A step refused (it would squash a shape…) keeps the last good
+      // position; close in on the limit between the two so the shape stops
+      // right at it, not a whole mouse step short.
+      const ok = this.dragging.lastOkDelta;
+      if (result?.rejected && ok && !primary) {
+        let lo = ok, hi = { dx, dy };
+        for (let i = 0; i < 6; i++) {
+          const mid = { dx: (lo.dx + hi.dx) / 2, dy: (lo.dy + hi.dy) / 2 };
+          const r = this.app.solveLocalizedDrag(this.dragging, mid.dx, mid.dy);
+          if (r && !r.rejected) { lo = mid; result = r; } else hi = mid;
+        }
+        this.dragging.lastOkDelta = lo;
+      } else if (result && !result.rejected) {
+        this.dragging.lastOkDelta = { dx, dy };
+      }
       this.app.updateLinkedDimensionsDuringDrag(this.dragging);
       // After the solve, probe each *other* handle at its now-final
       // position so secondary snaps (e.g. the far end of a dragged line

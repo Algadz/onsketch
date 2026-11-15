@@ -1,6 +1,6 @@
 import { EPS, TAU, clamp, directedArcSpan, dist, nullSpaceOf, solveLeastSquares, unwrapAngleNear } from '../core/math.js';
 import { Arc, Circle, Line, Point } from '../core/entities.js';
-import { collapsedShapes } from '../core/solver.js';
+import { shapeSize } from '../core/solver.js';
 import { DistanceConstraint, FixConstraint, ParamFixConstraint } from '../core/constraints.js';
 import { sameLineRefs } from '../editor/relations.js';
 import { buildJacobianPlan, numericJacobian } from '../core/jacobian.js';
@@ -245,10 +245,13 @@ export class DragMixin {
   _finishDragStep(drag, result) {
     const sketch = this.activeSketch();
     if (!sketch) return result;
-    // A drag never takes a radius below zero (a circle kept smaller than
-    // another by a dimension stops when it reaches nothing).
+    // A drag never squashes a shape: not the one held, nor any that
+    // follows through relations (the far corner of a held rectangle
+    // dropped on the fixed one flattens all four sides). Lines and radii
+    // stop at about 2 screen pixels; a shape already that small when the
+    // drag started may shrink but not reach zero.
     const negativeRadius = sketch.entities.some(e => (e instanceof Circle || e instanceof Arc) && e.r < 0)
-      || [...collapsedShapes(sketch.entities)].some(e => !drag?.collapsedAtStart?.has(e));
+      || this._dragSquashes(sketch, drag);
     if (sketch && (negativeRadius || !this._offsetGeometryValid(sketch) || !this._offsetDragGuardValid(drag?.offsetGuard))) {
       if (drag?.lastValidValues) this._applyParamValues(drag.state, drag.lastValidValues);
       else if (drag?.state) this._restoreSketchParams(drag.state);
@@ -258,6 +261,26 @@ export class DragMixin {
     if (drag?.state) drag.lastValidValues = this._captureParamValues(drag.state);
     for (const e of sketch.entities) if (e instanceof Arc) e.syncEnds();
     return result;
+  }
+
+  /** Sizes of the lines / circles / arcs when a drag starts. */
+  _shapeSizes(sketch) {
+    const out = new Map();
+    for (const e of sketch?.entities || []) { const s = shapeSize(e); if (s != null) out.set(e, Math.abs(s)); }
+    return out;
+  }
+
+  /** True when this drag step took a shape below the minimum size. */
+  _dragSquashes(sketch, drag) {
+    const start = drag?.sizesAtStart;
+    if (!start) return false;
+    const min = Math.max(1e-7, 2 / this.view.zoom);
+    for (const [e, s0] of start) {
+      const s = Math.abs(shapeSize(e));
+      if (s >= min) continue;
+      if (s0 >= min || (s < 1e-7 && s0 >= 1e-7)) return true;
+    }
+    return false;
   }
 
   _setOffsetDistanceValue(c, value) {

@@ -102,6 +102,35 @@ const fixPoint = (page, kind, key) => app(page, ([kind, key]) => {
   await ctx.close();
 }
 
+{
+  const { ctx, page, errors } = await open({ viewport: { width: 1280, height: 800 } }, '/app/?new');
+  // A rectangle held at one corner: the far corner dropped on it would
+  // flatten all four sides. They stop at about 2 screen pixels instead.
+  await app(page, () => window._app.setTool('rectangle'));
+  await page.mouse.click(X, Y); await page.mouse.click(X + 240, Y + 160); await page.keyboard.press('Escape');
+  await app(page, () => window._app.setTool('select'));
+  const corners = await app(page, () => { const a = window._app, r = a.canvas.getBoundingClientRect(), pts = [];
+    for (const l of a.activeSketch().entities.filter(e => e.constructor.kind === 'line')) for (const q of [l.p1, l.p2]) if (!pts.includes(q)) pts.push(q);
+    return pts.map(q => { const s = a.view.worldToScreen(q); return { id: q.id, x: s.x + r.left, y: s.y + r.top }; }); });
+  const tl = corners.reduce((a, b) => (b.x + b.y < a.x + a.y ? b : a)), br = corners.reduce((a, b) => (b.x + b.y > a.x + a.y ? b : a));
+  await app(page, (id) => { const a = window._app, q = a.activeSketch().entities.flatMap(e => [e, ...e.children()]).find(e => e.id === id); a.clearSelection(); a.setSelected(q, true); a.toggleRelation('fix'); a.clearSelection(); a.refreshUI(); }, tl.id);
+  await dragTo(page, [br.x, br.y], [tl.x + 1, tl.y + 1]);
+  const zoom = await app(page, () => window._app.view.zoom);
+  const sides = await lineLens(page);
+  check(sides.length === 4 && sides.every(l => l * zoom >= 1.9 && l * zoom < 6), `rectangle: no side squashed, all stop at ~2 px (${sides.map(l => (l * zoom).toFixed(1)).join(', ')} px)`);
+  await page.keyboard.press('Control+z'); await page.waitForTimeout(150);
+
+  // A circle's edge dragged onto its centre stops at ~2 px too.
+  await app(page, () => window._app.setTool('circle'));
+  await page.mouse.click(X + 500, Y + 100); await page.mouse.click(X + 600, Y + 100); await page.keyboard.press('Escape');
+  await app(page, () => window._app.setTool('select'));
+  await dragTo(page, [X + 600, Y + 100], [X + 500.5, Y + 100.5]);
+  const r = await app(page, () => window._app.activeSketch().entities.find(e => e.constructor.kind === 'circle').r * window._app.view.zoom);
+  check(r >= 1.9 && r < 6, `circle dragged to its centre stops at ~2 px radius (${r.toFixed(2)} px)`);
+  check(!errors.length, `no page errors ${errors.join(' ')}`);
+  await ctx.close();
+}
+
 await browser.close();
 server.close();
 console.log(failed ? `\n${failed} check(s) failed` : '\nall checks passed');

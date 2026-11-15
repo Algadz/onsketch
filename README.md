@@ -659,10 +659,13 @@ or arc at its centre (zero or negative radius).
 - A relation that would do it isn't added (Horizontal then Vertical on one
   line: *Vertical not added: it would shrink Line e7 to nothing*), and no
   undo step is left.
-- Typed dimension values must be above 0; a drag stops before a shape
-  reaches nothing (a circle held smaller than another stops when that one
-  is gone), and any solve that would collapse one counts as a conflict and
-  is reverted. Shapes already collapsed in older files don't block solving.
+- A drag never squashes a shape below about 2 screen pixels: not the one
+  you hold, nor any that follows through relations (a rectangle held at
+  one corner, its far corner dropped on it: the four sides stop at 2 px).
+  The drag stops right at that limit.
+- Typed dimension values must be above 0, and any solve that would
+  collapse a shape counts as a conflict and is reverted. Shapes already
+  collapsed in older files don't block solving.
 
 Right-click (long press on a touch screen) **something already selected**
 for a shortcut to its relations, before the actions above:

@@ -5,12 +5,18 @@ import { buildJacobianPlan, numericJacobian, rowNonZeros } from './jacobian.js';
 /** Lines of zero length and circles / arcs of zero radius among `entities`
  *  (duck-typed: lines have p1 / p2 and no handles, round shapes a radius). */
 const COLLAPSE_EPS = 1e-7;
-export function collapsedShapes(entities) {
+/** Size of a line (length) or circle / arc (radius); null for other shapes. */
+export function shapeSize(e) {
+  const kind = e.constructor?.kind;
+  if (kind === 'line') return Math.hypot(e.p2.x - e.p1.x, e.p2.y - e.p1.y);
+  if (kind === 'circle' || kind === 'arc') return e.r;
+  return null;
+}
+export function collapsedShapes(entities, eps = COLLAPSE_EPS) {
   const out = new Set();
   for (const e of entities || []) {
-    const kind = e.constructor?.kind;
-    if (kind === 'line' && Math.hypot(e.p2.x - e.p1.x, e.p2.y - e.p1.y) < COLLAPSE_EPS) out.add(e);
-    else if ((kind === 'circle' || kind === 'arc') && Math.abs(e.r) < COLLAPSE_EPS) out.add(e);
+    const s = shapeSize(e);
+    if (s != null && Math.abs(s) < eps) out.add(e);
   }
   return out;
 }
