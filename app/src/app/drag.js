@@ -1,5 +1,6 @@
 import { EPS, TAU, clamp, directedArcSpan, dist, nullSpaceOf, solveLeastSquares, unwrapAngleNear } from '../core/math.js';
 import { Arc, Circle, Line, Point } from '../core/entities.js';
+import { collapsedShapes } from '../core/solver.js';
 import { DistanceConstraint, FixConstraint, ParamFixConstraint } from '../core/constraints.js';
 import { sameLineRefs } from '../editor/relations.js';
 import { buildJacobianPlan, numericJacobian } from '../core/jacobian.js';
@@ -246,7 +247,8 @@ export class DragMixin {
     if (!sketch) return result;
     // A drag never takes a radius below zero (a circle kept smaller than
     // another by a dimension stops when it reaches nothing).
-    const negativeRadius = sketch.entities.some(e => (e instanceof Circle || e instanceof Arc) && e.r < 0);
+    const negativeRadius = sketch.entities.some(e => (e instanceof Circle || e instanceof Arc) && e.r < 0)
+      || [...collapsedShapes(sketch.entities)].some(e => !drag?.collapsedAtStart?.has(e));
     if (sketch && (negativeRadius || !this._offsetGeometryValid(sketch) || !this._offsetDragGuardValid(drag?.offsetGuard))) {
       if (drag?.lastValidValues) this._applyParamValues(drag.state, drag.lastValidValues);
       else if (drag?.state) this._restoreSketchParams(drag.state);

@@ -717,7 +717,42 @@ export class App {
       for (const e of sketch.entities) if (e.children().some(c => set.has(c))) set.add(e);
     }
     drag._snapExclusions = set;
+    drag._collapsePartners = this._collapsePartners(sketch, set);
     return set;
+  }
+
+  /** Points a dragged point mustn't snap onto because its own shape would
+   *  collapse: the other end of its line (a zero-length line), the centre
+   *  of its arc (zero radius), with the points tied to those by
+   *  Coincident. A point dragged together with them is fine (they move as
+   *  one). */
+  _collapsePartners(sketch, dragged) {
+    const out = new Set();
+    if (!sketch) return out;
+    const moving = (p) => dragged.has(p);
+    for (const e of sketch.entities) {
+      if (e instanceof Line) {
+        if (moving(e.p1) && !moving(e.p2)) out.add(e.p2);
+        if (moving(e.p2) && !moving(e.p1)) out.add(e.p1);
+      } else if (e instanceof Arc) {
+        const ends = e.children().filter(c => c !== e.center);
+        if (ends.some(moving) && !moving(e.center)) out.add(e.center);
+        if (moving(e.center)) for (const q of ends) if (!moving(q)) out.add(q);
+      }
+    }
+    // Same corner through a relation counts as the same point.
+    const byId = new Map();
+    for (const e of sketch.entities) { byId.set(e.id, e); for (const c of e.children()) byId.set(c.id, c); }
+    for (let grew = true; grew;) {
+      grew = false;
+      for (const c of sketch.constraints) {
+        if (c.kind !== 'coincident') continue;
+        const a = byId.get(c.p1), b = byId.get(c.p2);
+        if (out.has(a) && b && !out.has(b) && !moving(b)) { out.add(b); grew = true; }
+        if (out.has(b) && a && !out.has(a) && !moving(a)) { out.add(a); grew = true; }
+      }
+    }
+    return out;
   }
 
   /** Where every shape of the active sketch is when a drag starts. */
@@ -761,6 +796,7 @@ export class App {
       const snap = this.snap.find(probe, this.view, this.visibleSketches(), {
         ignore: (candidate) =>
           (candidate.entity && draggedSet.has(candidate.entity)) ||
+          (candidate.entity && drag._collapsePartners?.has(candidate.entity)) ||
           this._dragSnapTargetMoves(drag, candidate) ||
           this.shouldIgnoreDragSnap(drag, candidate)
       });
@@ -804,6 +840,7 @@ export class App {
       const snap = this.snap.find(probe, this.view, this.visibleSketches(), {
         ignore: (candidate) =>
           (candidate.entity && draggedSet.has(candidate.entity)) ||
+          (candidate.entity && drag._collapsePartners?.has(candidate.entity)) ||
           this._dragSnapTargetMoves(drag, candidate) ||
           this.shouldIgnoreDragSnap(drag, candidate)
       });

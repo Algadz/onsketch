@@ -24,6 +24,7 @@ npm run test:layers  # layers as display only: editing, relations and dimensions
 npm run test:nosnap  # Alt = no snap while placing or dragging; Space-drag pans
 npm run test:pattern # linear / circular / point patterns: picks, linked copies, editing, equations, unlink
 npm run test:scissors # scissors: trim (click, drag), split, relations kept / moved / removed, undo
+npm run test:collapse # no line collapses to a point, no circle / arc to its centre (snaps, relations)
 npm run test:relmenu # right-click / long press on a selection: its relations, remove, add
 npm run test:curve   # Bézier curves: drawing, handles, tangent / smooth / on curve, fill, scissors, mirror, export
 npm run test:export  # Export (PNG, SVG, copy, DXF, print to scale) and the first-run steps, desktop and phone
@@ -649,6 +650,18 @@ apply to all of them.
 Relations (coincident, horizontal, parallel, tangent, …) are shown as small
 badges where they act (toggle: Relations / `K`); click one to select it and
 Delete to remove it.
+
+Nothing collapses a shape: a line never ends up as a point, nor a circle
+or arc at its centre (zero or negative radius).
+- Dragging a line end doesn't snap onto the line's other end, nor an arc
+  end onto its own centre (other snaps work as usual).
+- A relation that would do it isn't added (Horizontal then Vertical on one
+  line: *Vertical not added: it would shrink Line e7 to nothing*), and no
+  undo step is left.
+- Typed dimension values must be above 0; a drag stops before a shape
+  reaches nothing (a circle held smaller than another stops when that one
+  is gone), and any solve that would collapse one counts as a conflict and
+  is reverted. Shapes already collapsed in older files don't block solving.
 
 Right-click (long press on a touch screen) **something already selected**
 for a shortcut to its relations, before the actions above:

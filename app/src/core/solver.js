@@ -2,6 +2,19 @@ import { nullSpaceOf, paramPinnedFromBasis, rowSpaceBasis, solveLinear } from '.
 import { markTangentContacts } from './constraints.js';
 import { buildJacobianPlan, numericJacobian, rowNonZeros } from './jacobian.js';
 
+/** Lines of zero length and circles / arcs of zero radius among `entities`
+ *  (duck-typed: lines have p1 / p2 and no handles, round shapes a radius). */
+const COLLAPSE_EPS = 1e-7;
+export function collapsedShapes(entities) {
+  const out = new Set();
+  for (const e of entities || []) {
+    const kind = e.constructor?.kind;
+    if (kind === 'line' && Math.hypot(e.p2.x - e.p1.x, e.p2.y - e.p1.y) < COLLAPSE_EPS) out.add(e);
+    else if ((kind === 'circle' || kind === 'arc') && Math.abs(e.r) < COLLAPSE_EPS) out.add(e);
+  }
+  return out;
+}
+
 /* =============== 4. SOLVER ==================================== */
 export class Solver {
   constructor() { this.maxIter = 80; this.tol = 1e-9; this.lambda0 = 1e-3; }
@@ -126,11 +139,13 @@ export class Solver {
     const pinned = [];
     let ok = true, iters = 0, residualSq = 0, n = 0, m = 0, rank = 0, redundant = 0, dof = 0;
     let over = false, under = false;
+    const collapsed = [];
 
     for (const group of groupsToSolve) {
       const subSketch = { entities: group.entities, constraints: group.constraints };
       const r = this.solve(subSketch, allVisibleSketches, [], { ...options, componentize:false });
       ok = ok && r.ok;
+      if (r.collapsed) collapsed.push(...r.collapsed);
       iters = Math.max(iters, r.iters || 0);
       residualSq += (r.residual || 0) * (r.residual || 0);
       n += r.n || 0;
@@ -156,7 +171,7 @@ export class Solver {
     return {
       ok, iters, residual, dof:diagnostics ? dof : null, n, m,
       rank:diagnostics ? rank : null, redundant, state,
-      entityStatus, redundantIds, pinned:diagnostics ? pinned : null, diagnostics
+      entityStatus, redundantIds, pinned:diagnostics ? pinned : null, diagnostics, collapsed
     };
   }
 
@@ -196,6 +211,7 @@ export class Solver {
     const L = this._lookupBuilder(allVisibleSketches);
     const x = params.map(p => p.ent[p.key]);
     const x0 = x.slice();
+    const flatBefore = collapsedShapes(activeSketch.entities);
     const setX = (xv) => { for (let i = 0; i < n; i++) params[i].ent[params[i].key] = xv[i]; };
     setX(x);
 
@@ -257,9 +273,12 @@ export class Solver {
 
     const residual = Math.sqrt(f.reduce((s,v)=>s+v*v, 0));
     // A negative radius satisfies the equations but isn't a shape (two
-    // concentric circles kept 20 apart, the outer one made 15): it counts
-    // as a failure, like a conflict.
-    const badShape = params.some(p => p.key === 'r' && p.ent.r < -1e-9);
+    // concentric circles kept 20 apart, the outer one made 15), nor is a
+    // line that became a point or a circle / arc that shrank to nothing
+    // (a snap or a set of dimensions that collapses it): a failure, like a
+    // conflict. Shapes already collapsed before (old files) don't count.
+    const collapsed = [...collapsedShapes(activeSketch.entities)].filter(e => !flatBefore.has(e)).map(e => e.id);
+    const badShape = params.some(p => p.key === 'r' && p.ent.r < -1e-9) || collapsed.length > 0;
     const failed = residual >= 1e-4 || badShape;
     // A solve that can't satisfy every constraint ends on a least-squares
     // compromise that bends everything, fixed points included. With
@@ -271,7 +290,7 @@ export class Solver {
       const state = residual > 1e-3 || badShape ? 'over' : 'solved';
       return { ok: !failed, iters, residual, dof:null, n, m, rank:null,
                redundant:0, state, entityStatus:null, redundantIds:null, pinned:null,
-               diagnostics:false, reverted };
+               diagnostics:false, reverted, collapsed };
     }
 
     // Rank-based analysis of the final Jacobian. The orthonormal basis
@@ -363,6 +382,6 @@ export class Solver {
     else                  state = 'under';
 
     return { ok: !failed, iters, residual, dof, n, m, rank, redundant,
-             state, entityStatus, redundantIds, pinned, reverted };
+             state, entityStatus, redundantIds, pinned, reverted, collapsed };
   }
 }

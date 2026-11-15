@@ -1,7 +1,7 @@
 import { Circle, Line } from '../core/entities.js';
 import { CollinearConstraint, ConcentricConstraint, Constraint, CurveTangentConstraint, PointOnCurveConstraint, SmoothConstraint, constraintLabel, EqualLengthConstraint, EqualRadiusConstraint, HorizontalConstraint, ParallelConstraint, PerpendicularConstraint, TangentCircleCircleConstraint, TangentLineCircleConstraint, VerticalConstraint } from '../core/constraints.js';
 import { classifySelection } from '../editor/relations.js';
-import { confirmDialog } from '../ui/dialogs.js';
+import { confirmDialog, notice } from '../ui/dialogs.js';
 
 /** Constraint kinds that express the same relation (plain points vs arc
  *  endpoints), keyed by the relation the Properties buttons offer. */
@@ -310,6 +310,22 @@ export class ConstraintActionsMixin {
       diagnostics:true,
       activeIds:affectedIds
     });
+    // A relation that shrinks a line to a point or a circle / arc to its
+    // centre isn't kept: that shape would be gone, not constrained.
+    if (solver.collapsed?.length) {
+      const byId = this._lookupMap([sketch]);
+      const names = solver.collapsed.map(id => byId.get(id)).filter(Boolean).map(e => this._entityLabel(e));
+      this.undoStack.pop();                              // no undo step for it either
+      this._swapSameDocument(beforeJSON);
+      this._afterStateSwap();
+      this.solveAndRender();
+      this.refreshUI();
+      const what = names.length ? names.join(', ') : 'a shape';
+      const text = `${constraintLabel({ kind })} not added: it would shrink ${what} to nothing.`;
+      this._hint(text);
+      notice(text);
+      return;
+    }
     if (solver.state === 'over' && solver.residual > 1e-2) {
       confirmDialog({
         title: 'This relation over-defines the sketch',

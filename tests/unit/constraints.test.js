@@ -202,3 +202,28 @@ test('a radius never goes negative: concentric circles 17.5 apart, outer set to 
   const ok = solve(s, { revertOnFailure: true });
   assert.ok(ok.ok && near(outer.r, 30, 1e-5) && near(inner.r, 12.5, 1e-5));
 });
+
+test('a line never collapses to a point, nor a circle to its centre', () => {
+  const s = sketch();
+  const l = line(s, 0, 0, 10, 0);
+  s.constraints.push(new C.CoincidentConstraint(l.p1.id, l.p2.id));
+  const r = solve(s, { revertOnFailure: true });
+  assert.equal(r.ok, false);
+  assert.ok(near(Math.hypot(l.p2.x - l.p1.x, l.p2.y - l.p1.y), 10), 'reverted');
+
+  // An arc whose end is held on its own centre: radius 0.
+  const s2 = sketch();
+  const a = arc(s2, 0, 0, 5, 0, 1.5);
+  s2.constraints.push(new C.ArcEndpointCoincidentConstraint({ arcId: a.id, centerId: a.center.id, which: 'start' }, a.center.id));
+  const r2 = solve(s2, { revertOnFailure: true });
+  assert.equal(r2.ok, false);
+  assert.ok(near(a.r, 5), `arc kept (${a.r})`);
+});
+
+test('a shape already collapsed before the solve does not block it', () => {
+  const s = sketch();
+  const l = line(s, 3, 3, 3, 3), m = line(s, 0, 0, 4, 1);
+  s.constraints.push(new C.HorizontalConstraint(m.id, m.p1.id, m.p2.id));
+  const r = solve(s, { revertOnFailure: true });
+  assert.ok(r.ok && near(m.p1.y, m.p2.y) && l);
+});
