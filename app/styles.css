@@ -1809,3 +1809,9 @@
   font: inherit; font-size: 10.5px; padding: 0 4px; margin-right: 2px;
   border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px; background: var(--field); color: var(--text);
 }
+
+/* Pattern fields: the value of a formula, under the field */
+.pat-eqval { font-size: 11px; color: var(--text-muted); text-align: right; margin: -4px 4px 4px 0; font-variant-numeric: tabular-nums; }
+.pat-eqval.bad { color: var(--overc); }
+.pat-formula-hint code { font-size: 10.5px; }
+.eq-name.eq-pat { display: flex; align-items: center; font-size: 11px; color: var(--text-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -31,6 +31,7 @@ npm run test:export  # Export (PNG, SVG, copy, DXF, print to scale) and the firs
 npm run test:formula # click a dimension to put it in an equation; variables driving tangents
 npm run test:units   # document unit (km: Earth to Moon), typed units, print scale, formulas in text
 npm run test:axis    # horizontal / vertical guess when a line end snaps to a shape or a point
+npm run test:patform # formulas in pattern fields: click a dimension, values, Equations window, variables
 node tests/style.e2e.mjs  # restyling arrows / texts after drawing, touch tap-through guard
 node tests/analytics.e2e.mjs  # Umami events: what is counted, once per visit, nothing sent from tests
 npm run test:mobile  # phone / tablet layout and touch input on emulated devices
@@ -617,8 +618,14 @@ and Create / Cancel; a dashed preview shows the copies, the centre, the
 targets and the directions. Enter creates, Esc cancels. Fields take units
 and arithmetic (`1in`, `30/2`); a field starting with `=` or naming a
 dimension or variable keeps an **equation** (`=D1*2`, `=pitch`), so the
-pattern follows when D1 changes (counts too, `=floor(D3/D4)`). Arrow keys
-step a value. At most 200 copies per pattern (every copy is solved).
+pattern follows when D1 changes (counts too, `=floor(D3/D4)`). While a
+field is focused, **click a dimension** on the canvas to insert its name
+(`=D1`; clicks on shapes still pick seeds and centres), and the field shows
+the formula's value under it (`= 15 mm`) as you type. The **Equations
+window** lists every linked linear and circular pattern's instances,
+spacing and angles (*Linear 1 · Spacing*…), with their formulas, editable
+there too. Arrow keys step a value. At most 200 copies per pattern (every
+copy is solved).
 
 **Keep linked** (on by default; the last choice is remembered for the
 visit):

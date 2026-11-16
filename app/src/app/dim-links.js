@@ -118,7 +118,7 @@ export class DimLinksMixin {
 
   /** Fields outside the canvas that take a formula. */
   _setupFormulaFields() {
-    const FIELDS = '#equations-body .eq-expr, #sel-body input[data-dim-edit], #sb-body input[data-dim-edit], input.dim-val[data-dim-edit], textarea[data-ink-k="text"]';
+    const FIELDS = '#equations-body .eq-expr, #sel-body input[data-dim-edit], #sb-body input[data-dim-edit], input.dim-val[data-dim-edit], textarea[data-ink-k="text"], input[data-pfield], #equations-body input[data-k="pat-expr"]';
     document.addEventListener('focusin', (e) => {
       const el = e.target;
       if (el?.matches?.(FIELDS)) this._formulaField = el;
@@ -151,13 +151,14 @@ export class DimLinksMixin {
     }
     const el = this._formulaField;
     if (!el || !el.isConnected || document.activeElement !== el) return null;
+    const dimsOnly = !!el.dataset.pfield;       // in a pattern, shape clicks pick seeds / centres
     const dims = allDimensions(this.project);
     let selfName = null, equation = true;
     if (el.dataset.k === 'dim-expr') selfName = dims[+el.dataset.i]?.name || null;
     else if (el.dataset.k === 'var-expr') { selfName = (this.project.variables || [])[+el.dataset.i]?.name || null; equation = false; }
     else if (el.dataset.dimEdit) selfName = this.activeSketch()?.constraints.find(c => c.id === el.dataset.dimEdit)?.name || null;
     return {
-      selfName,
+      selfName, dimsOnly,
       hold: () => setTimeout(() => el.focus(), 0),
       insert: (name) => {
         const v = el.value;
@@ -169,6 +170,7 @@ export class DimLinksMixin {
         el.value = before + pad + name + after;
         const caret = (before + pad + name).length;
         el.classList.remove('bad');
+        el.dispatchEvent(new Event('input', { bubbles: true }));   // live preview, value shown
         setTimeout(() => { el.focus(); el.setSelectionRange(caret, caret); }, 0);
       },
     };
@@ -176,9 +178,10 @@ export class DimLinksMixin {
 
   /** The name a click at this spot would insert while a formula is
    *  typed: a dimension label first, then a line, circle or arc. */
-  _formulaCandidate(screen, world) {
+  _formulaCandidate(screen, world, dimsOnly = false) {
     const dim = this.hitDimAtScreen(screen.x, screen.y);
     if (dim) { ensureDimensionNames(this.project); return { dim, name: dim.name }; }
+    if (dimsOnly) return null;
     const hits = this.hitTestAllSketches(world, this.activeVisibleSketches());
     const shape = hits.find(e => e instanceof Line || e instanceof Circle || e instanceof Arc);
     return shape ? { shape } : null;
@@ -188,7 +191,7 @@ export class DimLinksMixin {
    *  used to insert a name. */
   _formulaPick(screen, world) {
     const target = this._formulaTarget(); if (!target) return false;
-    const hit = this._formulaCandidate(screen, world); if (!hit) return false;
+    const hit = this._formulaCandidate(screen, world, target.dimsOnly); if (!hit) return false;
     const name = hit.name || this.dimensionNameForEntity(hit.shape);
     if (!name) return false;
     this._keepFormulaFocus = true;
@@ -212,7 +215,9 @@ export class DimLinksMixin {
       return false;
     }
     this._formulaHovering = true;
-    const hit = this._formulaCandidate(screen, world);
+    const target = this._formulaTarget();
+    const hit = this._formulaCandidate(screen, world, target.dimsOnly);
+    if (target.dimsOnly && !hit) { this._formulaHovering = false; return false; }   // the pattern's own picking
     this.canvas.style.cursor = hit ? 'copy' : '';
     const el = document.getElementById('status-hint');
     if (el) el.textContent = hit

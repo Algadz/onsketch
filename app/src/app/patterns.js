@@ -437,6 +437,66 @@ export class PatternsMixin {
     return true;
   }
 
+  /** Under a field holding a formula: "= 15 mm", its current value. */
+  _patternValueRow(path, unit) {
+    const p = this.pattern.params;
+    const e = p.exprs?.[path];
+    return `<div class="pat-eqval" data-pval="${path}"${e ? '' : ' hidden'}>= ${esc(fmt(getPath(p, path)))}${unit ? ' ' + esc(unit) : ''}</div>`;
+  }
+
+  /** Live "= value" while a formula is typed (or hidden for a plain value). */
+  _patternShowValue(body, path, text) {
+    const el = body.querySelector(`[data-pval="${path}"]`); if (!el) return;
+    if (!/^\s*=/.test(text)) { el.hidden = true; return; }
+    try {
+      const v = this._patternParse(path, text).value;
+      const unit = ANGLE_PATHS.has(path) ? '°' : COUNT_PATHS.has(path) ? '' : this.project.units;
+      el.textContent = `= ${fmt(v)}${unit ? ' ' + unit : ''}`;
+      el.hidden = false; el.classList.remove('bad');
+    } catch (err) { el.textContent = err.message; el.hidden = false; el.classList.add('bad'); }
+  }
+
+  /** Every editable parameter of a linked pattern, for the Equations
+   *  window: [{ path, label, unit }]. */
+  patternFormulaFields(c) {
+    const p = c.params;
+    if (c.type === 'linear') {
+      const out = [{ path: 'd1.count', label: 'Instances' }, { path: 'd1.spacing', label: 'Spacing', unit: this.project.units }];
+      if (!p.d1.line) out.push({ path: 'd1.angle', label: 'Angle', unit: '°' });
+      if (p.d2.count > 1) {
+        out.push({ path: 'd2.count', label: 'Instances 2' }, { path: 'd2.spacing', label: 'Spacing 2', unit: this.project.units });
+        if (!p.d2.line) out.push({ path: 'd2.angle', label: 'Angle 2', unit: '°' });
+      }
+      return out;
+    }
+    if (c.type === 'circular') return [{ path: 'count', label: 'Instances' }, { path: 'angle', label: p.equal ? 'Total angle' : 'Step angle', unit: '°' }];
+    return [];
+  }
+
+  patternFieldValue(c, path) { return getPath(c.params, path); }
+
+  /** A value or formula typed for a pattern parameter outside its panel
+   *  (Equations window). @returns {string|null} an error, or null */
+  setPatternFieldFromText(c, path, text) {
+    const sketch = this.activeSketch(); if (!sketch) return 'No sketch';
+    let r;
+    try { r = this._patternParse(path, text); } catch (e) { return e.message; }
+    const p = c.params;
+    const wasCount = getPath(p, path);
+    setPath(p, path, r.value);
+    p.exprs = p.exprs || {};
+    if (r.expr) p.exprs[path] = r.expr; else delete p.exprs[path];
+    if (!Object.keys(p.exprs).length) delete p.exprs;
+    if (COUNT_PATHS.has(path)) {
+      if (patternCopyCount(c.type, p) > PATTERN_MAX_COPIES) { setPath(p, path, wasCount); return `At most ${PATTERN_MAX_COPIES} copies`; }
+      syncPattern(sketch, c);
+    }
+    placePatternCopies(sketch, c);
+    this.commit();
+    this.refreshUI();
+    return null;
+  }
+
   _patternFieldText(path) {
     const p = this.pattern.params;
     const e = p.exprs?.[path];
@@ -678,12 +738,12 @@ export class PatternsMixin {
     const field = (path, lab, unit, extra = '') => {
       const bad = this._patternFieldBad?.[path];
       return `<div class="prop-row"><label for="pf-${path}">${lab}</label>
-        <span class="pat-field"><input id="pf-${path}" type="text" inputmode="decimal" data-pfield="${path}" value="${esc(this._patternFieldText(path))}"${bad ? ' class="bad"' : ''} autocomplete="off" spellcheck="false">${unit ? `<span class="pat-unit">${unit}</span>` : ''}${extra}</span></div>`;
+        <span class="pat-field"><input id="pf-${path}" type="text" inputmode="decimal" data-pfield="${path}" value="${esc(this._patternFieldText(path))}"${bad ? ' class="bad"' : ''} autocomplete="off" spellcheck="false" title="A value (1in, 30/2) or a formula (=D1/2, =width/n)">${unit ? `<span class="pat-unit">${unit}</span>` : ''}${extra}</span></div>${this._patternValueRow(path, unit)}`;
     };
     const stepper = (path, lab) => `<div class="prop-row"><label for="pf-${path}">${lab}</label>
         <span class="pat-stepper"><button class="pat-step" data-step="${path}" data-d="-1" aria-label="Fewer" title="Fewer">−</button>
-        <input id="pf-${path}" type="text" inputmode="numeric" data-pfield="${path}" value="${esc(this._patternFieldText(path))}" autocomplete="off">
-        <button class="pat-step" data-step="${path}" data-d="1" aria-label="More" title="More">+</button></span></div>`;
+        <input id="pf-${path}" type="text" inputmode="numeric" data-pfield="${path}" value="${esc(this._patternFieldText(path))}" autocomplete="off" title="A number or a formula (=n, =D1/10)">
+        <button class="pat-step" data-step="${path}" data-d="1" aria-label="More" title="More">+</button></span></div>${this._patternValueRow(path, '')}`;
     const flip = (key, on) => `<button class="pat-flip${on ? ' on' : ''}" data-flip="${key}" title="Reverse the direction" aria-label="Reverse">${uiIcon('flip')}</button>`;
 
     let html = '';
@@ -737,6 +797,9 @@ export class PatternsMixin {
           ? 'Copies follow the seed; edit the pattern later from Properties.'
           : 'Plain copies with the seed\'s relations, each edited on its own.'}</div>`;
     }
+    if (st.type !== 'points') {
+      html += `<div class="hint pat-formula-hint">Fields take formulas: <code>=D1/2</code>, <code>=n</code>, <code>=360/n</code>. While a field is focused, click a dimension to insert its name. Formulas keep following their dimensions and variables (see the Equations window).</div>`;
+    }
     html += `<div class="tool-note warn" id="pattern-issue"${issue ? '' : ' hidden'}>${esc(issue || '')}</div>`;
     if (st.mode === 'create') {
       html += `<div class="rel-grid op-actions">
@@ -769,6 +832,7 @@ export class PatternsMixin {
       inp.addEventListener('input', () => {
         const ok = this._patternSet(path, inp.value, false);
         inp.classList.toggle('bad', !ok);
+        this._patternShowValue(body, path, inp.value);
       });
       const commitField = () => {
         if (inp.value === original) return;

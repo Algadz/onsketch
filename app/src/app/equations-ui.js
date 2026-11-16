@@ -315,6 +315,16 @@ export class EquationsMixin {
     } else if (kind === 'var-expr') {
       const v = this.project.variables[+inp.dataset.i];
       v.expr = inp.value.trim().replace(/^=\s*/, '') || '0';
+    } else if (kind === 'pat-expr') {
+      const pats = (this.activeSketch()?.constraints || []).filter(c => c.kind === 'pattern' && this.patternFormulaFields?.(c).length);
+      const c = pats[+inp.dataset.i];
+      if (!c) return;
+      const text = inp.value.trim();
+      if (!text) return;
+      const err = this.setPatternFieldFromText(c, inp.dataset.path, text);
+      if (err) { showErr(err); return; }
+      this._refreshEquationsPanel(true);
+      return;
     } else if (kind === 'dim-expr') {
       const c = dims[+inp.dataset.i];
       const text = inp.value.trim();
@@ -366,7 +376,26 @@ export class EquationsMixin {
           placeholder="${c.driven ? 'driven (reference)' : 'value or =equation'}" ${c.driven ? 'disabled' : ''} title="${esc(c.exprError || kind)}" aria-label="Dimension equation">
         <span class="eq-val${!c.expr && !c.driven ? ' scrub' : ''}" data-val="dim:${i}" ${!c.expr && !c.driven ? `data-scrub="dim:${i}" title="Drag left / right to change (Shift: fine, Ctrl: round)"` : `title="${c.driven ? 'Floating: measures the geometry' : 'Set by its equation'}"`}>${c.exprError ? '!' : fmt(userValue(c), ang)}</span><span></span>`;
     });
-    html += `</div><div class="hint">Plain numbers are in ${esc(this.project.units)}; units: mm cm m km in " ft mi, deg rad. Functions: sin cos tan sqrt abs min max, pi. Start with = to keep an equation.</div>`;
+    html += '</div>';
+    // Linked patterns: their instances, spacing and angles take formulas too.
+    const pats = (this.activeSketch()?.constraints || []).filter(c => c.kind === 'pattern' && this.patternFormulaFields?.(c).length);
+    if (pats.length) {
+      html += `<div class="eq-head"><span>Patterns</span></div><div class="eq-grid">`;
+      const counts = {};
+      pats.forEach((c, pi) => {
+        counts[c.type] = (counts[c.type] || 0) + 1;
+        const title = `${c.type === 'linear' ? 'Linear' : 'Circular'} ${counts[c.type]}`;
+        for (const f of this.patternFormulaFields(c)) {
+          const e = c.params.exprs?.[f.path];
+          const v = this.patternFieldValue(c, f.path);
+          html += `<span class="eq-name eq-pat" title="${esc(title)}">${esc(title)} · ${esc(f.label)}</span>
+            <input class="eq-expr" data-k="pat-expr" data-i="${pi}" data-path="${esc(f.path)}" value="${esc(e ? '=' + e : '')}" placeholder="${esc(fmt(v, false))}${f.unit ? ' ' + esc(f.unit) : ''}" title="A value or =formula" aria-label="${esc(title + ' ' + f.label)}">
+            <span class="eq-val" title="${e ? 'Set by its formula' : 'Its value'}">${esc(fmt(v, f.unit === '°'))}</span><span></span>`;
+        }
+      });
+      html += '</div>';
+    }
+    html += `<div class="hint">Plain numbers are in ${esc(this.project.units)}; units: mm cm m km in " ft mi, deg rad. Functions: sin cos tan sqrt abs min max, pi. Start with = to keep an equation.</div>`;
     this._eqRebuilding = true;           // a browser may fire change on the removed field
     try { body.innerHTML = html; } finally { this._eqRebuilding = false; }
     if (keep) {

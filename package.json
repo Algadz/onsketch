@@ -27,7 +27,8 @@
     "test:export": "node tests/export.e2e.mjs",
     "test:formula": "node tests/formula.e2e.mjs",
     "test:units": "node tests/units.e2e.mjs",
-    "test:axis": "node tests/axis.e2e.mjs"
+    "test:axis": "node tests/axis.e2e.mjs",
+    "test:patform": "node tests/patform.e2e.mjs"
   },
   "devDependencies": {
     "eslint": "^9.39.0",
