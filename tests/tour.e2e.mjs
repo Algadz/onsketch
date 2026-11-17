@@ -86,6 +86,7 @@ for (const phone of [false, true]) {
     await page.waitForTimeout(1800);
     check(await slideTitle(page) === 'Take it anywhere' && await page.isVisible('.tour [data-a="example"]'), `${tag}: slide 3 offers an example (not opened)`);
     check(new URL(page.url()).search === '', `${tag}: no example was opened`);
+    check(/example=linkage$/.test(await page.getAttribute('.tour [data-a="example"]', 'href')), `${tag}: the example offered is the linkage`);
     await shot(page, `tour-3-${tag}`);
     check(await page.textContent('.tour [data-a="next"]') === 'Start drawing', `${tag}: the last button is Start drawing`);
     await page.click('.tour [data-a="next"]');
@@ -131,12 +132,17 @@ for (const phone of [false, true]) {
   }
 }
 
-/* -------- Not shown on an example or a saved drawing -------- */
+/* -------- The linkage example: opens without the tour, one thing left free -------- */
 {
   const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 } });
-  const page = await open(ctx, base + '?example=desk');
+  const page = await open(ctx, base + '?example=linkage');
+  await page.waitForFunction(() => window._app.activeSketch().entities.length > 5);
   await page.waitForTimeout(600);
   check(!(await page.$('.tour')), 'an example opens without the tour');
+  check(/DOF: 1/.test(await page.textContent('#statusbar')), 'linkage: one degree of freedom left, the crank');
+  // Change the crank from 30 to 40: the mechanism re-solves, the crank's circle follows (D7 = D1).
+  const r = await page.evaluate(() => { const a = window._app, s = a.activeSketch(); const d1 = s.constraints.find(c => c.name === 'D1'); d1.value = 40; a._applyEquations(); a.solveAndRender(); const c = s.entities.find(e => e.constructor.kind === 'circle'); return { r: c.r, status: document.getElementById('statusbar').textContent }; });
+  check(Math.abs(r.r - 40) < 1e-6 && /DOF: 1/.test(r.status), 'linkage: crank 30 → 40, its circle follows by equation');
   await ctx.close();
 }
 

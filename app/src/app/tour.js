@@ -137,7 +137,7 @@ export class TourMixin {
           <button type="button" class="btn tour-back" data-a="back">Back</button>
           <button type="button" class="btn primary tour-next" data-a="next">Next</button>
         </div>
-        <a class="tour-example" data-a="example" href="?example=desk" hidden>or open an example</a>
+        <a class="tour-example" data-a="example" href="?example=linkage" hidden>or open an example</a>
       </div>`;
     document.body.appendChild(back);
     const box = back.querySelector('.tour');
@@ -186,7 +186,7 @@ export class TourMixin {
     prevBtn.addEventListener('click', () => go(t.index - 1));
     back.querySelector('[data-a="skip"]').addEventListener('click', () => close('skipped'));
     dots.forEach(d => d.addEventListener('click', () => go(+d.dataset.i)));
-    example.addEventListener('click', () => { close('example'); });   // the link then opens ?example=desk
+    example.addEventListener('click', () => { close('example'); });   // the link then opens ?example=linkage
     back.addEventListener('click', (e) => { if (e.target === back) close('skipped'); });
     back.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') { e.preventDefault(); close('skipped'); }

@@ -152,7 +152,7 @@ export class GuideMixin {
       g.el.innerHTML = `
         <div class="guide-steps">${dots}</div>
         <div class="guide-text"><b>That's the idea.</b><span>Now change the size: ${touch ? 'tap the dimension twice' : 'double-click the dimension'} and type another number. The shape and its colour follow.</span></div>
-        <a class="btn" data-a="example" href="?example=desk">See an example</a>
+        <a class="btn" data-a="example" href="?example=linkage">See an example</a>
         <button type="button" class="btn primary" data-a="ok">Got it</button>`;
       g.el.querySelector('[data-a="ok"]').addEventListener('click', () => this._guideClose('done'));
       g.el.querySelector('[data-a="example"]').addEventListener('click', () => { set(GUIDE_KEY, 'done'); track('guide', { step: 'example' }); });

@@ -46,6 +46,7 @@ npm run lint
 npm run stamp        # after changing anything in app/: refresh cache-busting hashes
 node scripts/landing-shots.mjs # regenerate landing page images (hero + examples carousel)
 node scripts/build-examples.mjs # regenerate app/examples/*.json (opened with /app/?example=<slug>)
+                                # linkage: the four-bar offered by the tour and the first-run steps; desk: the /about/ demo
 ```
 
 While the modules load, `app/index.html` shows only a clean shell: an
