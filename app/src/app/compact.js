@@ -123,7 +123,7 @@ export class CompactMixin {
   /* ---- ⋯ menu ----
      Grouped: file · view · settings · account · help. Only what isn't on
      the phone's own bars. Re-solve isn't here (the solver runs on every
-     change); "Only the pencil draws" appears once a pen has been used. */
+     change); "Stylus only (fingers pan)" appears once a pen has been used. */
   _moreItems() {
     const check = (on) => `<span class="chk">${on ? '✓' : ''}</span>`;
     const icon = (k) => ACTION_ICONS[k] || (k === 'theme' ? uiIcon(this.themeName === 'dark' ? 'sun' : 'moon') : MORE_ICONS[k] || '');
@@ -133,7 +133,7 @@ export class CompactMixin {
       [['grid', 'Grid', this.gridOn], ['snap', 'Snap', this.snapOn], ['dimensions', 'Dimensions', this.showDimensions],
         ['relations', 'Relations', this.showRelations], ['zoom-fit', 'Zoom to fit']],
       [['units', `Units: ${this.project.units}`], ['theme', this.themeName === 'dark' ? 'Light theme' : 'Dark theme'],
-        ...(this.stylusMode != null ? [['stylus', 'Only the pencil draws', !!this.stylusMode]] : [])],
+        ...(this.stylusMode != null ? [['stylus', 'Stylus only (fingers pan)', !!this.stylusMode]] : [])],
       !this.cloudEnabled ? [] : u
         ? [['my-sketches', 'My sketches'], ['library', 'Library'], ['profile', 'Public profile'],
           this.cloudPlan?.plan === 'premium' ? ['billing', 'Manage subscription'] : ['pricing', 'Upgrade to Pro'], ['signout', 'Sign out']]
