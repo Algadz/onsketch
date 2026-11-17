@@ -165,6 +165,16 @@ export class ChromeMixin {
     };
   }
 
+  /** The setup new drawings start from: the one this browser keeps (last
+   *  toggled by hand), not whatever the drawing or example just open shows
+   *  (the linkage example opens with snap and relations off). */
+  preferredDisplay() {
+    let p = {};
+    try { p = JSON.parse(localStorage.getItem('onsketch:prefs') || '{}') || {}; } catch { p = {}; }
+    return { grid: p.grid !== false, snap: p.snap !== false, dimensions: p.showDimensions !== false,
+      relations: p.showRelations !== false, dimNames: !!p.showDimNames };
+  }
+
   applyDisplay(d) {
     this.setGridVisible(d.grid, false);
     this.setSnapOn(d.snap, false);

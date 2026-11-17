@@ -60,7 +60,7 @@ const pts = (x) => `70,135 ${x},135 ${x},70 70,70`;
 const ILLU_COLOUR = `<svg viewBox="0 0 320 190" aria-hidden="true">${GRID('tour-g2')}
   <defs><marker id="tour-ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
     <path d="M0 0L10 5L0 10z" fill="#e5484d"/></marker></defs>
-  <polygon class="acc" stroke-width="3" stroke-linejoin="round" fill="#f5a524" fill-opacity=".45" points="${pts(180)}">
+  <polygon class="acc paint" stroke-width="3" stroke-linejoin="round" points="${pts(180)}">
     <animate attributeName="points" ${T2} ${KT2} values="${pts(180)};${pts(180)};${pts(230)};${pts(230)};${pts(180)};${pts(180)}"/>
   </polygon>
   <g class="ln" stroke-width="1.4"><path d="M70 141v20"/>
@@ -76,8 +76,8 @@ const ILLU_COLOUR = `<svg viewBox="0 0 320 190" aria-hidden="true">${GRID('tour-
     <animate attributeName="opacity" ${T2} calcMode="discrete" keyTimes="0;.38;.88" values="0;1;0"/></text>
   <line x1="262" y1="58" x2="184" y2="92" stroke="#e5484d" stroke-width="2.5" stroke-linecap="round" marker-end="url(#tour-ah)">
     <animate attributeName="x2" ${T2} ${KT2} values="184;184;234;234;184;184"/></line>
-  <rect x="232" y="34" width="64" height="24" rx="5" fill="#fff4d6" stroke="#f5a524" stroke-width="1.5"/>
-  <text x="264" y="50" text-anchor="middle" class="t b" fill="#8a5a00">Heat sink</text>
+  <rect class="note" x="232" y="34" width="64" height="24" rx="5" stroke-width="1.5"/>
+  <text x="264" y="50" text-anchor="middle" class="t b note-t">Heat sink</text>
 </svg>`;
 
 /* 3. One drawing, three ways out. */
@@ -87,7 +87,7 @@ const chip = (y, cls, a, b, d) => `<g class="tour-pop" style="animation-delay:${
   <text x="248" y="${y + 31}" text-anchor="middle" class="t soft">${b}</text></g>`;
 const ILLU_EXPORT = `<svg viewBox="0 0 320 190" aria-hidden="true">${GRID('tour-g3')}
   <rect class="chip" x="22" y="46" width="118" height="114" rx="8" stroke-width="1.5"/>
-  <rect class="acc" x="40" y="66" width="60" height="36" rx="2" stroke-width="2" fill="#f5a524" fill-opacity=".45"/>
+  <rect class="acc paint" x="40" y="66" width="60" height="36" rx="2" stroke-width="2"/>
   <circle cx="114" cy="124" r="12" class="acc" fill="none" stroke-width="2"/>
   <g class="ln" stroke-width="1.2"><path d="M40 140h60M40 135v10M100 135v10"/></g>
   <path class="ln tour-draw" pathLength="1" d="M150 103H184" stroke-width="2.5"/>

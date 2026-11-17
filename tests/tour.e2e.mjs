@@ -140,9 +140,18 @@ for (const phone of [false, true]) {
   await page.waitForTimeout(600);
   check(!(await page.$('.tour')), 'an example opens without the tour');
   check(/DOF: 1/.test(await page.textContent('#statusbar')), 'linkage: one degree of freedom left, the crank');
+  const disp = await page.evaluate(() => ({ snap: window._app.snapOn, rel: window._app.showRelations }));
+  check(!disp.snap && !disp.rel, 'linkage: opens with snap and relations off');
   // Change the crank from 30 to 40: the mechanism re-solves, the crank's circle follows (D7 = D1).
   const r = await page.evaluate(() => { const a = window._app, s = a.activeSketch(); const d1 = s.constraints.find(c => c.name === 'D1'); d1.value = 40; a._applyEquations(); a.solveAndRender(); const c = s.entities.find(e => e.constructor.kind === 'circle'); return { r: c.r, status: document.getElementById('statusbar').textContent }; });
   check(Math.abs(r.r - 40) < 1e-6 && /DOF: 1/.test(r.status), 'linkage: crank 30 → 40, its circle follows by equation');
+  // A new sketch afterwards starts from this browser's own setup, not the example's.
+  await page.click('#menubar [data-action="new"]');
+  const dlg = page.locator('.app-dialog button', { hasText: 'Discard and start new' });
+  if (await dlg.count()) await dlg.click();
+  await page.waitForFunction(() => !window._app.activeSketch().entities.length);
+  const after = await page.evaluate(() => ({ snap: window._app.snapOn, rel: window._app.showRelations }));
+  check(after.snap && after.rel, 'a new sketch after the example has snap and relations back on');
   await ctx.close();
 }
 

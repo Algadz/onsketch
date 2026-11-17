@@ -855,7 +855,6 @@
   .tour-ill .lnf { fill: var(--text); }
   .tour-ill .acc { stroke: var(--accent); }
   .tour-ill .accf { fill: var(--accent); fill-opacity: .14; }
-  .tour-ill .acct { fill: var(--accent); }
   .tour-ill .chip { fill: var(--field); stroke: var(--border); }
   .tour-ill .chip.acc { stroke: var(--accent); }
   .tour-ill .cursor { fill: var(--text); stroke: var(--field); stroke-width: 1.2; }
@@ -863,6 +862,13 @@
   .tour-ill .t.b { font-weight: 700; }
   .tour-ill .t.big { font-size: 13px; font-weight: 700; }
   .tour-ill .t.soft { fill: var(--text-muted); font-size: 10px; }
+  .tour-ill .t.acct { fill: var(--accent); }
+  .tour-ill .paint { fill: #f5a524; fill-opacity: .5; }
+  .tour-ill .note { fill: #fff4d6; stroke: #f5a524; }
+  .tour-ill .t.note-t { fill: #8a5a00; }
+  [data-theme="dark"] .tour-ill .paint { fill-opacity: .8; }
+  [data-theme="dark"] .tour-ill .note { fill: #3b2f14; }
+  [data-theme="dark"] .tour-ill .t.note-t { fill: #ffd27a; }
   .tour-slide.play .tour-draw { stroke-dasharray: 1; stroke-dashoffset: 1; animation: tour-draw .5s ease .2s forwards; }
   .tour-slide.play .tour-pop { opacity: 0; transform-box: fill-box; transform-origin: center; animation: tour-pop .35s cubic-bezier(.3, 1.5, .6, 1) forwards; }
   @keyframes tour-draw { to { stroke-dashoffset: 0; } }

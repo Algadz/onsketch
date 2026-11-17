@@ -1,4 +1,12 @@
 import { ACTION_ICONS, DRAW_TOOLS, TOOLS, TOOL_ICONS, WINDOW_ICONS, toolDef } from '../ui/tool-defs.js';
+import { uiIcon } from '../ui/icons.js';
+
+const svgIcon = (inner) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
+const MORE_ICONS = {
+  units: svgIcon('<path d="M3 15l12-12 6 6-12 12z"/><path d="M7 11l2 2M10 8l2 2M13 5l2 2"/>'),
+  stylus: svgIcon('<path d="M4 20l1-4L16 5l3 3L8 19z"/><path d="M14 7l3 3"/>'),
+  report: svgIcon('<path d="M5 21V4"/><path d="M5 4h11l-2 4 2 4H5"/>'),
+};
 
 /* =============== PHONE LAYOUT ("compact") ======================
    On a touch screen that is narrow (< 700 px) or short (< 500 px, a phone
@@ -112,25 +120,29 @@ export class CompactMixin {
   }
   _closeFlyout() { const f = document.getElementById('mb-flyout'); if (f) f.hidden = true; }
 
-  /* ---- ⋯ menu ---- */
+  /* ---- ⋯ menu ----
+     Grouped: file · view · settings · account · help. Only what isn't on
+     the phone's own bars. Re-solve isn't here (the solver runs on every
+     change); "Only the pencil draws" appears once a pen has been used. */
   _moreItems() {
     const check = (on) => `<span class="chk">${on ? '✓' : ''}</span>`;
-    return [
-      ['new', 'New sketch'], ...(this.cloudEnabled ? [['open', 'Open…']] : []), ['save', 'Save'], ['export', 'Export…'], ['solve', 'Re-solve'],
-      '-',
-      ['grid', 'Grid', this.gridOn], ['snap', 'Snap', this.snapOn], ['dimensions', 'Dimensions', this.showDimensions],
-      ['relations', 'Relations', this.showRelations], ['zoom-fit', 'Zoom to fit'], ['theme', 'Dark theme', this.themeName === 'dark'],
-      ['units', `Units: ${this.project.units}…`],
-      '-',
-      ...(!this.cloudEnabled ? [] : this.cloudUser
-        ? ['-', ['my-sketches', 'My sketches'], ['library', 'Library'], ['profile', 'Public profile'],
+    const icon = (k) => ACTION_ICONS[k] || (k === 'theme' ? uiIcon(this.themeName === 'dark' ? 'sun' : 'moon') : MORE_ICONS[k] || '');
+    const u = this.cloudUser;
+    const groups = [
+      [['new', 'New sketch'], ...(this.cloudEnabled ? [['open', 'Open…']] : []), ['save', 'Save'], ['export', 'Export…']],
+      [['grid', 'Grid', this.gridOn], ['snap', 'Snap', this.snapOn], ['dimensions', 'Dimensions', this.showDimensions],
+        ['relations', 'Relations', this.showRelations], ['zoom-fit', 'Zoom to fit']],
+      [['units', `Units: ${this.project.units}`], ['theme', this.themeName === 'dark' ? 'Light theme' : 'Dark theme'],
+        ...(this.stylusMode != null ? [['stylus', 'Only the pencil draws', !!this.stylusMode]] : [])],
+      !this.cloudEnabled ? [] : u
+        ? [['my-sketches', 'My sketches'], ['library', 'Library'], ['profile', 'Public profile'],
           this.cloudPlan?.plan === 'premium' ? ['billing', 'Manage subscription'] : ['pricing', 'Upgrade to Pro'], ['signout', 'Sign out']]
-        : ['-', ['account', 'Sign in'], ['library', 'Library']]),
-      ['stylus', 'Only the pencil draws', !!this.stylusMode],
-      ['tour', 'How OnSketch works'],
-      ['report', 'Report a problem'],
-    ].map(x => x === '-' ? '<div class="more-sep"></div>'
-      : `<button type="button" class="more-item" data-more="${x[0]}">${ACTION_ICONS[x[0]] || ''}<span>${x[1]}</span>${x.length > 2 ? check(x[2]) : ''}</button>`).join('');
+        : [['account', 'Sign in'], ['library', 'Library']],
+      [['tour', 'How OnSketch works'], ['report', 'Report a problem']],
+    ].filter(g => g.length);
+    return groups.map(g => g.map(x =>
+      `<button type="button" class="more-item" data-more="${x[0]}">${icon(x[0])}<span>${x[1]}</span>${x.length > 2 ? check(x[2]) : ''}</button>`).join(''))
+      .join('<div class="more-sep"></div>');
   }
   _refreshMoreMenu() {
     const m = document.getElementById('more-menu');

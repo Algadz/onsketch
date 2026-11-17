@@ -2,7 +2,8 @@
 // Usage: node scripts/build-examples.mjs   (writes app/examples/*.json)
 import { writeFile } from 'node:fs/promises';
 import { Point, Line, Circle } from '../app/src/core/entities.js';
-import { Project } from '../app/src/core/model.js';
+import { Project, DISPLAY_DEFAULTS } from '../app/src/core/model.js';
+import { INK } from '../app/src/render/theme.js';
 import { Layer } from '../app/src/core/style.js';
 import { HorizontalConstraint, VerticalConstraint, DistanceConstraint, RadiusConstraint, PointLineDistanceConstraint, FixConstraint } from '../app/src/core/constraints.js';
 import { linkItems } from '../app/src/core/ink-links.js';
@@ -72,6 +73,8 @@ function desk() {
 function linkage() {
   const p = new Project();
   p.name = 'Linkage';
+  // Opens without relation icons (less clutter) and without snap (free drags).
+  p.display = { ...DISPLAY_DEFAULTS, relations: false, snap: false };
   const s = p.addSketch('Sketch 1');
   const bars = p.layers[0]; bars.name = 'Linkage';
   const notes = new Layer('Notes'); p.layers.push(notes);
@@ -116,12 +119,12 @@ function linkage() {
 
   // Ink: ground marks, the path of E, and notes that ride on the bars.
   const ink = [];
-  const pen = (pts, color = '#58616d', width = 0.8, kind = 'pen', opacity = 1) => {
+  const pen = (pts, color = '#8a94a1', width = 0.8, kind = 'pen', opacity = 1) => {
     const k = { id: 'k' + (ink.length + 1), layerId: notes.id, kind, color, opacity, width, points: pts.map(([x, y]) => ({ x, y })) };
     ink.push(k); return k;
   };
   const text = (x, y, t, o = {}) => {
-    const k = { id: 'k' + (ink.length + 1), layerId: notes.id, kind: 'text', color: o.color || '#1b2028', opacity: 1, size: o.size || 4, text: t, bold: !!o.bold, points: [{ x, y }] };
+    const k = { id: 'k' + (ink.length + 1), layerId: notes.id, kind: 'text', color: o.color || INK, opacity: 1, size: o.size || 4, text: t, bold: !!o.bold, points: [{ x, y }] };
     if (o.box) k.box = o.box;
     ink.push(k); return k;
   };
@@ -130,8 +133,8 @@ function linkage() {
     ink.push(k); return k;
   };
   for (const gx of [0, GROUND]) {                     // ground hatching under A and D
-    pen([[gx - 8, -4], [gx + 8, -4]], '#58616d', 0.9);
-    for (let i = 0; i < 5; i++) pen([[gx - 7 + i * 4, -4], [gx - 10 + i * 4, -8]], '#58616d', 0.6);
+    pen([[gx - 8, -4], [gx + 8, -4]], '#8a94a1', 0.9);
+    for (let i = 0; i < 5; i++) pen([[gx - 7 + i * 4, -4], [gx - 10 + i * 4, -8]], '#8a94a1', 0.6);
   }
   // Path of E over a full turn of the crank, for these sizes.
   const trace = [];
@@ -141,9 +144,10 @@ function linkage() {
     const c = meet(b, COUPLER, D, ROCKER), e = meet(b, BE, c, CE);
     trace.push([e.x, e.y]);
   }
-  pen(trace, '#2563a5', 1.4, 'marker', 0.35);
-  text(-46, 50, 'path of E', { color: '#2563a5', size: 3.6, bold: true });
-  const eLabel = text(E.x - 3, E.y + 9, 'E', { color: '#2563a5', size: 4, bold: true });
+  const BLUE = '#3d8fe0';                              // reads on both themes
+  pen(trace, BLUE, 0.9);                              // pen, not marker: marker blends dull on the dark canvas
+  text(-46, 50, 'path of E', { color: BLUE, size: 3.6, bold: true });
+  const eLabel = text(E.x - 3, E.y + 9, 'E', { color: BLUE, size: 4, bold: true });
   linkItems([eLabel], E);
 
   const drag = text(B.x - 44, B.y - 4, 'Drag me', { color: '#d63a3a', size: 4.5, bold: true });

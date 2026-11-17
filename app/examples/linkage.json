@@ -2,6 +2,13 @@
  "version": 3,
  "name": "Linkage",
  "units": "mm",
+ "display": {
+  "grid": true,
+  "snap": false,
+  "dimensions": true,
+  "relations": false,
+  "dimNames": false
+ },
  "activeSketchId": "s41",
  "activeLayerId": "ly40",
  "layers": [
@@ -287,7 +294,7 @@
      "id": "k1",
      "layerId": "ly42",
      "kind": "pen",
-     "color": "#58616d",
+     "color": "#8a94a1",
      "opacity": 1,
      "width": 0.9,
      "pts": [
@@ -301,7 +308,7 @@
      "id": "k2",
      "layerId": "ly42",
      "kind": "pen",
-     "color": "#58616d",
+     "color": "#8a94a1",
      "opacity": 1,
      "width": 0.6,
      "pts": [
@@ -315,7 +322,7 @@
      "id": "k3",
      "layerId": "ly42",
      "kind": "pen",
-     "color": "#58616d",
+     "color": "#8a94a1",
      "opacity": 1,
      "width": 0.6,
      "pts": [
@@ -329,7 +336,7 @@
      "id": "k4",
      "layerId": "ly42",
      "kind": "pen",
-     "color": "#58616d",
+     "color": "#8a94a1",
      "opacity": 1,
      "width": 0.6,
      "pts": [
@@ -343,7 +350,7 @@
      "id": "k5",
      "layerId": "ly42",
      "kind": "pen",
-     "color": "#58616d",
+     "color": "#8a94a1",
      "opacity": 1,
      "width": 0.6,
      "pts": [
@@ -357,7 +364,7 @@
      "id": "k6",
      "layerId": "ly42",
      "kind": "pen",
-     "color": "#58616d",
+     "color": "#8a94a1",
      "opacity": 1,
      "width": 0.6,
      "pts": [
@@ -371,7 +378,7 @@
      "id": "k7",
      "layerId": "ly42",
      "kind": "pen",
-     "color": "#58616d",
+     "color": "#8a94a1",
      "opacity": 1,
      "width": 0.9,
      "pts": [
@@ -385,7 +392,7 @@
      "id": "k8",
      "layerId": "ly42",
      "kind": "pen",
-     "color": "#58616d",
+     "color": "#8a94a1",
      "opacity": 1,
      "width": 0.6,
      "pts": [
@@ -399,7 +406,7 @@
      "id": "k9",
      "layerId": "ly42",
      "kind": "pen",
-     "color": "#58616d",
+     "color": "#8a94a1",
      "opacity": 1,
      "width": 0.6,
      "pts": [
@@ -413,7 +420,7 @@
      "id": "k10",
      "layerId": "ly42",
      "kind": "pen",
-     "color": "#58616d",
+     "color": "#8a94a1",
      "opacity": 1,
      "width": 0.6,
      "pts": [
@@ -427,7 +434,7 @@
      "id": "k11",
      "layerId": "ly42",
      "kind": "pen",
-     "color": "#58616d",
+     "color": "#8a94a1",
      "opacity": 1,
      "width": 0.6,
      "pts": [
@@ -441,7 +448,7 @@
      "id": "k12",
      "layerId": "ly42",
      "kind": "pen",
-     "color": "#58616d",
+     "color": "#8a94a1",
      "opacity": 1,
      "width": 0.6,
      "pts": [
@@ -454,10 +461,10 @@
     {
      "id": "k13",
      "layerId": "ly42",
-     "kind": "marker",
-     "color": "#2563a5",
-     "opacity": 0.35,
-     "width": 1.4,
+     "kind": "pen",
+     "color": "#3d8fe0",
+     "opacity": 1,
+     "width": 0.9,
      "pts": [
       38.785,
       59.353,
@@ -707,7 +714,7 @@
      "id": "k14",
      "layerId": "ly42",
      "kind": "text",
-     "color": "#2563a5",
+     "color": "#3d8fe0",
      "opacity": 1,
      "size": 3.6,
      "text": "path of E",
@@ -721,7 +728,7 @@
      "id": "k15",
      "layerId": "ly42",
      "kind": "text",
-     "color": "#2563a5",
+     "color": "#3d8fe0",
      "opacity": 1,
      "size": 4,
      "text": "E",
@@ -793,7 +800,7 @@
      "id": "k18",
      "layerId": "ly42",
      "kind": "text",
-     "color": "#1b2028",
+     "color": "#111418",
      "opacity": 1,
      "size": 3.2,
      "text": "coupler",
@@ -817,7 +824,7 @@
      "id": "k19",
      "layerId": "ly42",
      "kind": "text",
-     "color": "#1b2028",
+     "color": "#111418",
      "opacity": 1,
      "size": 3.4,
      "text": "Try: drag the crank round its circle · double-click 30 and type 40",

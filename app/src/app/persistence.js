@@ -127,6 +127,7 @@ export class PersistenceMixin {
       if (answer !== 'new') return;
     }
     if (this._cloudUnlink) this._cloudUnlink();
+    this.applyDisplay(this.preferredDisplay());       // not the setup of the drawing being left
     this.project = new Project(); this.project.addSketch('Sketch 1');
     this.undoStack.length = 0; this.redoStack.length = 0;
     // The empty sketch is the first undo state, so the first thing drawn

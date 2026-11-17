@@ -18,8 +18,11 @@ import { track } from '../ui/analytics.js';
    - Stylus mode (on once a pen is seen, can be turned off): the pen draws,
      fingers only pan and zoom, which also ignores a resting palm.
    - Hit tolerances grow for fingers (2.5×) and a little for pens (1.5×).
-   - A loupe magnifies the canvas above the finger while placing or
-     dragging points.
+   - A loupe magnifies the canvas under the finger while placing or
+     dragging points. It sits still in a top corner, the one away from
+     the finger (switching sides only past 40 % / 60 % of the width), so
+     it never hides where the finger is heading and doesn't chase it.
+     It waits 150 ms (or a move) before showing, so taps don't flash it.
    - Two-point tools (line, rectangle, circle…) place their first point
      where the finger lands and their second where it lifts: one drag
      draws one shape. A tap sets the first point (shown as a dot) and the
@@ -292,14 +295,24 @@ export class TouchMixin {
     return ['line', 'centerLine', 'rectangle', 'centerRectangle', 'circle', 'threePointCircle', 'arc', 'hexagon', 'point', 'curve', 'smartdim'].includes(n)
       || (n === 'select' && !!this.tool?.dragging);
   }
-  _loupeStart(ev) { this._loupeOn = true; this._loupeFollow(ev); }
+  _loupeStart(ev) {
+    this._loupeOn = true; this._loupeSide = null;
+    this._loupeShowAt = performance.now() + 150;
+    clearTimeout(this._loupeTimer);
+    this._loupeTimer = setTimeout(() => this.requestRender(), 160);
+    this._loupeDown = null;
+    this._loupeFollow(ev);
+  }
   _loupeStop() {
     this._loupeOn = false; this._loupeAt = null;
+    clearTimeout(this._loupeTimer);
     const el = document.getElementById('loupe'); if (el) el.hidden = true;
   }
   _loupeFollow(ev, screen) {
     if (!this._loupeOn || (ev.pointerType !== 'touch' && ev.pointerType !== 'pen')) return;
     if (!screen) screen = this._canvasHandlers.getWorld(ev).screen;
+    if (!this._loupeDown) this._loupeDown = screen;
+    else if (Math.hypot(screen.x - this._loupeDown.x, screen.y - this._loupeDown.y) > SLOP_PX) this._loupeShowAt = 0;
     this._loupeAt = screen;
     this.requestRender();
   }
@@ -320,10 +333,14 @@ export class TouchMixin {
     const m = el.width / 2;
     ctx.beginPath(); ctx.moveTo(m - 8 * dpr, m); ctx.lineTo(m + 8 * dpr, m); ctx.moveTo(m, m - 8 * dpr); ctx.lineTo(m, m + 8 * dpr); ctx.stroke();
     ctx.restore();
-    const h = this.canvas.clientHeight;
-    const top = y - D - 46 < 0 ? Math.min(h - D, y + 46) : y - D - 46;
-    el.style.left = Math.max(0, Math.min(this.canvas.clientWidth - D, x - D / 2)) + 'px';
+    // A top corner, away from the finger; flips only well past the middle.
+    const w = this.canvas.clientWidth;
+    if (!this._loupeSide) this._loupeSide = x < w / 2 ? 'right' : 'left';
+    else if (this._loupeSide === 'right' && x > w * 0.6) this._loupeSide = 'left';
+    else if (this._loupeSide === 'left' && x < w * 0.4) this._loupeSide = 'right';
+    const pad = 10, top = this.compact ? 52 : pad;      // below the status chips on a phone
+    el.style.left = (this._loupeSide === 'left' ? pad : w - D - pad) + 'px';
     el.style.top = top + 'px';
-    el.hidden = false;
+    el.hidden = performance.now() < (this._loupeShowAt || 0);
   }
 }
