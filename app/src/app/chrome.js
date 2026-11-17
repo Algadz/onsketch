@@ -136,6 +136,7 @@ export class ChromeMixin {
       case 'zoom-reset':   this.view.zoom = 4; this.view.panX = 0; this.view.panY = 0; this.requestRender(); break;
       case 'theme':        this.setTheme(this.themeName === 'dark' ? 'light' : 'dark'); break;
       case 'reset-layout': this.windows.reset(); break;
+      case 'tour':         this.openTour({ source: 'help' }); break;
       case 'account':      this.openAccount(); break;
       case 'my-sketches':  track('nav', { to: 'my-sketches', from: 'editor' }); location.href = 'projects/'; break;
       case 'library':      track('nav', { to: 'library', from: 'editor' }); location.href = '/library/'; break;

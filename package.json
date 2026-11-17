@@ -25,6 +25,7 @@
     "test:relmenu": "node tests/relmenu.e2e.mjs",
     "test:collapse": "node tests/collapse.e2e.mjs",
     "test:export": "node tests/export.e2e.mjs",
+    "test:tour": "node tests/tour.e2e.mjs",
     "test:formula": "node tests/formula.e2e.mjs",
     "test:units": "node tests/units.e2e.mjs",
     "test:axis": "node tests/axis.e2e.mjs",

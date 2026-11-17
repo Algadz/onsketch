@@ -15,7 +15,8 @@ import { track } from '../ui/analytics.js';
 
    Shown once per browser, only on an empty first visit (not with a
    saved drawing, an example or a shared sketch), and never again once
-   finished or dismissed.
+   finished or dismissed. A brand-new visitor sees the welcome tour
+   (tour.js) first; the card follows only after its Start drawing.
 
    Activation is counted for everyone, guided or not, once per browser:
      activation { step: 'shape' | 'dimension' | 'fill', guided }
@@ -84,6 +85,23 @@ export class GuideMixin {
     const empty = !!s && !s.entities.length && !s.strokes.length && !s.fills.length;
     this._actBaseline = this._guideState();
     if (restored || busy || !empty || get(GUIDE_KEY)) return;
+    // A brand-new visitor first sees the three-slide tour (tour.js); the
+    // steps follow only if they press Start drawing, not if they skip.
+    if (this._tourWanted()) {
+      this._startTourThen(() => this._startGuideCard());
+      // Skipped (or left for an example): no steps afterwards either.
+      set(GUIDE_KEY, 'skipped');
+      return;
+    }
+    this._startGuideCard();
+  }
+
+  /** The first-run card, on the empty canvas. */
+  _startGuideCard() {
+    if (this._guide) return;
+    const s = this.activeSketch();
+    if (!s || s.entities.length || s.strokes.length || s.fills.length) return;   // drew behind the tour
+    try { localStorage.removeItem(GUIDE_KEY); } catch { /* storage unavailable */ }
     const el = document.createElement('aside');
     el.id = 'guide';
     el.setAttribute('aria-label', 'Getting started');

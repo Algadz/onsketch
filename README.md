@@ -3,7 +3,12 @@
 Browser-based parametric 2D sketcher: SolidWorks-style geometric constraints
 and dimensions, with Paint.NET-style layers and a fill tool.
 
-- `index.html` is the landing page; `app/` is the editor.
+- `app/` is the editor, and `onsketch.io/` opens it directly: the root
+  `index.html` only redirects to `/app/` (keeping `?…` and `#…`). The former
+  landing page lives at `about/index.html` (canonical `/about/`, in the sitemap).
+- A first visit gets a three-slide welcome tour (`app/src/app/tour.js`), then the
+  first-run steps (`guide.js`) if the visitor presses Start drawing. The `?` button
+  (⋯ → How OnSketch works on a phone) opens the tour again.
 - No build step. `app/index.html` loads `app/src/main.js` as native ES modules,
   so GitHub Pages serves the repo as is.
 
@@ -28,6 +33,7 @@ npm run test:collapse # no line collapses to a point, no circle / arc to its cen
 npm run test:relmenu # right-click / long press on a selection: its relations, remove, add
 npm run test:curve   # Bézier curves: drawing, handles, tangent / smooth / on curve, fill, scissors, mirror, export
 npm run test:export  # Export (PNG, SVG, copy, DXF, print to scale) and the first-run steps, desktop and phone
+npm run test:tour    # root → editor redirect, /about/, the welcome tour (slides, skip, ? button, swipe)
 npm run test:formula # click a dimension to put it in an equation; variables driving tangents
 npm run test:units   # document unit (km: Earth to Moon), typed units, print scale, formulas in text
 npm run test:axis    # horizontal / vertical guess when a line end snaps to a shape or a point

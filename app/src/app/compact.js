@@ -127,6 +127,7 @@ export class CompactMixin {
           this.cloudPlan?.plan === 'premium' ? ['billing', 'Manage subscription'] : ['pricing', 'Upgrade to Pro'], ['signout', 'Sign out']]
         : ['-', ['account', 'Sign in'], ['library', 'Library']]),
       ['stylus', 'Only the pencil draws', !!this.stylusMode],
+      ['tour', 'How OnSketch works'],
       ['report', 'Report a problem'],
     ].map(x => x === '-' ? '<div class="more-sep"></div>'
       : `<button type="button" class="more-item" data-more="${x[0]}">${ACTION_ICONS[x[0]] || ''}<span>${x[1]}</span>${x.length > 2 ? check(x[2]) : ''}</button>`).join('');

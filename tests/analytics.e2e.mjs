@@ -104,8 +104,8 @@ await page.waitForTimeout(500);
 await page.click('.pr-toggle [data-interval="month"]');
 check(await count('pricing-interval', { interval: 'month' }) === 1, 'pricing: pricing-interval {interval: month}');
 
-// ---- Landing page: Umami script and tagged buttons ----
-await page.goto(`http://localhost:${port}/`);
+// ---- About page (the former landing page): Umami script and tagged buttons ----
+await page.goto(`http://localhost:${port}/about/`);
 check(await page.$('script[src*="umami"]') !== null, 'landing page loads Umami');
 check(await page.$$eval('[data-umami-event="landing-cta"]', l => l.length) >= 4, 'landing CTAs carry data-umami-event');
 

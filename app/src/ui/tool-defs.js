@@ -53,6 +53,7 @@ export const ACTION_ICONS = {
   'circular-pattern': svg('<circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="12" cy="4.5" r="2.3"/><circle cx="18.5" cy="8.3" r="2.3" stroke-dasharray="2 1.6"/><circle cx="18.5" cy="15.7" r="2.3" stroke-dasharray="2 1.6"/><circle cx="12" cy="19.5" r="2.3" stroke-dasharray="2 1.6"/><circle cx="5.5" cy="15.7" r="2.3" stroke-dasharray="2 1.6"/><circle cx="5.5" cy="8.3" r="2.3" stroke-dasharray="2 1.6"/>'),
   'point-pattern': svg('<rect x="3" y="3" width="6" height="6" rx="1"/><rect x="14" y="7" width="6" height="6" rx="1" stroke-dasharray="2 1.6"/><rect x="5" y="15" width="6" height="6" rx="1" stroke-dasharray="2 1.6"/><circle cx="14" cy="7" r="1.3" fill="currentColor" stroke="none"/><circle cx="5" cy="15" r="1.3" fill="currentColor" stroke="none"/><path d="M9 9l4 -1.5M7 11l-1 3" stroke-dasharray="1.2 1.6" opacity="0.6"/>'),
   construction: svg('<path d="M4 17h16" stroke-dasharray="3 3"/><path d="M6 7h12"/>'),
+  tour: svg('<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .8-1 1.5v.7"/><circle cx="12" cy="17" r="0.6" fill="currentColor"/>'),
   'reset-layout': svg('<rect x="3" y="4" width="7" height="7" rx="1"/><rect x="14" y="4" width="7" height="16" rx="1"/><rect x="3" y="14" width="7" height="6" rx="1"/>'),
 };
 

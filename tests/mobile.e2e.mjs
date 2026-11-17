@@ -271,9 +271,9 @@ const lineMidOnScreen = (page, t = 0.5) => app(page, (t) => {
   await ctx.close();
 }
 
-/* ---------------- Landing page on a phone ---------------- */
+/* ---------------- About page (the former landing) on a phone ---------------- */
 {
-  const { ctx, page, errors } = await open(devices['iPhone 13'], '/');
+  const { ctx, page, errors } = await open(devices['iPhone 13'], '/about/');
   await page.waitForLoadState('networkidle');
   const m = await app(page, () => {
     const svg = document.getElementById('demo').getBoundingClientRect();

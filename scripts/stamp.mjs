@@ -28,7 +28,7 @@ export const PAGES = [
   { file: 'index.html', base: '' },
   { file: 'projects/index.html', base: '../' },
   { file: '../library/index.html', base: '../app/' },
-  { file: '../index.html', base: 'app/' },
+  { file: '../about/index.html', base: '../app/' },
   { file: '../pricing/index.html', base: '../app/' },
 ];
 
