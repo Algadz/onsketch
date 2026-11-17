@@ -33,6 +33,7 @@ import { track } from '../ui/analytics.js';
    ============================================================ */
 const TWO_POINT = { line: 'startPt', centerLine: 'center', rectangle: 'start', centerRectangle: 'center', circle: 'center', hexagon: 'center' };
 const TWO_POINT_MOVE_PX = 10;
+const PEN_SEEN_KEY = 'onsketch:pen-seen';     // '1' once a pen touched the canvas on this device
 const LONG_PRESS_MS = 450;
 const SLOP_PX = 8;
 const TAP_MS = 300;
@@ -53,7 +54,14 @@ export class TouchMixin {
       document.documentElement.classList.add('touch-ui');
       this._refreshOptionsBar();
     }
-    if (type === 'pen' && this.stylusMode == null) this.setStylusMode(true, false);
+    if (type === 'pen' && !this.penSeen) {
+      // First pen on this device: remember it, then use the choice made
+      // here before (if any), else turn stylus mode on.
+      this.penSeen = true;
+      try { localStorage.setItem(PEN_SEEN_KEY, '1'); } catch { /* storage unavailable */ }
+      const saved = this._storedStylus();
+      this.setStylusMode(saved ?? true, false);
+    }
   }
 
   /** View used for hit tests: the real one for the mouse; for touch a
@@ -73,8 +81,17 @@ export class TouchMixin {
     if (save) try { localStorage.setItem('onsketch:stylus', this.stylusMode ? '1' : '0'); } catch { /* storage unavailable */ }
     if (this._refreshMoreMenu) this._refreshMoreMenu();
   }
+  _storedStylus() {
+    try { const v = localStorage.getItem('onsketch:stylus'); return v == null ? null : v === '1'; } catch { return null; }
+  }
+  /** Stylus mode only exists on a device where a pen was used: a choice
+   *  saved without one (a tap in the menu on a phone) is ignored, so
+   *  fingers always draw on a phone and the menu item stays hidden. */
   _loadStylusPref() {
-    try { const v = localStorage.getItem('onsketch:stylus'); if (v != null) this.stylusMode = v === '1'; } catch { /* storage unavailable */ }
+    try { this.penSeen = localStorage.getItem(PEN_SEEN_KEY) === '1'; } catch { this.penSeen = false; }
+    this.stylusMode = null;
+    if (this.penSeen) { const v = this._storedStylus(); if (v != null) this.stylusMode = v; }
+    document.documentElement.classList.toggle('stylus-mode', !!this.stylusMode);
   }
 
   /* ---- The filter in front of the canvas handlers ---- */

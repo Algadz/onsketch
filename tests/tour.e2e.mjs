@@ -132,6 +132,31 @@ for (const phone of [false, true]) {
   }
 }
 
+/* -------- Stylus option: only on a device where a pen was used -------- */
+{
+  const ctx = await browser.newContext({ ...devices['iPhone 13'] });
+  const page = await ctx.newPage();
+  // A synthetic pen event has no real pointer to capture: that one error is expected.
+  page.on('pageerror', e => { if (!/setPointerCapture/.test(String(e))) errors.push(String(e)); });
+  await page.route(/umami|supabase|jsdelivr/, r => r.abort());
+  await page.addInitScript(() => { if (!sessionStorage.getItem('x')) { sessionStorage.setItem('x', '1'); localStorage.setItem('onsketch:stylus', '1'); } });
+  await page.goto(base); await page.waitForFunction(() => window._app); await page.waitForTimeout(300);
+  await page.tap('#more-btn');
+  const st = await page.evaluate(() => ({ item: !!document.querySelector('#more-menu [data-more="stylus"]'), mode: window._app.stylusMode, cls: document.documentElement.classList.contains('stylus-mode') }));
+  check(!st.item && !st.mode && !st.cls, 'phone, stylus mode saved but no pen ever used: no menu item, fingers still draw');
+  await page.tap('#more-btn');
+  await page.evaluate(() => {
+    const c = document.getElementById('canvas'), r = c.getBoundingClientRect();
+    const o = { pointerType: 'pen', pointerId: 7, isPrimary: true, clientX: r.left + 50, clientY: r.top + 50, bubbles: true };
+    c.dispatchEvent(new PointerEvent('pointerdown', o)); c.dispatchEvent(new PointerEvent('pointerup', o));
+  });
+  await page.waitForTimeout(200);
+  await page.tap('#more-btn');
+  const pen = await page.evaluate(() => ({ item: !!document.querySelector('#more-menu [data-more="stylus"]'), mode: window._app.stylusMode, seen: localStorage.getItem('onsketch:pen-seen') }));
+  check(pen.item && pen.mode === true && pen.seen === '1', 'once a pen is used: the item appears, with the choice saved before');
+  await ctx.close();
+}
+
 /* -------- The linkage example: opens without the tour, one thing left free -------- */
 {
   const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 } });

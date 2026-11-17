@@ -133,7 +133,7 @@ export class CompactMixin {
       [['grid', 'Grid', this.gridOn], ['snap', 'Snap', this.snapOn], ['dimensions', 'Dimensions', this.showDimensions],
         ['relations', 'Relations', this.showRelations], ['zoom-fit', 'Zoom to fit']],
       [['units', `Units: ${this.project.units}`], ['theme', this.themeName === 'dark' ? 'Light theme' : 'Dark theme'],
-        ...(this.stylusMode != null ? [['stylus', 'Stylus only (fingers pan)', !!this.stylusMode]] : [])],
+        ...(this.penSeen ? [['stylus', 'Stylus only (fingers pan)', !!this.stylusMode]] : [])],
       !this.cloudEnabled ? [] : u
         ? [['my-sketches', 'My sketches'], ['library', 'Library'], ['profile', 'Public profile'],
           this.cloudPlan?.plan === 'premium' ? ['billing', 'Manage subscription'] : ['pricing', 'Upgrade to Pro'], ['signout', 'Sign out']]
