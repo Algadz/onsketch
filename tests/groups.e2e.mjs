@@ -137,6 +137,24 @@ check(/1 of 2 in a group/.test(await page.textContent('#context-menu')), 'inside
 await page.click('#context-menu [data-action="select-group"]');
 check(await sel() === 'tA,tB', '"Select the whole group"');
 
+// ---- Right-click actions are for the selection, not the shape on top ----
+await click(await S(0, 70));
+await click(spot); await click(spot);                                   // L2 (under L1) selected
+check(await sel() === 'L2', 'the lower line is selected');
+await page.mouse.click(spot.x, spot.y, { button: 'right' });
+await page.waitForSelector('#context-menu [data-action="midpoint"]');
+const midLabel = await page.textContent('#context-menu [data-action="midpoint"]');
+check(/Line L2/.test(midLabel), `"Create midpoint" names the selected line (${midLabel.trim()})`);
+await page.click('#context-menu [data-action="midpoint"]');
+const mid = await page.evaluate(() => {
+  const s = window._app.activeSketch();
+  const c = s.constraints.find(k => k.kind === 'midpoint');
+  const p = c && s.entities.find(e => e.id === c.pointId);
+  const line = c && s.entities.find(e => e.constructor.kind === 'line' && e.p1.id === c.l.a && e.p2.id === c.l.b);
+  return c && { line: line?.id, x: p.x, y: p.y };
+});
+check(mid && mid.line === 'L2' && Math.abs(mid.x - 10) < 1e-6, `the midpoint is on the selected L2, at x = 10, not on L1 on top (${JSON.stringify(mid)})`);
+
 check(!errors.length, 'no page errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
 await browser.close();
 server.close();

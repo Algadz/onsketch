@@ -242,7 +242,11 @@ export class DimLinksMixin {
   /** Context-menu actions for the shape under the cursor. */
   contextActions(items) {
     const owner = (e) => (e instanceof Point ? (this.project.ownerOf(e) || e) : e);
-    const item = items.map(owner).find(e => e instanceof Line || e instanceof Circle || e instanceof Arc || e instanceof Bezier);
+    // A selected shape under the cursor wins over one lying on top of it:
+    // the actions are for what is selected (create midpoint of the selected
+    // line, not of the line that happens to be first at that spot).
+    const curves = items.map(owner).filter(e => e instanceof Line || e instanceof Circle || e instanceof Arc || e instanceof Bezier);
+    const item = curves.find(e => e.selected) || curves[0];
     if (!item) return [];
     const targets = this._actionTargets(item);
     const out = [];
@@ -272,7 +276,7 @@ export class DimLinksMixin {
     if (lines.length) {
       out.push({
         id: 'midpoint',
-        label: lines.length > 1 ? `Create midpoints (${lines.length})` : 'Create midpoint',
+        label: lines.length > 1 ? `Create midpoints (${lines.length})` : `Create midpoint of ${this._entityLabel(lines[0])}`,
         run: () => this.createMidpoints(lines),
       });
     }

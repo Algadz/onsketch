@@ -971,7 +971,7 @@ await page.evaluate(() => { const a = window._app; a.project.layer('ly1').visibl
   let at = await scr(35, -20);
   await page.mouse.click(at.x, at.y, { button: 'right' });
   const labels = await page.$$eval('#context-menu .action span:last-child', els => els.map(e => e.textContent.trim()));
-  check(labels.includes('Set as construction') && labels.includes('Create midpoint'), `right-click offers construction and midpoint (${labels.join(' | ')})`);
+  check(labels.includes('Set as construction') && labels.some(l => l.startsWith('Create midpoint')), `right-click offers construction and midpoint (${labels.join(' | ')})`);
   await page.click('#context-menu [data-action="construction"]');
   check(await page.evaluate(() => window._app.activeSketch().entities.find(e => e.id === 'f1').construction), 'Set as construction');
   await page.mouse.click(at.x, at.y, { button: 'right' });
