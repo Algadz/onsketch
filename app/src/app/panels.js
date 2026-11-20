@@ -89,7 +89,7 @@ export class PanelsMixin {
       <div class="sb-subhead">Sketch</div>
       <div class="prop-row"><label for="sk-units">Unit</label><select id="sk-units" data-sketch-units>${DOC_UNITS.map(u => `<option value="${u}"${u === this.project.units ? ' selected' : ''}>${u} · ${UNIT_NAMES[u]}</option>`).join('')}</select></div>
       <div class="prop-row"><label>Line weight</label>${this.sizeFieldHTML('linePx', '')}</div>
-      <div class="hint">The line weight is for the whole sketch (every line, circle, arc and curve), in px at 100 % zoom: it zooms with the drawing. Also in the options bar of the drawing tools.</div>`;
+      <div class="hint">The line weight is for the whole sketch (every line, circle, arc and curve), in screen px: the same at every zoom. Also in the options bar of the drawing tools.</div>`;
       this.bindSizeFields(body);
       body.querySelector('[data-sketch-units]')?.addEventListener('change', async (e) => {
         if (!(await this.setDocumentUnits(e.target.value))) e.target.value = this.project.units;

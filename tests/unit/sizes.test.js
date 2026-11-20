@@ -25,11 +25,11 @@ test('ink sizes are in drawing units, set once from the view', () => {
   assert.equal(km.sizes.linePx, 1.4, 'the line weight is px, whatever the unit');
 });
 
-test('the line weight is px at 100 % zoom and zooms with the drawing', () => {
+test('the line weight is screen px, the same at every zoom', () => {
   assert.equal(linePxAt(1.4, 4), 1.4);       // 100 %
-  assert.equal(linePxAt(1.4, 8), 2.8);       // 200 %
-  assert.equal(linePxAt(1.4, 2), 0.75, 'never thinner than a hairline');
-  assert.equal(linePxAt(2, 2), 1);
+  assert.equal(linePxAt(1.4, 8), 1.4);       // 200 %
+  assert.equal(linePxAt(1.4, 0.001), 1.4);   // far out
+  assert.equal(linePxAt(0.2, 4), 0.75, 'never thinner than a hairline');
 });
 
 test('one line weight for the sketch: from older pixel files and from drawing-unit weights', () => {

@@ -10,16 +10,16 @@
    default looked like at that zoom), rounded, then stays put.
 
    The CAD line weight (lines, circles, arcs, curves) is one setting for
-   the whole sketch, in screen pixels AT 100 % ZOOM (project.sizes.linePx):
-   1.4 px is 1.4 px at 100 %, 2.8 px at 200 %, 0.7 px at 50 % — it zooms
-   with the drawing (never thinner than a hairline, so nothing vanishes).
-   Shapes keep only their line type.
+   the whole sketch, in SCREEN PIXELS (project.sizes.linePx): 1.4 px is
+   1.4 px at every zoom, as in CAD programs. Shapes keep only their line
+   type.
 
    The eraser stays a cursor size in screen pixels; dimensions, handles and
    markers are editor overlays and stay in pixels too.
    ============================================================ */
 
-/** Screen px per drawing unit at 100 % zoom (the status bar shows zoom × 25 %). */
+/** Screen px per drawing unit at 100 % zoom (the status bar shows zoom × 25 %);
+ *  converts weights saved in drawing units by earlier versions. */
 export const ZOOM_100 = 4;
 export const DEFAULT_LINE_PX = 1.4;
 
@@ -66,14 +66,15 @@ export function ensureSizes(project, zoom) {
   return project.sizes;
 }
 
-/** Screen px a line of the sketch is drawn with at this zoom. */
-export function linePxAt(linePx, zoom) {
-  return Math.max(MIN_LINE_PX, (linePx > 0 ? linePx : DEFAULT_LINE_PX) * zoom / ZOOM_100);
+/** Screen px a line of the sketch is drawn with: its weight, the same at
+ *  every zoom (`_zoom` is ignored; kept for callers). */
+export function linePxAt(linePx, _zoom) {
+  return Math.max(MIN_LINE_PX, linePx > 0 ? linePx : DEFAULT_LINE_PX);
 }
 
 const roundPx = (v) => Math.max(0.1, Math.round(v * 10) / 10);
 
-/** One line weight for the whole sketch, in px at 100 % zoom. Shapes saved
+/** One line weight for the whole sketch, in screen px. Shapes saved
  *  with weights of their own give them up; the sketch takes the most
  *  common one: from pixels in older files (`pixels`), from drawing units
  *  (× px per unit at 100 %) in files of the last versions, as was a

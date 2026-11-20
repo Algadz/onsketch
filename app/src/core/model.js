@@ -452,7 +452,7 @@ export class Project {
     p.orientAngleDimensions();
     // Sizes are in drawing units; files without them had pixel line weights.
     // Ink sizes in drawing units; one line weight for the whole sketch, in
-    // px at 100 % zoom (shapes saved with their own give it up: the most
+    // screen px (shapes saved with their own give it up: the most
     // common becomes the sketch's). Files without sizes had pixel weights.
     p.sizes = (o.sizes && typeof o.sizes === 'object' && cleanSizes(o.sizes)) || {};
     sketchWideLineWeight(p, { pixels: !(o.sizes && typeof o.sizes === 'object') });

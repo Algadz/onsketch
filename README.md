@@ -39,7 +39,7 @@ npm run test:units   # document unit (km: Earth to Moon), typed units, print sca
 npm run test:axis    # horizontal / vertical guess when a line end snaps to a shape or a point
 npm run test:patform # formulas in pattern fields: click a dimension, values, Equations window, variables
 npm run test:ctxmenu # no browser context menu in the editor (only the app's), except in text fields
-npm run test:sizes   # line weight (px at 100 %, sketch-wide), pen / arrow / text sizes in drawing units
+npm run test:sizes   # line weight (screen px, sketch-wide, same at every zoom), pen / arrow / text sizes in drawing units
 npm run test:groups  # groups (click, click again inside, Esc), clicking through overlapping items, right-click list
 node tests/style.e2e.mjs  # restyling arrows / texts after drawing, touch tap-through guard
 node tests/analytics.e2e.mjs  # Umami events: what is counted, once per visit, nothing sent from tests
@@ -451,16 +451,16 @@ touch input. Plan and audit: `docs/mobile-plan.md`.
 
 ## Sizes
 
-**The CAD line weight is in pixels at 100 % zoom, one for the whole
-sketch.** Every line, circle, arc and curve is drawn with it, and it zooms
-with the drawing: 1.4 px is 1.4 px at 100 %, 2.8 px at 200 %, 0.7 px at
-50 % (never thinner than a hairline, so nothing vanishes far out). Set it
-in **Properties with nothing selected** (*Sketch*: unit and line weight)
-or as *Line weight* in the options bar of the drawing tools (`1.5` or
-`1.5px`; ↑ ↓ step). Changing it updates every shape at once; shapes keep
-only their line type (solid, dashed…). It is saved with the sketch
-(`project.sizes.linePx`) and doesn't change with the document unit. Files
-whose shapes had weights of their own take the most common one.
+**The CAD line weight is in screen pixels, one for the whole sketch.**
+Every line, circle, arc and curve is drawn with it, and it is the same
+width on screen at every zoom, as in CAD programs (1.4 px stays 1.4 px
+zoomed in or out). Set it in **Properties with nothing selected**
+(*Sketch*: unit and line weight) or as *Line weight* in the options bar of
+the drawing tools (`1.5` or `1.5px`; ↑ ↓ step). Changing it updates every
+shape at once; shapes keep only their line type (solid, dashed…). It is
+saved with the sketch (`project.sizes.linePx`) and doesn't change with the
+document unit. Files whose shapes had weights of their own take the most
+common one.
 
 **Ink sizes are on the drawing, in the document unit**: pen, marker and
 arrow widths and text heights. A 5 mm text is 5 mm at every zoom, and the

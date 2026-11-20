@@ -47,7 +47,7 @@ export class SketchWindowMixin {
     const px = key === 'linePx';
     const u = px ? 'px' : esc(this.project.units);
     const what = px
-      ? 'Line weight of the whole sketch (every line, circle, arc and curve), in px at 100 % zoom: thicker when you zoom in, thinner when you zoom out. ↑ ↓ step'
+      ? 'Line weight of the whole sketch (every line, circle, arc and curve), in screen px: the same at every zoom. ↑ ↓ step'
       : `${esc(SIZE_LABELS[key])} on the drawing, in ${u}: the same at every zoom. Type a value (units convert: 0.5mm, 1/8in); ↑ ↓ step`;
     return `<label class="opt size-opt" title="${what}">${label ? esc(label) + ' ' : ''}<input type="text" class="size-in" inputmode="decimal" ${attr}="${key}" value="${fmtSize(v)}" spellcheck="false" autocomplete="off"><span class="opt-val">${u}</span></label>`;
   }

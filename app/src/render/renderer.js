@@ -110,7 +110,7 @@ export class Renderer {
     // Export (render/export.js): a drawing to show, not to edit. No state
     // colours: shapes in ink, construction geometry in grey.
     if (this.exportMode) color = construction ? t.inactive : t.ink;
-    // The sketch's line weight: px at 100 % zoom, zooming with the drawing
+    // The sketch's line weight, in screen px: the same at every zoom
     // (core/sizes.js).
     const px = linePxAt(this.linePx, this.view.zoom);
     const width = px + (entity.selected && !this.exportMode ? 0.6 : 0);
