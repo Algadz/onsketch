@@ -1,6 +1,8 @@
 import { Arc, Bezier, Circle, Line, Point } from '../core/entities.js';
-import { DistanceConstraint, MidpointConstraint, RadiusConstraint, constraintLabel } from '../core/constraints.js';
+import { AngleConstraint, DistanceConstraint, MidpointConstraint, RadiusConstraint, constraintLabel } from '../core/constraints.js';
 import { allDimensions, ensureDimensionNames } from '../core/equations.js';
+
+const DRIVABLE = new Set(['distance', 'radius', 'pointLineDistance', 'angle', 'curveDistance', 'offsetDistance']);
 
 /* =============== LINKED DIMENSIONS + FEATURE ACTIONS ===========
    Floating (driven) dimensions measure the geometry instead of driving
@@ -40,10 +42,77 @@ export class DimLinksMixin {
           const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy);
           if (len > 1e-12) v = Math.abs(dx * (p.y - a.y) - dy * (p.x - a.x)) / len;
         }
+      } else if (c.kind === 'angle') {
+        const L = (id, k) => byId.get(id)?.[k] ?? NaN;
+        const a = AngleConstraint.measure(L, c.l1, c.l2);
+        if (Number.isFinite(a)) v = a;
+      } else if (c.kind === 'curveDistance') {
+        const a = byId.get(c.c1), b = byId.get(c.c2);
+        if (a && b) v = c.mode === 'gap' ? Math.hypot(b.x - a.x, b.y - a.y) - a.r - b.r : a.r - b.r;
+      } else if (c.kind === 'offsetDistance') {
+        const p = c.pairs[0];
+        if (p?.kind === 'line') {
+          const q = byId.get(p.pointId), a = byId.get(p.l.a), b = byId.get(p.l.b);
+          if (q && a && b) {
+            const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy);
+            if (len > 1e-12) v = Math.abs(dx * (q.y - a.y) - dy * (q.x - a.x)) / len;
+          }
+        } else if (p) {
+          const a = byId.get(p.c1), b = byId.get(p.c2);
+          if (a && b) v = Math.abs(a.r - b.r);
+        }
       }
-      if (v != null && Math.abs(v - c.value) > 1e-9) { c.value = v; changed = true; }
+      if (v != null && Number.isFinite(v) && Math.abs(v - c.value) > 1e-9) { c.value = v; changed = true; }
     }
     return changed;
+  }
+
+  /** Whether this dimension can be switched between driving and driven. */
+  canToggleDriven(c) { return !!c && DRIVABLE.has(c.kind) && c.value != null; }
+
+  /**
+   * Makes a dimension driven (it only measures the shapes) or driving (it
+   * sets them). A dimension that would over-define the sketch as a driving
+   * one stays driven, with a note in the status bar. One undo step.
+   * @returns {boolean} whether it changed
+   */
+  setDimensionDriven(c, on) {
+    const sketch = this.activeSketch();
+    if (!sketch || !this.canToggleDriven(c) || !!c.driven === !!on) return false;
+    if (on) {
+      c.driven = true; c.expr = null; c.exprError = null;
+      this.refreshDrivenDimensions();
+    } else {
+      // Probe as a driving dimension at its measured value: refused when
+      // the sketch would be over-defined (or this is implied by the rest).
+      this.refreshDrivenDimensions();
+      const before = this._captureSketchParams(sketch);
+      c.driven = false;
+      const probe = this.solver.solve(sketch, this.project.sketches, [], { diagnostics: true, activeIds: c.refs() });
+      this._restoreSketchParams(before);
+      for (const e of sketch.entities) if (e.syncEnds) e.syncEnds();
+      let bad = !probe.ok || probe.state === 'over' || !!probe.redundantIds?.has(c.id);
+      if (bad && !probe.redundantIds?.has(c.id)) {
+        // Only blame this one if the sketch solves without it.
+        c.driven = true;
+        const base = this.solver.solve(sketch, this.project.sketches, [], { diagnostics: false, activeIds: c.refs() });
+        this._restoreSketchParams(before);
+        for (const e of sketch.entities) if (e.syncEnds) e.syncEnds();
+        if (!base.ok) bad = false;
+      }
+      if (bad) {
+        c.driven = true;
+        document.getElementById('status-hint').textContent =
+          `${c.name || constraintLabel(c)} stays driven: as a driving dimension it would over-define the sketch. Delete a dimension or relation, or make one driven, first.`;
+        this.refreshUI(); this.requestRender();
+        return false;
+      }
+      c.driven = false;
+    }
+    this.commit();
+    this.refreshUI();
+    this.requestRender();
+    return true;
   }
 
   /** Name of the dimension that measures this shape: its existing length /

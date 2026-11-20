@@ -73,8 +73,9 @@ export class TouchUIMixin {
     b.addEventListener('click', () => { this.deleteSelection(); this.refreshUI(); this.requestRender(); });
   }
 
-  /** Long press on a dimension label or a relation badge: select it and
-   *  offer Delete (and Edit value for a driving dimension). */
+  /** Long press (or right-click) on a dimension label or a relation badge:
+   *  select it and offer Delete, Edit value for a driving dimension, and
+   *  Make driven / Make driving. */
   showConstraintMenu(c, clientX, clientY) {
     this.hideContextMenu();
     this.clearSelection();
@@ -90,8 +91,11 @@ export class TouchUIMixin {
     const row = (action, glyph, label) => `<button type="button" class="context-menu-item action" data-action="${action}"><span class="glyph">${glyph}</span><span>${label}</span></button>`;
     menu.innerHTML = `<div class="context-menu-title">${esc(title)}</div>`
       + (isDim && !c.driven ? row('edit', '✎', 'Edit value') : '')
+      + (this.canToggleDriven(c) ? (c.driven ? row('driving', '⇥', 'Make driving') : row('driven', '( )', 'Make driven (reference)')) : '')
       + row('delete', '✕', isDim ? 'Delete dimension' : 'Delete relation');
     menu.querySelector('[data-action="delete"]').addEventListener('click', () => { this.hideContextMenu(); this.deleteSelection(); this.refreshUI(); });
+    menu.querySelector('[data-action="driven"]')?.addEventListener('click', () => { this.hideContextMenu(); this.setDimensionDriven(c, true); });
+    menu.querySelector('[data-action="driving"]')?.addEventListener('click', () => { this.hideContextMenu(); this.setDimensionDriven(c, false); });
     menu.querySelector('[data-action="edit"]')?.addEventListener('click', () => { this.hideContextMenu(); this.editDimValue(c); });
     document.body.appendChild(menu);
     const r = menu.getBoundingClientRect(), m = 8;

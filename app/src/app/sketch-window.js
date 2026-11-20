@@ -4,7 +4,7 @@ import { ARROW_HEADS, ARROW_TIPS, isArrow } from '../core/arrows.js';
 import { INK } from '../render/theme.js';
 import { TOOL_ICONS, toolDef } from '../ui/tool-defs.js';
 import { evaluate } from '../core/expr.js';
-import { SIZE_LABELS, ensureSizes, stepSize } from '../core/sizes.js';
+import { SIZE_LABELS, ensureSizes, niceSize, stepSize } from '../core/sizes.js';
 
 const esc = (t) => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -47,11 +47,16 @@ export class SketchWindowMixin {
     const px = key === 'linePx';
     const u = px ? 'px' : esc(this.project.units);
     const what = px
-      ? 'Line weight of the whole sketch (every line, circle, arc and curve), in screen px: the same at every zoom. ↑ ↓ step'
-      : `${esc(SIZE_LABELS[key])} on the drawing, in ${u}: the same at every zoom. Type a value (units convert: 0.5mm, 1/8in); ↑ ↓ step`;
+      ? 'Line weight of the whole sketch (every line, circle, arc and curve), in screen px: the same at every zoom. Drag sideways to change it (Shift: fine, Ctrl: round); click to type'
+      : `${esc(SIZE_LABELS[key])} on the drawing, in ${u}: the same at every zoom. Drag sideways to change it (Shift: fine, Ctrl: round); click to type (units convert: 0.5mm, 1/8in)`;
     return `<label class="opt size-opt" title="${what}">${label ? esc(label) + ' ' : ''}<input type="text" class="size-in" inputmode="decimal" ${attr}="${key}" value="${fmtSize(v)}" spellcheck="false" autocomplete="off"><span class="opt-val">${u}</span></label>`;
   }
 
+  /* Size fields scrub like Blender's: press and drag sideways to change
+     the value (by ratio, about ×2 per 60 px, so it feels the same at
+     0.4 mm and at 4000 km; Shift 10× finer, Ctrl round values). The
+     drawing follows live; release is one undo step; Esc puts it back. A
+     click without dragging edits the value as text (↑ ↓ still step). */
   bindSizeFields(root, attr = 'data-size') {
     root.querySelectorAll(`input[${attr}]`).forEach(inp => {
       const key = inp.getAttribute(attr);
@@ -76,13 +81,56 @@ export class SketchWindowMixin {
           setTimeout(() => { const again = document.querySelector(`input[${attr}="${key}"]`); if (again) { again.focus(); again.select(); } }, 0);
         }
       });
+      inp.addEventListener('pointerdown', (e) => this._scrubSize(inp, key, e));
     });
+  }
+
+  _scrubSize(inp, key, ev) {
+    if (document.activeElement === inp || ev.button !== 0) return;   // typing in it: normal text editing
+    ev.preventDefault();                                               // no focus until we know it's a click
+    const v0 = this.docSizes()[key];
+    const x0 = ev.clientX;
+    let moved = false, last = v0;
+    try { inp.setPointerCapture(ev.pointerId); } catch { /* synthetic */ }
+    const value = (e) => {
+      const dx = e.clientX - x0;
+      let v = v0 * Math.pow(2, dx / (e.shiftKey ? 600 : 60));
+      if (e.ctrlKey || e.metaKey) v = niceSize(v);
+      else v = Number(v.toPrecision(key === 'linePx' ? 2 : 3));
+      return Math.max(key === 'linePx' ? 0.1 : 1e-9, v);
+    };
+    const move = (e) => {
+      if (!moved && Math.abs(e.clientX - x0) < 3) return;
+      if (!moved) { moved = true; inp.classList.add('scrubbing'); document.body.classList.add('scrubbing'); }
+      const v = value(e);
+      if (v === last) return;
+      last = v;
+      inp.value = fmtSize(v);
+      this.setDocSize(key, v, { live: true });
+    };
+    const finish = (keep) => {
+      inp.removeEventListener('pointermove', move);
+      inp.removeEventListener('pointerup', up);
+      inp.removeEventListener('pointercancel', cancel);
+      window.removeEventListener('keydown', esc, true);
+      inp.classList.remove('scrubbing'); document.body.classList.remove('scrubbing');
+      if (!moved) { inp.focus(); inp.select(); return; }              // a click: type a value
+      if (!keep) { inp.value = fmtSize(v0); this.setDocSize(key, v0, { live: true }); this.requestRender(); return; }
+      this.setDocSize(key, last);                                      // one undo step
+    };
+    const up = () => finish(true);
+    const cancel = () => finish(false);
+    const esc = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(false); } };
+    inp.addEventListener('pointermove', move);
+    inp.addEventListener('pointerup', up);
+    inp.addEventListener('pointercancel', cancel);
+    window.addEventListener('keydown', esc, true);
   }
 
   /** Sets a document size (one undo step). The line weight is the whole
    *  sketch's; a pen / arrow / text size also restyles the selected ink of
    *  that kind. */
-  setDocSize(key, v) {
+  setDocSize(key, v, { live = false } = {}) {
     const sizes = this.docSizes();
     sizes[key] = v;
     if (key === 'linePx') {
@@ -90,6 +138,7 @@ export class SketchWindowMixin {
     } else if (key === 'arrow' || key === 'text') {
       this._refineInk({ [key + 'Size']: v }, false);
     }
+    if (live) { this.requestRender(); return; }      // while scrubbing: no undo step yet
     this.commit();
     this.refreshUI();
     this._refreshSketchWindow();

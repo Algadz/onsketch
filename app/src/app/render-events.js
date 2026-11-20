@@ -202,6 +202,8 @@ export class RenderEventsMixin {
       const { screen, world } = getWorld(ev);
       if (ev.button === 2) {
         ev.preventDefault();
+        const c = this._valueInput ? null : (this.hitDimAtScreen(screen.x, screen.y) || this.hitRelationAtScreen(screen.x, screen.y));
+        if (c && this.showConstraintMenu(c, ev.clientX, ev.clientY)) return;
         this.showContextMenu(screen, world, ev);
         return;
       }

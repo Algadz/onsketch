@@ -299,6 +299,7 @@ export class PanelsMixin {
       <span class="glyph">${glyph}</span>
       <span class="dim-name" title="${esc(label)}">${esc(c.name || label)}${this._crossLayerTag(c) ? ' ⇄' : ''}</span>
       ${value}<span class="dim-unit">${ang ? '°' : esc(this.project.units)}</span>
+      ${this.canToggleDriven(c) ? `<button type="button" class="dim-drv${c.driven ? ' on' : ''}" data-drv="${c.id}" aria-pressed="${!!c.driven}" title="${c.driven ? 'Driven (reference): click to make it driving' : 'Driving: click to make it driven (a reference that only measures)'}">( )</button>` : ''}
       ${removable ? `<button class="rel-del" data-del="${c.id}" title="Delete this dimension" aria-label="Delete dimension">×</button>` : ''}
     </div>`;
   }
@@ -350,9 +351,9 @@ export class PanelsMixin {
     }
     if (dim) {
       html += '<div class="sb-subhead">Value</div>' + this._dimRowHTML(c, false);
-      if (['distance', 'radius', 'pointLineDistance'].includes(c.kind)) {
-        html += `<div class="prop-row"><label>Driven</label><label class="switch" title="A driven dimension only measures; it does not move the shapes">
-          <input type="checkbox" data-driven${c.driven ? ' checked' : ''}><span></span></label></div>`;
+      if (this.canToggleDriven(c)) {
+        html += `<div class="prop-row"><label>Role</label><span class="seg" data-driven-seg>
+          <button type="button" class="${c.driven ? '' : 'on'}" data-driven="0" title="Driving: the value sets the shapes">Driving</button><button type="button" class="${c.driven ? 'on' : ''}" data-driven="1" title="Driven (reference): measures the shapes and doesn't move them">Driven</button></span></div>`;
       }
     }
     html += `<button class="rel-btn danger full ps-delete" data-delete-sel>Delete ${dim ? 'dimension' : 'relation'}</button>`;
@@ -404,6 +405,11 @@ export class PanelsMixin {
       this.commit();
       this.refreshUI();
     }));
+    body.querySelectorAll('[data-drv]').forEach(b => b.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      const c = sketch.constraints.find(k => k.id === b.dataset.drv);
+      if (c) this.setDimensionDriven(c, !c.driven);
+    }));
     body.querySelectorAll('[data-delete-sel]').forEach(b => b.addEventListener('click', () => this.deleteSelection()));
 
     const mover = body.querySelector('select[data-move-layer]');
@@ -429,15 +435,10 @@ export class PanelsMixin {
       });
       inp.addEventListener('input', () => { inp.classList.remove('bad'); });
     });
-    const driven = body.querySelector('input[data-driven]');
-    if (driven) driven.addEventListener('change', () => {
+    body.querySelectorAll('[data-driven-seg] button').forEach(b => b.addEventListener('click', () => {
       const c = this.selectedEntitiesAndPoints().find(x => x instanceof Constraint);
-      if (!c) return;
-      c.driven = driven.checked;
-      if (c.driven) { c.expr = null; this.refreshDrivenDimensions(); }
-      this.commit();
-      this.refreshUI();
-    });
+      if (c) this.setDimensionDriven(c, b.dataset.driven === '1');
+    }));
 
     const e = geom[0];
     body.querySelectorAll('input[data-edit]').forEach(inp => {

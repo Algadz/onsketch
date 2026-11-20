@@ -590,6 +590,13 @@
   .dim-val:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
   .dim-val.driven { border-style: dashed; color: var(--text-muted); background: transparent; }
   .dim-unit { font-size: 11px; color: var(--text-soft); flex: 0 0 auto; min-width: 16px; }
+  .dim-drv {
+    flex: 0 0 auto; height: 20px; padding: 0 4px; border: 1px solid transparent; border-radius: 4px; background: none;
+    color: var(--text-muted); font-size: 11px; letter-spacing: -1px; cursor: pointer; opacity: 0.55;
+  }
+  .dim-row:hover .dim-drv, .dim-drv:focus-visible { opacity: 1; }
+  .dim-drv:hover { background: var(--hover); color: var(--text); }
+  .dim-drv.on { opacity: 1; color: var(--accent); border-color: var(--accent-border); }
   .dim-add { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
   .dim-add .mini-btn { display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; border-style: dashed; }
   .dim-add .mini-btn .glyph { color: var(--accent); font-weight: 600; }
@@ -1881,3 +1888,8 @@
 /* Right-click list: what is already selected */
 #context-menu .context-menu-item.is-selected > span:nth-child(2) { font-weight: 600; }
 #context-menu .context-menu-item.is-selected .meta { color: var(--accent); }
+
+/* Size fields: the unit stays as written (mm, not Mm); drag to scrub */
+.prop-row .size-opt, .prop-row .size-opt .opt-val { text-transform: none; }
+.size-in:not(:focus) { cursor: ew-resize; }
+.size-in.scrubbing { border-color: var(--accent); background: var(--accent-softer); }

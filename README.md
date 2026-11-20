@@ -41,6 +41,7 @@ npm run test:patform # formulas in pattern fields: click a dimension, values, Eq
 npm run test:ctxmenu # no browser context menu in the editor (only the app's), except in text fields
 npm run test:sizes   # line weight (screen px, sketch-wide, same at every zoom), pen / arrow / text sizes in drawing units
 npm run test:groups  # groups (click, click again inside, Esc), clicking through overlapping items, right-click list
+npm run test:driven  # driving / driven dimensions (Properties, rows, right-click), refused when over-defining; size fields drag like Blender
 node tests/style.e2e.mjs  # restyling arrows / texts after drawing, touch tap-through guard
 node tests/analytics.e2e.mjs  # Umami events: what is counted, once per visit, nothing sent from tests
 npm run test:mobile  # phone / tablet layout and touch input on emulated devices
@@ -89,7 +90,16 @@ cached modules after a deploy. `npm test` fails if the stamp is out of date.
   selects it, × removes it. Dimensions are edited in place (a value or
   `=equation`); only missing ones are offered. Typing a length or diameter
   changes the driving dimension when there is one. A selected relation or
-  dimension shows what it ties, its value, Driven, and Delete.
+  dimension shows what it ties, its value, Driving | Driven, and Delete.
+- **Driving or driven dimensions.** Any dimension (length, distance,
+  radius / diameter, angle, gap, offset) can be switched between
+  *driving* (its value sets the shapes) and *driven* (a reference: it
+  measures the shapes, greyed, and follows them as they move): Driving |
+  Driven in Properties, the small `( )` button on each row of the
+  Dimensions list, or right-click (long-press) the dimension's label:
+  *Make driven* / *Make driving*. A dimension that would over-define the
+  sketch as a driving one stays driven, with a note in the status bar. One
+  undo step.
 - **Line colour always shows state**, as in SolidWorks: blue under-defined,
   black fully defined, red over-defined, pink construction, orange selected.
 - **Sketch** window: Fill (B), Pen (N), Marker (G) and Eraser (E), with the
@@ -456,7 +466,11 @@ Every line, circle, arc and curve is drawn with it, and it is the same
 width on screen at every zoom, as in CAD programs (1.4 px stays 1.4 px
 zoomed in or out). Set it in **Properties with nothing selected**
 (*Sketch*: unit and line weight) or as *Line weight* in the options bar of
-the drawing tools (`1.5` or `1.5px`; ↑ ↓ step). Changing it updates every
+the drawing tools (`1.5` or `1.5px`; ↑ ↓ step). Like every size field
+(pen, marker, arrow, text), **drag sideways on it** to change it, as in
+Blender: right is bigger (×2 every 60 px), Shift is finer, Ctrl snaps to
+round sizes, Esc puts it back, and release is one undo step; a click
+without dragging opens it for typing. Changing it updates every
 shape at once; shapes keep only their line type (solid, dashed…). It is
 saved with the sketch (`project.sizes.linePx`) and doesn't change with the
 document unit. Files whose shapes had weights of their own take the most
