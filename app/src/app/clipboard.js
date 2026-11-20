@@ -149,7 +149,7 @@ export class ClipboardMixin {
     const s = this.inkSettings('text');
     const item = textFromPlain(text, {
       layerId: this.project.activeLayerId, color: this.pen.fillColor,
-      size: s.size / this.view.zoom, bold: s.bold, box: s.box,
+      size: s.size, bold: s.bold, box: s.box,
     });
     if (!item) return false;
     placeTextCenter(item, this._pasteTarget());

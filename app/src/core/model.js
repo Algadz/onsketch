@@ -27,6 +27,7 @@ import { PatternConstraint } from './patterns.js';
 import { reviveStroke, strokeToJSON } from './strokes.js';
 import { imageSource, registerImage, usedImageIds } from './images.js';
 import { DOC_UNITS } from './expr.js';
+import { cleanSizes, migratePixelLineWidths } from './sizes.js';
 
 /** Constraints that tie a point to itself or to a line it is an end of:
  *  always true, never useful, dropped on load. */
@@ -171,6 +172,9 @@ export class Project {
     this.variables = [];          // global variables: { name, expr } (value/error are computed)
     this.drawStyle = null;        // style given to new entities (set by the editor; not saved)
     this.units = 'mm';
+    // Line weight, pen, marker, arrow and text sizes, in drawing units
+    // (core/sizes.js); filled from the view when first needed.
+    this.sizes = {};
     this.sketches = [];
     this.activeSketchId = null;
     this.layers = [new Layer('Layer 1')];   // bottom → top
@@ -276,7 +280,7 @@ export class Project {
     const pics = {};
     if (images) for (const id of usedImageIds(this)) { const src = imageSource(id); if (src) pics[id] = src; }
     return {
-      version: 3, name:this.name, units:this.units,
+      version: 3, name:this.name, units:this.units, sizes: { ...(this.sizes || {}) },
       ...(this.background ? { background: this.background } : {}),
       ...(this.display ? { display: { ...this.display } } : {}),
       ...(this.variables.length ? { variables: this.variables.map(v => ({ name: v.name, expr: v.expr })) } : {}),
@@ -446,6 +450,9 @@ export class Project {
     ensureDimensionNames(p);
     p.assignConstraintLayers();
     p.orientAngleDimensions();
+    // Sizes are in drawing units; files without them had pixel line weights.
+    if (o.sizes && typeof o.sizes === 'object') p.sizes = cleanSizes(o.sizes) || {};
+    else migratePixelLineWidths(p);
     return p;
   }
 

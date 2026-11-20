@@ -90,7 +90,7 @@ export class ArrowTool extends Tool {
     const a = {
       id: newId('k'), layerId: this.app.project.activeLayerId, kind: 'arrow',
       color: this.app.pen.fillColor, opacity: 1,
-      width: s.size / this.app.view.zoom,
+      width: s.size,
       points: [{ x: start.x, y: start.y }, { x: end.x, y: end.y }],
     };
     if (s.tips !== 'end') a.tips = s.tips;

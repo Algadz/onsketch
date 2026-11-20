@@ -87,11 +87,14 @@ export class LayersPanelMixin {
 
 
   /** Entity style handed to new geometry. */
+  /** Style of new shapes: the document's line weight (drawing units),
+   *  the chosen line type. */
   _penStyle() {
-    return cleanStyle({ lineWidth: this.pen.lineWidth, lineStyle: this.pen.lineStyle });
+    const lw = this.project && this.view ? this.docSizes().line : undefined;
+    return cleanStyle({ lineWidth: lw, lineStyle: this.pen.lineStyle });
   }
   _penChanged(save = true) {
-    if (this.project) this.project.drawStyle = this._penStyle();
+    // project.drawStyle reads _penStyle() live (App's project setter)
     if (save) this._savePrefs();
   }
 

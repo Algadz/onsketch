@@ -110,7 +110,8 @@ check(T && T.text === 'Hello world' && T.bold && T.color === RED, 'Bold and colo
 check(T.selected, 'the finished text stays selected');
 await page.click('#sketch-body [data-boxmode="outline"]');
 const sizeBefore = T.size;
-await page.$eval('#sketch-body input[type=range]', (r) => { r.value = String(+r.value + 10); r.dispatchEvent(new Event('input')); r.dispatchEvent(new Event('change')); });
+// sizes are in drawing units: type a bigger text height
+await page.$eval('#sketch-body input[data-size="text"]', (r) => { r.value = String(+r.value * 2); r.dispatchEvent(new Event('change')); });
 T = (await items()).find(i => i.kind === 'text');
 check(T.box === 'outline' && T.size > sizeBefore, 'box and size changed after finishing restyle the text');
 // an older text: a click with the Text tool opens it, and the style controls apply to it

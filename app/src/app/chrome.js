@@ -1,4 +1,4 @@
-import { LINE_STYLES, LINE_WEIGHTS } from '../core/style.js';
+import { LINE_STYLES } from '../core/style.js';
 import { clamp } from '../core/math.js';
 import { ACTION_ICONS, DRAW_TOOLS, TOOLS, TOOL_ICONS, WINDOW_ICONS, toolDef } from '../ui/tool-defs.js';
 import { WindowManager } from '../ui/windows.js';
@@ -71,6 +71,8 @@ export class ChromeMixin {
       if (go !== 'go') return false;
     }
     this.project.units = u;
+    // An empty drawing picks its sizes again, at this unit's scale.
+    if (!has) this.project.sizes = {};
     this._syncUnits();
     this.commit({ diagnostics: 'sync' });
     this.refreshUI();
@@ -273,7 +275,7 @@ export class ChromeMixin {
     let html = `<span class="opt-tool">${TOOL_ICONS[t.id] || ''}<b>${t.label}</b></span>`;
     const sep = '<span class="opt-sep"></span>';
     if (DRAW_TOOLS.has(t.id)) {
-      html += sep + `<label class="opt">Weight <select data-pen="lineWidth">${LINE_WEIGHTS.map(w => `<option value="${w}"${p.lineWidth === w ? ' selected' : ''}>${w} px</option>`).join('')}</select></label>`;
+      html += sep + this.sizeFieldHTML('line', 'Weight');
       html += `<label class="opt">Line <select data-pen="lineStyle">${Object.entries(LINE_STYLES).map(([k, v]) => `<option value="${k}"${p.lineStyle === k ? ' selected' : ''}>${v.label}</option>`).join('')}</select></label>`;
       html += sep + `<button class="tbtn toggle${this.constructionMode ? ' on' : ''}" data-opt="construction" title="Draw construction (reference) geometry">${ACTION_ICONS.construction}<span class="btn-label">Construction</span></button>`;
       if (t.id === 'curve') {
@@ -308,10 +310,9 @@ export class ChromeMixin {
 
     this._bindSketchOptions(bar);
     this._bindTouchOptions(bar);
+    this.bindSizeFields(bar);
     bar.querySelectorAll('select[data-pen]').forEach(sel => sel.addEventListener('change', () => {
-      const k = sel.dataset.pen;
-      const v = k === 'lineWidth' ? parseFloat(sel.value) : sel.value;
-      this._setPen(k, v, true);
+      this._setPen(sel.dataset.pen, sel.value, true);
     }));
     bar.querySelectorAll('[data-opt]').forEach(el => {
       const k = el.dataset.opt;

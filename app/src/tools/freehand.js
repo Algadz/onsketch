@@ -64,13 +64,13 @@ export class InkTool extends Tool {
     return {
       id: newId('k'), layerId: this.app.project.activeLayerId, kind: this.kind,
       color: this.app.pen.fillColor, opacity: s.opacity,
-      width: s.size / this.app.view.zoom, points,
+      width: s.size, points,
     };
   }
   getPreview() {
     const out = {};
     if (this.points) out.strokes = [this._make(this.points)];
-    else if (this.cursor) out.brush = { center: this.cursor, r: this._settings().size / 2 / this.app.view.zoom };
+    else if (this.cursor) out.brush = { center: this.cursor, r: this._settings().size / 2 };
     return out;
   }
 }

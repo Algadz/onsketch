@@ -3,6 +3,11 @@ import { BOX_COLORS, PAPER, cleanBox, isText } from '../core/strokes.js';
 import { ARROW_HEADS, ARROW_TIPS, isArrow } from '../core/arrows.js';
 import { INK } from '../render/theme.js';
 import { TOOL_ICONS, toolDef } from '../ui/tool-defs.js';
+import { Point } from '../core/entities.js';
+import { evaluate } from '../core/expr.js';
+import { SIZE_LABELS, ensureSizes, stepSize } from '../core/sizes.js';
+
+const esc = (t) => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 /* =============== SKETCH WINDOW =================================
    Floating window for the freehand side of OnSketch: Fill, Pen, Marker,
@@ -18,9 +23,10 @@ import { TOOL_ICONS, toolDef } from '../ui/tool-defs.js';
    ============================================================ */
 export const SKETCH_TOOLS = ['fill', 'pen', 'marker', 'arrow', 'text', 'eraser'];
 
-/** Size limits in screen pixels, and defaults. */
-const LIMITS = { pen: [1, 40], marker: [4, 80], arrow: [1, 16], text: [8, 120], eraser: [4, 120] };
-const clampPx = (v, [min, max]) => Math.max(min, Math.min(max, Math.round(v)));
+/** The eraser is a cursor: its size stays in screen pixels. Every other
+ *  size is on the drawing, in the document unit (core/sizes.js). */
+const ERASER_LIMITS = [4, 120];
+const fmtSize = (v) => String(Number(Number(v).toPrecision(4)));
 
 export const INK_DEFAULTS = {
   penSize: 3, penOpacity: 1,
@@ -31,14 +37,77 @@ export const INK_DEFAULTS = {
 };
 
 export class SketchWindowMixin {
-  /** Size (px) and opacity for one sketch tool. */
+  /** The document's sizes (line weight, pen, marker, arrow, text) in
+   *  drawing units; missing ones are set once from the view. */
+  docSizes() { return ensureSizes(this.project, this.view.zoom); }
+
+  /** A size field: the value in the document unit, typed with or without a
+   *  unit (0.5, 2mm, 1/8in), ↑ ↓ step to the next round size. */
+  sizeFieldHTML(key, label, attr = 'data-size', value = null) {
+    const v = value ?? this.docSizes()[key];
+    const u = esc(this.project.units);
+    return `<label class="opt size-opt" title="${esc(SIZE_LABELS[key])} on the drawing, in ${u}: the same at every zoom. Type a value (units convert: 0.5mm, 1/8in); ↑ ↓ step">${label ? esc(label) + ' ' : ''}<input type="text" class="size-in" inputmode="decimal" ${attr}="${key}" value="${fmtSize(v)}" spellcheck="false" autocomplete="off"><span class="opt-val">${u}</span></label>`;
+  }
+
+  bindSizeFields(root, attr = 'data-size') {
+    root.querySelectorAll(`input[${attr}]`).forEach(inp => {
+      const key = inp.getAttribute(attr);
+      const apply = () => {
+        let v;
+        try { v = evaluate(inp.value.replace(/^=\s*/, '')); } catch { v = NaN; }
+        if (!(v > 0) || !Number.isFinite(v)) { inp.classList.add('bad'); return; }
+        inp.classList.remove('bad');
+        this.setDocSize(key, v);
+      };
+      inp.addEventListener('change', apply);
+      inp.addEventListener('keydown', (e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter') { e.preventDefault(); apply(); inp.blur(); }
+        else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+          e.preventDefault();
+          const cur = parseFloat(inp.value);
+          const v = stepSize(cur > 0 ? cur : this.docSizes()[key], e.key === 'ArrowUp');
+          inp.value = fmtSize(v);
+          this.setDocSize(key, v);
+          setTimeout(() => { const again = document.querySelector(`input[${attr}="${key}"]`); if (again) { again.focus(); again.select(); } }, 0);
+        }
+      });
+    });
+  }
+
+  /** Sets a document size; the selected shapes, arrows or texts of that
+   *  kind take it too (one undo step). */
+  setDocSize(key, v) {
+    const sizes = this.docSizes();
+    sizes[key] = v;
+    if (key === 'line') {
+      this._penChanged(false);                  // next shapes
+      const sketch = this.activeSketch();
+      for (const e of sketch?.entities || []) {
+        if (!e.selected || e instanceof Point) continue;
+        e.style = { ...(e.style || {}), lineWidth: v };
+      }
+    } else if (key === 'arrow' || key === 'text') {
+      this._refineInk({ [key + 'Size']: v }, false);
+    }
+    this.commit();
+    this.refreshUI();
+    this._refreshSketchWindow();
+    this._refreshOptionsBar();
+    this._updateCanvasCursor();
+    this.requestRender();
+  }
+
+  /** Size (drawing units; the eraser: screen px) and opacity for one
+   *  sketch tool. */
   inkSettings(kind) {
     const p = this.pen;
-    if (kind === 'marker') return { size: p.markerSize, opacity: p.markerOpacity };
+    const sizes = this.docSizes();
+    if (kind === 'marker') return { size: sizes.marker, opacity: p.markerOpacity };
     if (kind === 'eraser') return { size: p.eraserSize, opacity: 1 };
     if (kind === 'arrow') {
       return {
-        size: p.arrowSize ?? INK_DEFAULTS.arrowSize, opacity: 1,
+        size: sizes.arrow, opacity: 1,
         tips: ARROW_TIPS.includes(p.arrowTips) ? p.arrowTips : 'end',
         head: ARROW_HEADS.includes(p.arrowHead) ? p.arrowHead : 'filled',
         dash: !!p.arrowDash,
@@ -47,11 +116,11 @@ export class SketchWindowMixin {
     if (kind === 'text') {
       const mode = ['box', 'outline'].includes(p.textBox) ? p.textBox : 'none';
       return {
-        size: p.textSize ?? INK_DEFAULTS.textSize, opacity: 1, bold: !!p.textBold, boxMode: mode,
+        size: sizes.text, opacity: 1, bold: !!p.textBold, boxMode: mode,
         box: mode === 'none' ? null : (mode === 'outline' ? { color: p.textBoxColor || PAPER, border: true } : { color: p.textBoxColor || PAPER }),
       };
     }
-    return { size: p.penSize, opacity: p.penOpacity };
+    return { size: sizes.pen, opacity: p.penOpacity };
   }
 
   /** Adds a finished stroke to the active sketch (one undo step). */
@@ -125,12 +194,11 @@ export class SketchWindowMixin {
     if (kind !== 'arrow' && kind !== 'text') return s;
     const it = this._styleTargets().find(x => (kind === 'arrow' ? isArrow(x) : isText(x)));
     if (!it) return s;
-    const z = this.view.zoom;
     if (kind === 'arrow') {
-      return { ...s, size: clampPx(it.width * z, LIMITS.arrow), tips: it.tips || 'end', head: it.head || 'filled', dash: !!it.dash };
+      return { ...s, size: it.width, tips: it.tips || 'end', head: it.head || 'filled', dash: !!it.dash };
     }
     const boxMode = !it.box ? 'none' : it.box.border ? 'outline' : 'box';
-    return { ...s, size: clampPx(it.size * z, LIMITS.text), bold: !!it.bold, boxMode, box: it.box ? { ...it.box } : null };
+    return { ...s, size: it.size, bold: !!it.bold, boxMode, box: it.box ? { ...it.box } : null };
   }
 
   /** The colour the Colors window shows: the selection's, when every
@@ -146,20 +214,19 @@ export class SketchWindowMixin {
    *  a slider is dragged). @returns {boolean} whether something changed */
   _refineInk(changes, final = true) {
     const items = this._styleTargets(); if (!items.length) return false;
-    const z = this.view.zoom;
     let hit = false;
     for (const it of items) {
       for (const [k, v] of Object.entries(changes)) {
         if (k === 'fillColor') { it.color = v; hit = true; continue; }
         if (isArrow(it)) {
-          if (k === 'arrowSize') it.width = v / z;
+          if (k === 'arrowSize') it.width = v;
           else if (k === 'arrowTips') { if (v === 'end') delete it.tips; else it.tips = v; }
           else if (k === 'arrowHead') { if (v === 'filled') delete it.head; else it.head = v; }
           else if (k === 'arrowDash') { if (v) it.dash = true; else delete it.dash; }
           else continue;
           hit = true;
         } else if (isText(it)) {
-          if (k === 'textSize') it.size = v / z;
+          if (k === 'textSize') it.size = v;
           else if (k === 'textBold') it.bold = !!v;
           else if (k === 'textBox') {
             if (v === 'none') delete it.box;
@@ -222,9 +289,11 @@ export class SketchWindowMixin {
         <div class="hint">Click inside a closed area of the active layer to colour it; outside every area colours the background.</div>`;
     } else {
       const s = this._shownSettings(target);
-      const [min, max] = LIMITS[target];
-      opts = `<div class="prop-row"><label>${toolDef(target).label} size</label>
-        <div class="range-row"><input type="range" min="${min}" max="${max}" step="1" value="${s.size}" aria-label="Size"><span>${s.size} px</span></div></div>
+      const [min, max] = ERASER_LIMITS;
+      const sizeRow = target === 'eraser'
+        ? `<div class="range-row"><input type="range" min="${min}" max="${max}" step="1" value="${s.size}" aria-label="Eraser size"><span>${s.size} px</span></div>`
+        : this.sizeFieldHTML(target, '', 'data-size', s.size);
+      opts = `<div class="prop-row"><label>${toolDef(target).label} ${target === 'text' ? 'height' : 'size'}</label>${sizeRow}</div>
         ${target === 'text' ? `<div class="prop-row"><label>Style</label><span class="seg"><button class="${s.bold ? '' : 'on'}" data-bold="0">Regular</button><button class="${s.bold ? 'on' : ''}" data-bold="1"><b>Bold</b></button></span></div>
           <div class="prop-row"><label>Box</label>${boxModeHTML(s.boxMode, 'data-boxmode')}</div>
           ${s.box ? `<div class="prop-row"><label>Box colour</label>${boxSwatchesHTML(s.box.color, 'data-boxcolor')}</div>` : ''}` : ''}
@@ -248,12 +317,12 @@ export class SketchWindowMixin {
     body.querySelectorAll('[data-boxmode]').forEach(b => b.addEventListener('click', () => this._setInk({ textBox: b.dataset.boxmode })));
     bindBoxSwatches(body, 'data-boxcolor', (c) => this._setInk({ textBoxColor: c }));
     bindArrowStyle(body, 'data-arrow', (k, v) => this._setInk({ [ARROW_PREF[k]]: v }));
-    const r = body.querySelector('input[type=range]');
+    this.bindSizeFields(body);
+    const r = body.querySelector('input[type=range]');           // the eraser (screen px)
     if (r) {
-      const key = target + 'Size';
       const read = () => { const v = parseFloat(r.value); r.nextElementSibling.textContent = v + ' px'; return v; };
-      r.addEventListener('input', () => { this.pen[key] = read(); this._refineInk({ [key]: this.pen[key] }, false); this.requestRender(); });
-      r.addEventListener('change', () => this._setInk({ [key]: read() }));
+      r.addEventListener('input', () => { this.pen.eraserSize = read(); this.requestRender(); });
+      r.addEventListener('change', () => this._setInk({ eraserSize: read() }));
     }
   }
 
@@ -331,8 +400,10 @@ export class SketchWindowMixin {
   _sketchOptionsHTML(id, restyle = false) {
     const s = this._shownSettings(id);
     const sep = '<span class="opt-sep"></span>';
-    const [min, max] = LIMITS[id];
-    let html = sep + `<label class="opt">Size <input type="range" min="${min}" max="${max}" step="1" value="${s.size}" data-ink="${id}Size"><span class="opt-val">${s.size} px</span></label>`;
+    const [min, max] = ERASER_LIMITS;
+    let html = sep + (id === 'eraser'
+      ? `<label class="opt">Size <input type="range" min="${min}" max="${max}" step="1" value="${s.size}" data-ink="eraserSize"><span class="opt-val">${s.size} px</span></label>`
+      : this.sizeFieldHTML(id, id === 'text' ? 'Height' : 'Size', 'data-size', s.size));
     if (id === 'text') {
       html += `<button class="tbtn toggle${s.bold ? ' on' : ''}" data-opt="text-bold" title="Bold text"><b>B</b><span class="btn-label">Bold</span></button>`;
       html += `<span class="opt">Box ${boxModeHTML(s.boxMode, 'data-opt-boxmode')}</span>`;
@@ -357,6 +428,7 @@ export class SketchWindowMixin {
     return html;
   }
   _bindSketchOptions(bar) {
+    this.bindSizeFields(bar);
     bar.querySelectorAll('input[data-ink]').forEach(r => {
       const key = r.dataset.ink;
       const read = () => {
@@ -364,8 +436,8 @@ export class SketchWindowMixin {
         r.nextElementSibling.textContent = key.endsWith('Size') ? v + ' px' : Math.round(v * 100) + '%';
         return v;
       };
-      r.addEventListener('input', () => { this.pen[key] = read(); this._refineInk({ [key]: this.pen[key] }, false); this.requestRender(); });
-      r.addEventListener('change', () => { this.pen[key] = read(); this._refineInk({ [key]: this.pen[key] }, true); this._savePrefs(); this._refreshSketchWindow(); });
+      r.addEventListener('input', () => { this.pen[key] = read(); this.requestRender(); });
+      r.addEventListener('change', () => { this.pen[key] = read(); this._savePrefs(); this._refreshSketchWindow(); });
     });
     bar.querySelector('[data-opt="text-bold"]')?.addEventListener('click', () => this._setInk({ textBold: !this.pen.textBold }));
     bar.querySelectorAll('[data-opt-boxmode]').forEach(b => b.addEventListener('click', (e) => { e.preventDefault(); this._setInk({ textBox: b.dataset.optBoxmode }); }));

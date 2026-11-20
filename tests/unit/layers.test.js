@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { niceSize } from '../../app/src/core/sizes.js';
 import { Project } from '../../app/src/core/model.js';
 import { Point, Line, Circle } from '../../app/src/core/entities.js';
 import { resolveStyle, cleanStyle, dashFor, withAlpha } from '../../app/src/core/style.js';
@@ -72,8 +73,11 @@ test('older files: stroke colours are dropped, shape and layer fills become Fill
   const p = Project.fromJSON(v3);
   const [e5] = p.sketches[0].entities;
   const circle = p.sketches[0].entities[4];
-  assert.deepEqual(e5.style, { lineWidth: 2 });
-  assert.deepEqual(circle.style, { lineWidth: 3, lineStyle: 'dashed' });
+  // pixel line weights become drawing units at the zoom that fits the
+  // drawing (32 units across 1100 px), so they look the same
+  const z = 1100 / 32;
+  assert.deepEqual(e5.style, { lineWidth: niceSize(2 / z) });
+  assert.deepEqual(circle.style, { lineWidth: niceSize(3 / z), lineStyle: 'dashed' });
   const fills = p.sketches[0].fills;
   assert.equal(fills.length, 2);
   const sq = fills.find(f => f.color === '#e07b00');

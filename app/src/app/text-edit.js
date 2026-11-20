@@ -29,7 +29,7 @@ export class TextEditMixin {
       return;
     }
     const s = this.inkSettings('text');
-    const size = s.size / this.view.zoom;
+    const size = s.size;
     const item = {
       id: newId('k'), layerId: layer.id, kind: 'text',
       color: this.pen.fillColor, opacity: 1, size, bold: !!s.bold, text: '',

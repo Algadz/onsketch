@@ -135,7 +135,9 @@ export class App {
     this._project = p;
     this._fieldCache = null; this._fieldLookup = null;
     if (p && this._syncUnits) this._syncUnits();     // expressions use its unit
-    if (p) p.drawStyle = this.pen ? this._penStyle() : null;
+    // Style of new shapes, read when one is added: the document's line
+    // weight is set then (from the view), not when the project is opened.
+    if (p) Object.defineProperty(p, 'drawStyle', { configurable: true, enumerable: false, get: () => (this.pen ? this._penStyle() : null), set: () => {} });
     // A project opened from storage brings its display (grid, snap,
     // dimensions, relations); undo / redo keep the current one (toggling
     // isn't an undo step); a project without one takes the current setup.

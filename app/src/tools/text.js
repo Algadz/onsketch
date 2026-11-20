@@ -45,7 +45,7 @@ export class TextTool extends Tool {
   getPreview() {
     if (!this.cursor || this.app._textEdit) return null;
     // A caret-sized mark where the text will start.
-    const h = this.app.inkSettings('text').size / this.app.view.zoom;
+    const h = this.app.inkSettings('text').size;
     return { dashedPaths: [[{ x: this.cursor.x, y: this.cursor.y + h * 0.6 }, { x: this.cursor.x, y: this.cursor.y - h * 0.6 }]] };
   }
 }
