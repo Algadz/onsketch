@@ -38,6 +38,7 @@ npm run test:formula # click a dimension to put it in an equation; variables dri
 npm run test:units   # document unit (km: Earth to Moon), typed units, print scale, formulas in text
 npm run test:axis    # horizontal / vertical guess when a line end snaps to a shape or a point
 npm run test:patform # formulas in pattern fields: click a dimension, values, Equations window, variables
+npm run test:ctxmenu # no browser context menu in the editor (only the app's), except in text fields
 node tests/style.e2e.mjs  # restyling arrows / texts after drawing, touch tap-through guard
 node tests/analytics.e2e.mjs  # Umami events: what is counted, once per visit, nothing sent from tests
 npm run test:mobile  # phone / tablet layout and touch input on emulated devices

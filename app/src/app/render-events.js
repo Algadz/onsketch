@@ -165,7 +165,16 @@ export class RenderEventsMixin {
       return { screen: {x:sx, y:sy}, world: this.view.screenToWorld({x:sx, y:sy}) };
     };
 
-    c.addEventListener('contextmenu', e => e.preventDefault());
+    // No browser menu in the editor: right-click (or a long press) opens
+    // the app's own menu. The browser's 'contextmenu' event can come after
+    // ours is open (on mouse-up on Windows, after a long press on touch),
+    // aimed at our menu or a window rather than the canvas, so it is
+    // stopped for the whole page. Text fields keep it (copy, paste, spell).
+    document.addEventListener('contextmenu', (e) => {
+      const t = e.target;
+      if (t?.closest?.('input, textarea, select, [contenteditable="true"], [contenteditable=""]')) return;
+      e.preventDefault();
+    });
 
     c.addEventListener('dblclick', (ev) => {
       if (this.toolName === 'line' && this.tool && this.tool.startPt) {
