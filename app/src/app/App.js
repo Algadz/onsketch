@@ -45,6 +45,8 @@ import { setTextResolver, textLines } from '../core/strokes.js';
 import { projectLookup, resolveFields } from '../core/text-fields.js';
 import { trackOnce } from '../ui/analytics.js';
 
+const escHTML = (t) => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
 /* =============== 10. APP ====================================== */
 export class App {
   constructor() {
@@ -547,11 +549,18 @@ export class App {
     this.hideContextMenu();
     this.cancelLinkPick();
     const items = this.hitTestAllSketches(world, this.activeVisibleSketches());
-    // Ink under the cursor (no geometry there): select it with its group,
-    // as most apps do on right-click, and offer the ink actions.
-    const ink = items.length ? null : this.hitStrokeAt(world);
+    // Ink under the cursor: the selected one there (even over a shape), else
+    // the top one when no shape is there. Right-click selects it (with its
+    // group, or alone inside an entered group) and offers the ink actions.
+    const sketchNow = this.activeSketch();
+    const inkUnder = this.pickCandidates(world).filter(c => sketchNow?.strokes.includes(c));
+    const ink = inkUnder.find(c => c.selected) || (items.length ? null : inkUnder[0] || null);
     if (!items.length && !ink) return this._showPasteMenu(ev);
-    if (ink && !ink.selected) { this.clearSelection(); this.selectInk(ink, true); this.refreshUI(); this.requestRender(); }
+    if (ink && !ink.selected) {
+      if (this._groupFocus && ink.group === this._groupFocus) this.focusGroupMember(ink);
+      else { this.clearSelection(); this.selectInk(ink, true); }
+      this.refreshUI(); this.requestRender();
+    }
 
     const menu = document.createElement('div');
     menu.id = 'context-menu';
@@ -567,17 +576,44 @@ export class App {
       this._appendSelectionRelations(menu, () => this.showContextMenu(screen, world, ev));
     }
 
-    for (const item of onSelection ? [] : items) {
+    // What is under the cursor, to pick one of a pile: shapes (other
+    // layers' with their layer), then ink when several things overlap.
+    const multiLayer = this.project.layers.length > 1;
+    const layerTag = (e) => {
+      const owner = this.project.ownerOf(e) || e;
+      return multiLayer && !this._onActiveLayer(owner) ? this.project.layerOf(owner).name : '';
+    };
+    // On a selection in a pile: the others there, to switch to one.
+    const others = onSelection ? items.filter(i => !i.selected && !(i instanceof Point && this.project.ownerOf(i)?.selected)) : [];
+    if (others.length) {
+      const head = document.createElement('div');
+      head.className = 'context-menu-head';
+      head.textContent = 'Also here';
+      menu.appendChild(head);
+    }
+    for (const item of onSelection ? others : items) {
       const row = document.createElement('button');
       row.type = 'button';
-      row.className = 'context-menu-item';
+      row.className = 'context-menu-item' + (item.selected ? ' is-selected' : '');
+      const tag = layerTag(item);
       row.innerHTML = `
         <span class="glyph">${this._contextMenuGlyph(item)}</span>
         <span>${this._entityLabel(item)}</span>
-        <span class="meta">${item.construction ? 'construction' : item.fixed ? 'fixed' : ''}</span>
+        <span class="meta">${item.selected ? '✓ ' : ''}${tag ? escHTML(tag) + ' · ' : ''}${item.construction ? 'construction' : item.fixed ? 'fixed' : ''}</span>
       `;
       row.addEventListener('mouseenter', () => this._setHoverTarget(item));
       row.addEventListener('click', e => this._selectFromContextMenu(item, e));
+      menu.appendChild(row);
+    }
+    const inkRows = !onSelection && (items.length || inkUnder.length > 1) ? inkUnder : [];
+    for (const it of inkRows) {
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.className = 'context-menu-item' + (it.selected ? ' is-selected' : '');
+      row.dataset.inkPick = it.id;
+      row.innerHTML = `<span class="glyph">${it.kind === 'text' ? 'T' : it.kind === 'image' ? '▣' : it.kind === 'arrow' ? '→' : '〜'}</span>
+        <span>${escHTML(this.candidateLabel(it))}</span><span class="meta">${it.selected ? '✓ ' : ''}${it.group ? 'group' : ''}</span>`;
+      row.addEventListener('click', () => { this.hideContextMenu(); this.selectOnly(it); });
       menu.appendChild(row);
     }
 
@@ -586,11 +622,14 @@ export class App {
       const head = document.createElement('div');
       head.className = 'context-menu-head';
       const one = { text: 'Text', image: 'Image', arrow: 'Arrow' }[sel[0]?.kind] || 'Stroke';
-      head.textContent = sel.length === 1 ? one
+      const inGroup = this._groupFocus && sel.length === 1 ? sketchNow.strokes.filter(x => x.group === this._groupFocus).length : 0;
+      head.textContent = inGroup ? `${one} (1 of ${inGroup} in a group)`
+        : sel.length === 1 ? one
         : `${sel.length} ink items${sel.every(s => s.group && s.group === sel[0].group) ? ' (group)' : ''}`;
       menu.appendChild(head);
     }
     // Geometry: its own actions, plus "link the selected ink here".
+    this._inkMenuTarget = ink;                  // the item right-clicked (Select this one only)
     const actions = ink ? this.inkContextActions()
       : [...this.contextActions(items), ...this.linkHereActions(items[0])];
     if (actions.length) {

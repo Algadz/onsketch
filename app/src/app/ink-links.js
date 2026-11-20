@@ -148,6 +148,13 @@ export class InkLinksMixin {
     const items = this.selectedStrokes();
     if (!items.length) return [];
     const out = [];
+    // Groups: inside one, back to all of it; on a whole group, this one only.
+    if (this._groupFocus && items.length === 1) {
+      out.push({ id: 'select-group', glyph: '▣', label: 'Select the whole group', hint: 'Esc', run: () => this.exitGroupFocus() });
+    } else if (this._inkMenuTarget && this._inkMenuTarget.group && items.length > 1 && items.every(i => i.group === this._inkMenuTarget.group)) {
+      const t = this._inkMenuTarget;
+      out.push({ id: 'select-member', glyph: '◫', label: `Select this ${this._inkWord(t)} only`, hint: 'click again', run: () => this.focusGroupMember(t) });
+    }
     if (items.length === 1 && isText(items[0])) {
       out.push({ id: 'edit-text', glyph: 'T', label: 'Edit text', run: () => this.editText(items[0]) });
     }

@@ -40,6 +40,7 @@ npm run test:axis    # horizontal / vertical guess when a line end snaps to a sh
 npm run test:patform # formulas in pattern fields: click a dimension, values, Equations window, variables
 npm run test:ctxmenu # no browser context menu in the editor (only the app's), except in text fields
 npm run test:sizes   # line weights, pen / arrow / text sizes in drawing units, the same at every zoom
+npm run test:groups  # groups (click, click again inside, Esc), clicking through overlapping items, right-click list
 node tests/style.e2e.mjs  # restyling arrows / texts after drawing, touch tap-through guard
 node tests/analytics.e2e.mjs  # Umami events: what is counted, once per visit, nothing sent from tests
 npm run test:mobile  # phone / tablet layout and touch input on emulated devices
@@ -142,6 +143,22 @@ cached modules after a deploy. `npm test` fails if the stamp is out of date.
   texts turn but are never stretched or mirrored (a flip moves them,
   readable). Right-click: Rotate 90°, Flip horizontal, Flip vertical.
   A text's angle is also in Properties. One gesture = one undo step.
+- **Groups work as in slide editors.** The first click on a grouped item
+  selects the group (a drag moves it all). Click an item of the selected
+  group again, without dragging, to go **inside**: only that item is
+  selected and moves, a faint dashed frame shows the group, Properties
+  says *1 of N* with **Select group**. Inside, one click selects another
+  item of the group; **Esc** goes back to the whole group; a click outside
+  leaves. Right-click offers *Select this … only* on a whole group and
+  *Select the whole group* inside one. Double-clicking a grouped text
+  edits it.
+- **Overlapping items.** Click again on the same spot (without moving) to
+  select the next item under the cursor; the status bar says *2 of 3
+  here: Line L5*. The order: the active layer's points and shapes, its
+  ink, then other layers' shapes. Pressing on the selected item drags it
+  even when others lie on top. Right-click lists what is there (other
+  layers' items with their layer, the selection ticked); on a selection,
+  *Also here* lists the others to switch to.
 - **Group / link ink** (right-click a stroke or text, Properties, or the
   keyboard): **Group** (Ctrl+G) makes strokes and texts select and move
   as one; **Ungroup** (Ctrl+Shift+G). **Link to a shape…** then click a

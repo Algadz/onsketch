@@ -404,6 +404,21 @@ export class Renderer {
     ctx.restore();
   }
 
+  /** The group being edited inside (one member selected): a faint dashed
+   *  frame around all of it, a little outside the members' own marks. */
+  drawGroupFrame(b) {
+    const ctx = this.ctx, v = this.view;
+    const a = v.worldToScreen({ x: b.minX, y: b.maxY }), c = v.worldToScreen({ x: b.maxX, y: b.minY });
+    const m = 9;
+    ctx.save();
+    ctx.globalAlpha = 0.55;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([2, 3]);
+    ctx.strokeStyle = this.theme.selected;
+    ctx.strokeRect(a.x - m, a.y - m, c.x - a.x + 2 * m, c.y - a.y + 2 * m);
+    ctx.restore();
+  }
+
   /** Selected ink: a dashed box around it, in the selection colour. */
   _drawInkSelection(pts, w) {
     const ctx = this.ctx;

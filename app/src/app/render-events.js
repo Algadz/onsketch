@@ -1,3 +1,4 @@
+import { unionBounds } from '../core/strokes.js';
 import { toolDef } from '../ui/tool-defs.js';
 import { fillCursor } from '../ui/cursors.js';
 import { Arc, Bezier, Circle, Line, Point } from '../core/entities.js';
@@ -28,6 +29,10 @@ export class RenderEventsMixin {
     this.renderer.drawGrid(this.gridOn, this.project.background);
     this.renderer.drawEntities(this.project, this.fillDisplay());
     this._drawInkLinks();
+    if (this._groupFocus) {                   // inside a group: show the whole group
+      const members = this.activeSketch()?.strokes.filter(x => x.group === this._groupFocus) || [];
+      if (members.length) this.renderer.drawGroupFrame(unionBounds(members)); else this._groupFocus = null;
+    }
     this._drawInkTransform(this.tool?.inkTransform);
     if (this._textEdit) this._textEdit.place();
 

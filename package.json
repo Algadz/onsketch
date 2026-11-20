@@ -31,7 +31,8 @@
     "test:axis": "node tests/axis.e2e.mjs",
     "test:patform": "node tests/patform.e2e.mjs",
     "test:ctxmenu": "node tests/ctxmenu.e2e.mjs",
-    "test:sizes": "node tests/sizes.e2e.mjs"
+    "test:sizes": "node tests/sizes.e2e.mjs",
+    "test:groups": "node tests/groups.e2e.mjs"
   },
   "devDependencies": {
     "eslint": "^9.39.0",

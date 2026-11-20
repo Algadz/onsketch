@@ -60,9 +60,31 @@ export class SelectTool extends Tool {
       return;
     }
     // Any visible shape (the active layer's win where they overlap).
-    const hit = this.app.hitTestActiveSketch(world);
+    let hit = this.app.hitTestActiveSketch(world);
     const isToggle = ev.ctrlKey || ev.metaKey || this.app.multiSelect;
     const isAdd    = ev.shiftKey;
+    // Clicks go through what is under the cursor (pickCandidates): when the
+    // selection is one of those items, the press acts on it (a drag moves
+    // it, even under others), and a click without a drag selects the next
+    // one there, or enters its group (ink-select.js).
+    this.clickInfo = null;
+    if (!this.app.operationName && !isToggle && !isAdd) {
+      const sketch = this.app.activeSketch();
+      const cands = this.app.pickCandidates(world);
+      const cur = cands.findIndex(c => this.app.isSoleSelection(c));
+      const ci = this.clickInfo = { cands, cur, sx, sy, time: performance.now() };
+      if (cur >= 0) {
+        const c = cands[cur];
+        if (sketch.strokes.includes(c)) {
+          const size = c.group ? sketch.strokes.filter(x => x.group === c.group).length : 1;
+          if (size > 1 && this.app._groupFocus !== c.group) ci.enterGroup = c;
+          this.inkDrag = this.app.beginInkDrag(world);
+          this.app.refreshUI(); this.app.requestRender();
+          return;
+        }
+        hit = c;
+      }
+    }
     if (this.app.operationName === 'mirror') {
       if (!hit && this.app.mirrorPickMode === 'entities') {
         this.boxMode = 'mirror';
@@ -149,8 +171,10 @@ export class SelectTool extends Tool {
       this.app.requestRender();
     } else if (this.app.hitStrokeAt(world)) {
       const ink = this.app.hitStrokeAt(world);
+      const focus = this.app._groupFocus;
       if (isToggle) this.app.selectInk(ink, !ink.selected);
       else if (isAdd) this.app.selectInk(ink, true);
+      else if (!ink.selected && focus && ink.group === focus) this.app.focusGroupMember(ink);   // another item of the entered group
       else if (!ink.selected) { this.app.clearSelection(); this.app.selectInk(ink, true); }
       this.inkDrag = ink.selected ? this.app.beginInkDrag(world) : null;
       this.app.refreshUI();
@@ -270,6 +294,35 @@ export class SelectTool extends Tool {
     }
   }
   onPointerUp(world, snap, ev) {
+    const ci = this.clickInfo; this.clickInfo = null;
+    this._pointerUp(world, snap, ev);
+    if (!ci || !ev) return;
+    const r = this.app.canvas.getBoundingClientRect();
+    if (Math.hypot(ev.clientX - r.left - ci.sx, ev.clientY - r.top - ci.sy) > 4) return;   // a drag
+    this._afterClick(ci);
+  }
+
+  /** A click without a drag: enter the selected group, or go to the next
+   *  item under the cursor; say where we are in the pile. */
+  _afterClick(ci) {
+    const app = this.app, n = ci.cands.length;
+    const quick = this._lastClickTime && ci.time - this._lastClickTime < 350;   // a double-click (edit a text…)
+    this._lastClickTime = ci.time;
+    if (ci.enterGroup) { app.focusGroupMember(ci.enterGroup); return; }
+    if (n < 2) return;
+    const hint = (i) => { const el = document.getElementById('status-hint'); if (el) el.textContent = `${i + 1} of ${n} here: ${app.candidateLabel(ci.cands[i])}. Click again (without moving) for the next; right-click lists them all.`; };
+    if (ci.cur >= 0) {
+      if (quick) return;
+      const next = (ci.cur + 1) % n;
+      app.selectOnly(ci.cands[next]);
+      hint(next);
+    } else {
+      const now = ci.cands.findIndex(c => app.isSoleSelection(c));
+      if (now >= 0) hint(now);
+    }
+  }
+
+  _pointerUp(world, snap, ev) {
     if (this.inkTransform) {
       const t = this.inkTransform;
       if (t.h.type === 'end' && world) this.app.updateInkTransform(t, world, snap, ev);
@@ -402,6 +455,8 @@ export class SelectTool extends Tool {
       } else if (this.app.cancelLinkPick()) {
         ev.preventDefault();
       } else if (this.app.cancelOperation()) {
+        ev.preventDefault();
+      } else if (this.app.exitGroupFocus()) {        // inside a group: back to the whole group
         ev.preventDefault();
       } else {
         this.app.clearSelection();

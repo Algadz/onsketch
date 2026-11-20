@@ -46,10 +46,104 @@ export class InkSelectMixin {
     stroke.selected = !!on;
   }
 
-  /** Select (or toggle) an item together with its group. */
+  /** Select (or toggle) an item together with its group, or only the
+   *  item when its group is entered (see focusGroupMember). */
   selectInk(item, on = true) {
     const sketch = this.activeSketch(); if (!sketch) return;
+    if (item.group && this._groupFocus === item.group) { item.selected = !!on; return; }
     for (const x of groupOf(sketch.strokes, item)) x.selected = !!on;
+  }
+
+  /* ---- Groups, as in slide editors ----
+     The first click on a grouped item selects the whole group (a drag
+     moves it). Clicking an item of the selected group again, without
+     dragging, enters the group: only that item is selected and moves; a
+     faint dashed frame shows the group. Another item of the group is then
+     selected with one click; Esc goes back to the whole group; a click
+     outside leaves it. */
+
+  /** Select just this member of its group. */
+  focusGroupMember(item) {
+    const sketch = this.activeSketch(); if (!sketch || !item.group) return;
+    this.clearSelection();
+    item.selected = true;
+    this._groupFocus = item.group;
+    const n = sketch.strokes.filter(x => x.group === item.group).length;
+    this._inkHint(`Inside the group: this ${this._inkWord(item)} alone (1 of ${n}). Drag to move it, click another one of the group, Esc for the whole group.`);
+    this.refreshUI(); this.requestRender();
+  }
+
+  /** Back from a member to its whole group. @returns {boolean} */
+  exitGroupFocus() {
+    const g = this._groupFocus;
+    if (!g) return false;
+    const sketch = this.activeSketch();
+    this._groupFocus = null;
+    if (sketch) for (const x of sketch.strokes) x.selected = x.group === g;
+    this._inkHint('The whole group is selected.');
+    this.refreshUI(); this.requestRender();
+    return true;
+  }
+
+  _inkWord(it) {
+    return it.kind === 'text' ? 'text' : it.kind === 'image' ? 'image' : it.kind === 'arrow' ? 'arrow' : 'stroke';
+  }
+
+  /** Everything under the cursor that a click can select, in the order
+   *  clicks go through it: the active layer's points, then its shapes,
+   *  then its ink (top first), then other visible layers' points and
+   *  shapes. */
+  pickCandidates(world) {
+    const geo = this.hitTestAllSketches(world, this.project.visibleSketches());
+    const active = geo.filter(e => this._onActiveLayer(this.project.ownerOf(e) || e));
+    const others = geo.filter(e => !active.includes(e));
+    const ink = [];
+    const sketch = this.activeSketch(), layer = this.project.activeLayer();
+    if (sketch && layer?.visible) {
+      const tol = 5 * (this._inputScale || 1) / this.view.zoom;
+      for (let i = sketch.strokes.length - 1; i >= 0; i--) {
+        const s = sketch.strokes[i];
+        if (s.layerId === layer.id && inkHit(s, world, isText(s) ? tol / 2 : tol)) ink.push(s);
+      }
+    }
+    return [...active, ...ink, ...others];
+  }
+
+  /** True when `c` (a shape, a point or ink) is all that is selected, or
+   *  its whole group is. */
+  isSoleSelection(c) {
+    const sketch = this.activeSketch(); if (!sketch) return false;
+    const strokes = sketch.strokes.filter(x => x.selected);
+    const geo = this.selectedEntitiesAndPoints();
+    if (sketch.constraints.some(k => k.selected)) return false;
+    if (sketch.strokes.includes(c)) {
+      if (geo.length) return false;
+      const want = this._groupFocus === c.group ? [c] : groupOf(sketch.strokes, c);
+      return strokes.length === want.length && want.every(x => x.selected);
+    }
+    return !strokes.length && geo.length === 1 && geo[0] === c;
+  }
+
+  /** Select only `c` (its group for grouped ink outside a focused group). */
+  selectOnly(c) {
+    const sketch = this.activeSketch(); if (!sketch) return;
+    const focus = this._groupFocus;
+    this.clearSelection();
+    if (sketch.strokes.includes(c)) {
+      if (c.group && focus === c.group) { this._groupFocus = focus; c.selected = true; }
+      else this.selectInk(c, true);
+    } else this.setSelected(c, true);
+    this.refreshUI(); this.requestRender();
+  }
+
+  /** Short name of a candidate for menus and hints. */
+  candidateLabel(c) {
+    const sketch = this.activeSketch();
+    if (sketch?.strokes.includes(c)) {
+      if (c.kind === 'text') { const t = String(c.text).split('\n')[0]; return `Text “${t.length > 18 ? t.slice(0, 17) + '…' : t}”`; }
+      return c.kind === 'image' ? 'Image' : c.kind === 'arrow' ? 'Arrow' : c.kind === 'marker' ? 'Marker stroke' : 'Pen stroke';
+    }
+    return this._entityLabel(c);
   }
 
   clearStrokeSelection() {
@@ -176,7 +270,11 @@ export class InkSelectMixin {
     const oneGroup = groups.size === 1 && !groups.has(null);
     const grouped = items.some(i => i.group);
     const btn = (act, label, title) => `<button class="mini-btn" data-ink-act="${act}" title="${title}">${label}</button>`;
-    if (oneGroup) html += `<div class="prop-row"><label>group</label><span class="prop-val">${items.length} items ${btn('ungroup', 'Ungroup', 'Ungroup (Ctrl+Shift+G)')}</span></div>`;
+    const sketchNow = this.activeSketch();
+    const groupSize = oneGroup ? sketchNow.strokes.filter(x => x.group === items[0].group).length : 0;
+    if (oneGroup && items.length < groupSize) {
+      html += `<div class="prop-row"><label>group</label><span class="prop-val">${items.length} of ${groupSize} ${btn('select-group', 'Select group', 'Select the whole group (Esc)')}</span></div>`;
+    } else if (oneGroup) html += `<div class="prop-row"><label>group</label><span class="prop-val">${items.length} items ${btn('ungroup', 'Ungroup', 'Ungroup (Ctrl+Shift+G)')}</span></div>`;
     else if (items.length > 1) html += `<div class="prop-row"><label>group</label><span class="prop-val">${btn('group', 'Group', 'Select and move them as one (Ctrl+G)')}${grouped ? btn('ungroup', 'Ungroup', 'Ungroup (Ctrl+Shift+G)') : ''}</span></div>`;
 
     const targets = new Set(items.map(i => i.link?.to || null));
@@ -260,7 +358,8 @@ export class InkSelectMixin {
     });
     body.querySelectorAll('[data-ink-act]').forEach(b => b.addEventListener('click', () => {
       const act = b.dataset.inkAct;
-      if (act === 'group') this.groupSelectedInk();
+      if (act === 'select-group') this.exitGroupFocus();
+      else if (act === 'group') this.groupSelectedInk();
       else if (act === 'ungroup') this.ungroupSelectedInk();
       else if (act === 'link') this.startLinkPick();
       else if (act === 'unlink') this.unlinkSelectedInk();

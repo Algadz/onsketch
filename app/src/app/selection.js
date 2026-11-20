@@ -44,6 +44,7 @@ export class SelectionMixin {
       for (const c of s.constraints) c.selected = false;
     }
     this.clearStrokeSelection();
+    this._groupFocus = null;                 // leaving a group (ink-select.js)
     this.selectionOrder = [];
     this.refreshUI();
     this.requestRender();
