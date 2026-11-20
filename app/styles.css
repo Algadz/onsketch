@@ -1907,3 +1907,7 @@
 #optbar .shape-grid { grid-template-columns: repeat(12, 24px); }
 #optbar .shape-btn { width: 24px; height: 24px; }
 .seg button:disabled { opacity: 0.4; cursor: default; }
+
+/* Equations window: give a dimension a formula */
+.eq-add { margin: -2px 0 8px; }
+.eq-add select { width: 100%; font: inherit; font-size: 12px; padding: 4px 6px; border: 1px dashed var(--border); border-radius: 5px; background: var(--field); color: var(--text-soft); }

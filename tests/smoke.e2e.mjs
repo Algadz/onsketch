@@ -988,18 +988,24 @@ await page.evaluate(() => { const a = window._app; a.project.layer('ly1').visibl
   await page.mouse.move(vb.x + vb.width / 2, vb.y + vb.height / 2); await page.mouse.down();
   await page.mouse.move(vb.x + vb.width / 2 + 25, vb.y + 5, { steps: 5 }); await page.mouse.move(vb.x + vb.width / 2 + 50, vb.y + 5, { steps: 5 }); await page.mouse.up();
   check(await page.evaluate(() => window._app.project.variables[0].expr) === '15', 'dragging a variable value by 50 px adds 50 × 0.1');
+  // Only dimensions with a formula are listed; a plain one is picked to get one.
+  const listed = () => page.evaluate(() => [...document.querySelectorAll('#equations-body [data-k="dim-name"]')].map(i => i.value));
+  check(!(await listed()).includes('D1'), `a dimension without a formula isn't listed (${await listed()})`);
+  const optD1 = await page.evaluate(() => [...document.querySelectorAll('#equations-body [data-eq-add] option')].find(o => /^D1 /.test(o.textContent))?.value);
+  await page.selectOption('#equations-body [data-eq-add]', optD1);
+  check((await listed()).includes('D1') && await page.evaluate(() => document.activeElement?.dataset.k === 'dim-expr' && document.activeElement.value === '='), 'picking D1 adds its row, ready for =formula');
+  await page.keyboard.type('k*4-20'); await page.keyboard.press('Enter');
+  const d1 = await page.evaluate(() => { const c = window._app.activeSketch().constraints.find(c => c.name === 'D1'); return [c.expr, c.value]; });
+  check(d1[0] === 'k*4-20' && Math.abs(d1[1] - 40) < 1e-9 && (await listed()).includes('D1'), `D1 = k*4-20 = 40, listed (${d1})`);
   const dimIdx = await page.evaluate(() => [...document.querySelectorAll('#equations-body [data-k="dim-name"]')].findIndex(i => i.value === 'D1'));
-  vb = await page.locator(`[data-scrub="dim:${dimIdx}"]`).boundingBox();
-  await page.mouse.move(vb.x + vb.width / 2, vb.y + vb.height / 2); await page.mouse.down();
-  await page.mouse.move(vb.x + vb.width / 2 + 30, vb.y + 5, { steps: 6 });
-  const live = await page.evaluate(() => { const s = window._app.activeSketch(); const b = s.entities.find(e => e.id === 'q1'); return Math.round(Math.hypot(b.p2.x - b.p1.x, b.p2.y - b.p1.y) * 10) / 10; });
-  await page.mouse.up();
-  check(live === 43, `dragging D1's value resizes the rectangle live (40 → ${live})`);
-  vb = await page.locator(`[data-scrub="dim:${dimIdx}"]`).boundingBox();
-  await page.mouse.move(vb.x + vb.width / 2, vb.y + vb.height / 2); await page.mouse.down();
-  await page.mouse.move(vb.x + vb.width / 2 + 40, vb.y + 5, { steps: 4 });
-  await page.keyboard.press('Escape'); await page.mouse.up();
-  check(await page.evaluate(() => window._app.activeSketch().constraints.find(c => c.name === 'D1').value) === 43, 'Esc during a scrub restores the value');
+  const row = page.locator('#equations-body [data-k="dim-expr"]').nth(dimIdx);
+  await row.fill(''); await row.press('Enter');
+  check(!(await listed()).includes('D1') && await page.evaluate(() => !window._app.activeSketch().constraints.find(c => c.name === 'D1').expr), 'clearing the formula takes D1 off the list');
+  // picked and left without a formula: off the list again
+  await page.selectOption('#equations-body [data-eq-add]', optD1);
+  await page.evaluate(() => document.activeElement.blur());
+  await page.waitForTimeout(50);
+  check(!(await listed()).includes('D1'), 'picked and left empty: off the list');
   await page.evaluate(() => window._app.windows.toggle('equations', false));
 
   // 3. Edit D1, click the free line: =D2 with a new floating dimension, then drag that line.
@@ -1055,8 +1061,8 @@ await page.evaluate(() => { const a = window._app; a.project.layer('ly1').visibl
       state: document.getElementById('status-state').textContent, label: document.querySelector('#equations-body') && window._app.constructor.name }; });
   check(yr.axes === 'x,y' && yr.dx === 50 && yr.dy === 12, `then a Y dimension to the right sets the vertical distance (${JSON.stringify(yr)})`);
   await page.evaluate(() => { const a = window._app; a.setTool('select'); a.windows.toggle('equations', true); a._refreshEquationsPanel(); });
-  const titles = await page.$$eval('#equations-body [data-k="dim-name"]', els => els.map(e => e.title).join(','));
-  check(titles === 'Horizontal distance,Vertical distance', `Equations window names them (${titles})`);
+  const titles = await page.$$eval('#equations-body [data-eq-add] option', els => els.slice(1).map(e => e.textContent.split(' · ')[1].split(' =')[0]).join(','));
+  check(titles === 'Horizontal distance,Vertical distance', `Equations window names them (in the formula picker: ${titles})`);
   await page.evaluate(() => window._app.windows.toggle('equations', false));
 }
 

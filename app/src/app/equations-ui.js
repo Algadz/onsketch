@@ -190,6 +190,13 @@ export class EquationsMixin {
     const body = document.getElementById('equations-body');
     if (!body) return;
     body.addEventListener('change', (e) => this._onEquationsEdit(e));
+    // A dimension picked for a formula and left without one leaves the list.
+    body.addEventListener('focusout', (e) => {
+      const t = e.target;
+      if (t.dataset?.k !== 'dim-expr' || !['', '='].includes(t.value.trim())) return;
+      const c = allDimensions(this.project)[+t.dataset.i];
+      if (c && !c.expr && this._eqPending?.delete(c.id)) setTimeout(() => this._refreshEquationsPanel(), 0);
+    });
     body.addEventListener('input', (e) => { if (e.target.classList?.contains('bad')) { e.target.classList.remove('bad'); e.target.title = ''; } });
     body.addEventListener('pointerdown', (e) => {
       const el = e.target.closest('[data-scrub]');
@@ -328,7 +335,8 @@ export class EquationsMixin {
     } else if (kind === 'dim-expr') {
       const c = dims[+inp.dataset.i];
       const text = inp.value.trim();
-      if (!text) { c.expr = null; }
+      this._eqPending?.delete(c.id);           // a value without = leaves the list
+      if (!text || text === '=') { c.expr = null; }
       else {
         const err = this.setDimensionFromText(c, text);
         if (err) { showErr(err); return; }
@@ -365,10 +373,18 @@ export class EquationsMixin {
         <button class="fwin-x" data-eq="del-var" data-i="${i}" title="Delete variable">&times;</button>`;
     });
     html += '</div>';
-    html += `<div class="eq-head"><span>Dimensions</span><button class="link-btn" data-eq="names">${this.showDimNames ? 'Hide' : 'Show'} names on canvas</button></div>`;
-    if (!dims.length) html += '<div class="hint">Dimensions you add appear here as D1, D2, …</div>';
+    // Only the dimensions set by a formula (and one just picked to get a
+    // formula); the others are edited on the canvas or in Properties.
+    const pending = this._eqPending ||= new Set();
+    for (const id of [...pending]) if (!dims.some(c => c.id === id && !c.expr && !c.driven)) pending.delete(id);
+    const shown = (c) => !!c.expr || pending.has(c.id);
+    html += `<div class="eq-head"><span>Dimensions with formulas</span><button class="link-btn" data-eq="names">${this.showDimNames ? 'Hide' : 'Show'} names on canvas</button></div>`;
+    if (!dims.some(shown)) {
+      html += `<div class="hint">${dims.length ? 'None yet. Type <code>=</code> and a formula in a dimension\'s value (on the canvas or in Properties), or pick one below.' : 'Dimensions you add are named D1, D2, …; the ones set by a formula show here.'}</div>`;
+    }
     html += '<div class="eq-grid">';
     dims.forEach((c, i) => {
+      if (!shown(c)) return;
       const ang = isAngular(c);
       const kind = c.isDiameter ? 'Diameter' : constraintLabel(c);
       html += `<input class="eq-name" data-k="dim-name" data-i="${i}" value="${esc(c.name || '')}" title="${esc(kind)}" aria-label="Dimension name">
@@ -377,6 +393,11 @@ export class EquationsMixin {
         <span class="eq-val${!c.expr && !c.driven ? ' scrub' : ''}" data-val="dim:${i}" ${!c.expr && !c.driven ? `data-scrub="dim:${i}" title="Drag left / right to change (Shift: fine, Ctrl: round)"` : `title="${c.driven ? 'Floating: measures the geometry' : 'Set by its equation'}"`}>${c.exprError ? '!' : fmt(userValue(c), ang)}</span><span></span>`;
     });
     html += '</div>';
+    const free = dims.filter(c => !shown(c) && !c.driven);
+    if (free.length) {
+      html += `<div class="eq-add"><select data-eq-add aria-label="Give a dimension a formula"><option value="">+ Formula for a dimension…</option>${free.map(c =>
+        `<option value="${esc(c.id)}">${esc(c.name || '')} · ${esc(c.isDiameter ? 'Diameter' : constraintLabel(c))} = ${esc(fmt(userValue(c), isAngular(c)))}</option>`).join('')}</select></div>`;
+    }
     // Linked patterns: their instances, spacing and angles take formulas too.
     const pats = (this.activeSketch()?.constraints || []).filter(c => c.kind === 'pattern' && this.patternFormulaFields?.(c).length);
     if (pats.length) {
@@ -398,6 +419,14 @@ export class EquationsMixin {
     html += `<div class="hint">Plain numbers are in ${esc(this.project.units)}; units: mm cm m km in " ft mi, deg rad. Functions: sin cos tan sqrt abs min max, pi. Start with = to keep an equation.</div>`;
     this._eqRebuilding = true;           // a browser may fire change on the removed field
     try { body.innerHTML = html; } finally { this._eqRebuilding = false; }
+    body.querySelector('[data-eq-add]')?.addEventListener('change', (e) => {
+      const c = dims.find(x => x.id === e.target.value);
+      if (!c) return;
+      this._eqPending.add(c.id);
+      this._refreshEquationsPanel(true);
+      const inp = body.querySelector(`input[data-k="dim-expr"][data-i="${dims.indexOf(c)}"]`);
+      if (inp) { inp.value = '='; inp.focus(); inp.setSelectionRange(1, 1); }
+    });
     if (keep) {
       const el = body.querySelector(`input[data-k="${keep.k}"][data-i="${keep.i}"]`);
       if (el && !el.disabled) {

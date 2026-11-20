@@ -465,12 +465,16 @@ touch input. Plan and audit: `docs/mobile-plan.md`.
   dimension first.
   Floating dimensions re-measure the geometry on every render, solve and drag
   frame, so after `D1 = D5`, dragging that line resizes D1's shape live.
-- In the Equations window, drag a plain value sideways to change it, as in
-  Blender: the step fits the value's size, Shift is 10× finer, Ctrl snaps to
-  round numbers, Esc restores, release is one undo step; a click edits the
-  text. Values set by an equation, and floating dimensions, don't scrub.
-- The Equations window (Σ in the menu bar) lists global variables and all
-  dimensions: rename them (references follow), edit equations, see values.
+- In the Equations window, drag a variable's plain value sideways to change
+  it, as in Blender: the step fits the value's size, Shift is 10× finer,
+  Ctrl snaps to round numbers, Esc restores, release is one undo step; a
+  click edits the text. Values set by an equation don't scrub.
+- The Equations window (Σ in the menu bar) lists the global variables and
+  only the **dimensions set by a formula** (plain values and driven ones are
+  edited on the canvas or in Properties): rename them (references follow),
+  edit equations, see values. *+ Formula for a dimension…* picks another
+  dimension and opens its row with `=` ready; clearing a formula (or
+  leaving a picked row empty) takes it off the list.
   Usual precedence: `^`, then `*` `/`, then `+` `-`, left to right. A bad
   entry turns red; editing it clears the red, and once applied the window
   shows the new value at once (it rebuilds even while a field has focus).
