@@ -684,9 +684,10 @@ await ctx.close();
   await c2.close();
 }
 
-// Once the database allows it (migration 0007, plan_rules()), free sketches
-// may be private: the app offers the choice, private by default, and asks
-// for a username only when publishing. Pro exports stay Pro.
+// Private sketches are Pro only (migration 0008), even where the database
+// still has the 0007 rule (free private allowed): the free plan saves
+// public, and a free sketch made private back then stays private, can be
+// made public, but not private again.
 {
   const c5 = await browser.newContext({ viewport: { width: 1400, height: 900 } });
   await c5.route(/umami|jsdelivr|supabase\.co/, r => r.abort());
@@ -696,10 +697,10 @@ await ctx.close();
   const errs5 = [];
   p5.on('pageerror', e => errs5.push(String(e)));
   await p5.goto(base.replace('/app/', '/pricing/'));
-  await p5.waitForFunction(() => window._pricing?.freePrivate === true);
+  await p5.waitForFunction(() => window._pricing && window._pricing.freePrivate === false);
   const priceText = await p5.evaluate(() => [...document.querySelectorAll('#pr-free li, #pr-pro li')].filter(li => !li.hidden).map(li => li.textContent.trim()).join(' | '));
-  check(/Private or public/.test(priceText) && !/Sketches are public/.test(priceText) && (await p5.evaluate(() => /DXF/.test(document.getElementById('pr-free').textContent) && !/DXF/.test(document.getElementById('pr-pro').textContent))) && /PNG, SVG/.test(priceText),
-    'pricing (free private allowed): Free says private or public and lists every export, DXF and PDF included');
+  check(/Sketches are public/.test(priceText) && !/Private or public/.test(priceText) && /Private sketches/.test(priceText),
+    'pricing: Free says sketches are public, Pro lists private sketches');
   await p5.goto(base);
   await p5.waitForFunction(() => window._app);
   const b5 = await p5.locator('#canvas').boundingBox();
@@ -713,34 +714,41 @@ await ctx.close();
   await p5.waitForSelector('#account-modal input[name=code]');
   await p5.fill('#account-modal input[name=code]', '123456');
   await p5.click('#account-modal button[type=submit]');
-  await p5.waitForSelector('#details-modal input[name=private]');
-  check(!(await p5.$('#profile-modal')), 'free, private allowed: saving doesn\'t ask for a public username first');
-  check(await p5.isChecked('#details-modal input[name=private]') && /Only you can open it/.test(await p5.textContent('#details-modal [data-note="visibility"]')),
-    'free, private allowed: the save form offers Private, ticked by default');
+  await p5.waitForSelector('#profile-modal input[name=username]');
+  check(true, 'free: saving asks for a public username first (free sketches are public)');
+  await p5.fill('#profile-modal input[name=username]', 'newbie_lab');
+  await p5.waitForFunction(() => !document.querySelector('#profile-modal [type=submit]').disabled);
+  await p5.click('#profile-modal [type=submit]');
+  await p5.waitForSelector('#details-modal');
+  check(!(await p5.$('#details-modal input[name=private]')) && /Free sketches are/.test(await p5.textContent('#details-modal')),
+    'free: the save form has no Private box and says free sketches are public');
   await p5.fill('#details-name', 'Bracket idea');
   await p5.fill('#details-desc', 'A bracket for the lab bench, first idea.');
   await p5.click('#details-modal [data-a="ok"]');
   await p5.waitForFunction(() => !document.getElementById('details-modal'));
   const saved5 = await p5.evaluate(() => JSON.parse(localStorage.getItem('fake-sb:rows') || '[]'));
-  check(saved5.length === 1 && saved5[0].visibility === 'private', 'free, private allowed: the sketch is saved private');
-  // Publishing asks for the username then.
+  check(saved5.length === 1 && saved5[0].visibility === 'public', 'free: the sketch is saved public');
+  // A sketch made private while the free plan allowed it.
+  await p5.evaluate(() => { const r = JSON.parse(localStorage.getItem('fake-sb:rows')); r[0].visibility = 'private'; localStorage.setItem('fake-sb:rows', JSON.stringify(r)); });
   await p5.goto(base + 'projects/');
-  await p5.waitForSelector('.sketch-card[data-id]');
+  await p5.waitForSelector('.sketch-card .tag.private');
   await p5.locator('.sketch-card[data-id]').first().locator('.menu-btn').click();
-  check(await p5.isVisible('.card-menu [data-a="public"]') && !(await p5.$('.card-menu [data-a="private-pro"]')), 'My sketches (free): Make public, no "Make private (Pro)"');
+  await p5.click('.card-menu [data-a="details"]');
+  await p5.waitForSelector('#details-modal');
+  check(await p5.isChecked('#details-modal input[name=private]') && /Kept private from before/.test(await p5.textContent('#details-modal')),
+    'free, private from before: Edit details keeps Private ticked, with a note');
+  await p5.fill('#details-desc', 'A bracket for the lab bench, second idea.');
+  await p5.click('#details-modal [data-a="ok"]');
+  await p5.waitForFunction(() => !document.getElementById('details-modal'));
+  check((await p5.evaluate(() => JSON.parse(localStorage.getItem('fake-sb:rows'))[0].visibility)) === 'private', '…and saving the details doesn\'t publish it');
+  await p5.locator('.sketch-card[data-id]').first().locator('.menu-btn').click();
+  check(await p5.isVisible('.card-menu [data-a="public"]'), 'My sketches (free): a private sketch from before can be made public');
   await p5.click('.card-menu [data-a="public"]');
-  await p5.waitForSelector('#profile-modal input[name=username]');
-  check(true, 'making a sketch public asks for a username');
-  await p5.fill('#profile-modal input[name=username]', 'newbie_lab');
-  await p5.waitForFunction(() => !document.querySelector('#profile-modal [type=submit]').disabled);
-  await p5.click('#profile-modal [type=submit]');
   await p5.waitForSelector('.sketch-card .tag.public');
   check((await p5.evaluate(() => JSON.parse(localStorage.getItem('fake-sb:rows'))[0].visibility)) === 'public', '…then the sketch is public');
   await p5.locator('.sketch-card[data-id]').first().locator('.menu-btn').click();
-  await p5.click('.card-menu [data-a="private"]');
-  await p5.waitForSelector('.sketch-card .tag.private');
-  check(true, 'a free account can make it private again');
-  check(errs5.length === 0, 'free private: no page errors' + (errs5.length ? ': ' + errs5.join(' | ') : ''));
+  check(await p5.isVisible('.card-menu [data-a="private-pro"]') && !(await p5.$('.card-menu [data-a="private"]')), '…and only Pro can make it private again ("Make private (Pro)")');
+  check(errs5.length === 0, 'free plan, public only: no page errors' + (errs5.length ? ': ' + errs5.join(' | ') : ''));
   await c5.close();
 }
 

@@ -876,13 +876,16 @@ the stored session first.
   (preview, title, description, last change, Public / Private), a usage
   meter, and per card Open, Edit details, Duplicate, Download JSON,
   Delete. Open goes to `/app/?project=<id>`, New to `/app/?new`.
-- **Plans**: free = 3 sketches; Pro = unlimited. Every export is free.
-  Free sketches are public only until migration
-  `0007_free_private.sql` is run, private or public after it: the app asks
-  the database which rule applies (`plan_rules()`), so the two always
-  agree. Where there is a choice, a new sketch starts private and a
-  username is asked for only when publishing. Enforced in the database;
-  the plan is in `account_plans`, written only by the service role.
+- **Plans**: free = 3 sketches, all public; Pro = unlimited, each private
+  or public. Every export is free. Private sketches are Pro only again
+  (migration `0008_private_pro_only.sql`, after a time when `0007` let free
+  sketches be private): the app never offers Private on the free plan, and
+  the database refuses a free sketch becoming private. Free sketches made
+  private under `0007` stay private; their owner can make them public
+  (then only Pro makes them private again), and editing their details
+  keeps them private. On Pro a new sketch starts private and a username is
+  asked for only when publishing. Enforced in the database; the plan is in
+  `account_plans`, written only by the service role.
 - **Library** (`/library/`): every public sketch with a description,
   newest first, with search (title / description), sort, *Show more*, a
   detail view with a shareable link (`/library/?s=<id>`), *Copy link*,

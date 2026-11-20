@@ -7,16 +7,17 @@
 | Drawing tools | all | all |
 | Export (PNG, SVG, copy, DXF, print / PDF to scale) | yes | yes |
 | Sketches in the account | 3 | unlimited |
-| Visibility | private or public, per sketch (after migration 0007; public only before) | private or public, per sketch |
+| Visibility | public (private sketches made under migration 0007 stay private) | private or public, per sketch |
 
 Enforced in the database (`projects_check` trigger): the limit counts all
-of a user's projects. Until migration 0007 is run, making a sketch private
-needs Pro; after it, free sketches may be private too. The app asks the
-database which rule applies (`plan_rules()`, added by 0007; without it the
-earlier rule holds), so the save form, My sketches and the pricing page
-always match what the server accepts. New sketches start private where
-there is a choice (then the last choice on that device); a username is
-asked for only when a sketch is made public.
+of a user's projects, and a free sketch can't become private (migration
+0008; 0007 had allowed it for a while). The app no longer reads
+`plan_rules()`: the free plan never offers Private, so the save form, My
+sketches and the pricing page match what the server accepts once 0008 is
+run. A free sketch made private under 0007 stays private, can be made
+public, and keeps Private when its details are edited. On Pro, new
+sketches start private (then the last choice on that device); a username
+is asked for only when a sketch is made public.
 
 Every export is free on every plan (DXF and to-scale printing were Pro
 for a few hours on 2026-11-14, then opened to all).
@@ -69,8 +70,9 @@ a local PostgreSQL.
 ## Setup (once, by the owner)
 
 1. **Supabase SQL Editor**: run `supabase/migrations/0005_billing.sql`,
-   then `supabase/migrations/0007_free_private.sql` (free sketches may be
-   private).
+   then `supabase/migrations/0008_private_pro_only.sql` (private sketches
+   are Pro only; it replaces `0007_free_private.sql`, which let free
+   sketches be private).
 2. **Lemon Squeezy → Settings → API**: create an API key. Note the store id
    (Settings → Stores, the number).
 3. **Supabase → Edge Functions → Secrets**, add:

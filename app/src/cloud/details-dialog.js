@@ -21,6 +21,9 @@ export function openDetailsDialog({ heading = 'Sketch details', submitLabel = 'S
     back.className = 'modal-backdrop show';
     back.id = 'details-modal';
     const premium = !!canPrivate;                 // may choose private or public
+    // A free sketch made private when the free plan allowed it stays
+    // private: it can be made public, but only Pro makes it private again.
+    const kept = !premium && visibility === 'private';
     back.innerHTML = `
       <form class="modal account details" role="dialog" aria-modal="true" aria-labelledby="details-heading" novalidate>
         <h3 id="details-heading">${esc(heading)}</h3>
@@ -30,7 +33,10 @@ export function openDetailsDialog({ heading = 'Sketch details', submitLabel = 'S
           <input type="text" id="details-name" name="name" maxlength="${TITLE_MAX}" autocomplete="off" value="${esc(name)}" placeholder="Standing desk" />
           <label for="details-desc">Description <span class="counter" data-for="description"></span></label>
           <textarea id="details-desc" name="description" maxlength="${DESC_MAX}" rows="3" placeholder="What it is, sizes, materials…">${esc(description)}</textarea>
-          ${premium ? `
+          ${kept ? `
+            <label class="check"><input type="checkbox" name="private" checked /> Private <span class="muted">(only you can see it)</span></label>
+            <p class="muted details-note">Kept private from before. If you make it public, only <a href="/pricing/" target="_blank" rel="noopener">OnSketch Pro</a> can make it private again.</p>`
+          : premium ? `
             <label class="check"><input type="checkbox" name="private" ${visibility === 'private' ? 'checked' : ''} /> Private <span class="muted">(only you can see it)</span></label>
             <p class="muted details-note" data-note="visibility"></p>`
           : `<p class="muted details-note">Free sketches are <b>public</b>: they appear in the <a href="/library/" target="_blank" rel="noopener">library</a>. <a href="/pricing/" target="_blank" rel="noopener">OnSketch Pro</a> keeps sketches private.</p>`}
@@ -54,7 +60,7 @@ export function openDetailsDialog({ heading = 'Sketch details', submitLabel = 'S
     const values = () => ({
       name: cleanText(form.elements.name.value),
       description: cleanText(form.elements.description.value),
-      visibility: premium && form.elements.private?.checked ? 'private' : 'public',
+      visibility: (premium || kept) && form.elements.private?.checked ? 'private' : 'public',
     });
     const validate = () => {
       const v = values();

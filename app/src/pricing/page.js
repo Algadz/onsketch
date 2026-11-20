@@ -15,7 +15,6 @@ const PRICES = {
   month: { price: '$9.99', per: 'per month', sub: 'Billed monthly. Cancel any time.' },
   year: { price: '$89', per: 'per year', sub: 'That is $7.42 a month, billed yearly. Cancel any time.' },
 };
-const RULES_KEY = 'onsketch:free-private';       // localStorage: '1' once the database allowed free private sketches
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const day = (iso) => new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
@@ -29,27 +28,23 @@ class Pricing {
     this.user = null; this.plan = null; this.cloud = null;
   }
 
-  /** The page words the plans as the database applies them: free
-   *  sketches public only (the default), or private or public once
-   *  plan_rules() says so (remembered, so the next visit doesn't flicker). */
+  /** The page words the plans: free sketches public only (private is
+   *  Pro, cloud.rules()); the free-private wording stays for a later
+   *  change of rule. */
   applyRules(freePrivate) {
     document.querySelectorAll('[data-rule]').forEach(el => { el.hidden = (el.dataset.rule === 'free-private') !== !!freePrivate; });
     this.freePrivate = !!freePrivate;
   }
 
   async start() {
-    let known = false;
-    try { known = localStorage.getItem(RULES_KEY) === '1'; } catch { /* storage unavailable */ }
-    this.applyRules(known);
+    this.applyRules(false);
     mountAccount($('#site-account'));
     document.querySelectorAll('.pr-toggle [data-interval]').forEach(b => b.addEventListener('click', () => { this.interval = b.dataset.interval; track('pricing-interval', { interval: this.interval }); this.render(); }));
     this.render();
     if (!isConfigured()) return;
     try {
       this.cloud = await openCloud({ createClient: window.__onsketchCreateClient || null });
-      const rules = await this.cloud.rules();
-      this.applyRules(rules.freePrivate);
-      try { localStorage.setItem(RULES_KEY, rules.freePrivate ? '1' : '0'); } catch { /* storage unavailable */ }
+      this.applyRules((await this.cloud.rules()).freePrivate);
       this.user = await this.cloud.user();
       if (this.user) this.plan = await this.cloud.plan();
     } catch { /* offline: the page still explains the plans */ }

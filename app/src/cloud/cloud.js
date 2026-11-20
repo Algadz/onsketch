@@ -100,21 +100,13 @@ export class Cloud {
     const { error } = await this.client.auth.signOut();
     if (error) throw error;
   }
-  /** What the plans allow, as the database says (plan_rules() in SQL):
-   *  { freePrivate }: whether free sketches may be private. A database
-   *  that doesn't have the function yet keeps the earlier rule (free =
-   *  public only), so the app never offers what the server would refuse. */
+  /** What the plans allow: { freePrivate }: whether free sketches may be
+   *  private. Private sketches are Pro only again (migration
+   *  0008_private_pro_only.sql), so the free plan never offers it, even
+   *  where the database still has the 0007 rule (plan_rules() is no longer
+   *  read). Free sketches made private under 0007 stay private. */
   async rules() {
-    if (!this._rules) {
-      this._rules = (async () => {
-        try {
-          const { data, error } = await this.client.rpc('plan_rules');
-          const r = Array.isArray(data) ? data[0] : data;
-          return { freePrivate: !error && !!r?.free_private };
-        } catch { return { freePrivate: false }; }
-      })();
-    }
-    return this._rules;
+    return { freePrivate: false };
   }
   /** The signed-in user's plan: { plan: 'free' | 'premium' (= Pro), limit,
    *  canPrivate, status, interval, renewsAt, endsAt, hasSubscription }. */
