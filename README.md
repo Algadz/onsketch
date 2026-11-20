@@ -39,7 +39,7 @@ npm run test:units   # document unit (km: Earth to Moon), typed units, print sca
 npm run test:axis    # horizontal / vertical guess when a line end snaps to a shape or a point
 npm run test:patform # formulas in pattern fields: click a dimension, values, Equations window, variables
 npm run test:ctxmenu # no browser context menu in the editor (only the app's), except in text fields
-npm run test:sizes   # line weights, pen / arrow / text sizes in drawing units, the same at every zoom
+npm run test:sizes   # line weight (px at 100 %, sketch-wide), pen / arrow / text sizes in drawing units
 npm run test:groups  # groups (click, click again inside, Esc), clicking through overlapping items, right-click list
 node tests/style.e2e.mjs  # restyling arrows / texts after drawing, touch tap-through guard
 node tests/analytics.e2e.mjs  # Umami events: what is counted, once per visit, nothing sent from tests
@@ -449,30 +449,35 @@ touch input. Plan and audit: `docs/mobile-plan.md`.
   entry turns red; editing it clears the red, and once applied the window
   shows the new value at once (it rebuilds even while a field has focus).
 
-## Sizes are on the drawing
+## Sizes
 
-Line weight, pen, marker and arrow widths and text heights are sizes on
-the drawing, in the **document unit**, like a dimension: a 0.4 mm line is
-0.4 mm at every zoom (thicker on screen when you zoom in, as on paper,
-never thinner than a hairline when far out), prints 0.4 mm at 1:1, and
-the size you pick doesn't depend on the zoom you are at.
+**The CAD line weight is in pixels at 100 % zoom, one for the whole
+sketch.** Every line, circle, arc and curve is drawn with it, and it zooms
+with the drawing: 1.4 px is 1.4 px at 100 %, 2.8 px at 200 %, 0.7 px at
+50 % (never thinner than a hairline, so nothing vanishes far out). Set it
+in **Properties with nothing selected** (*Sketch*: unit and line weight)
+or as *Line weight* in the options bar of the drawing tools (`1.5` or
+`1.5px`; ↑ ↓ step). Changing it updates every shape at once; shapes keep
+only their line type (solid, dashed…). It is saved with the sketch
+(`project.sizes.linePx`) and doesn't change with the document unit. Files
+whose shapes had weights of their own take the most common one.
 
-- The fields show and take the document unit: *Weight* in the options bar
-  of the drawing tools, the size of the Pen, Marker, Arrow and Text tools
-  (Sketch window and options bar). Type a value, with a unit if you like
-  (`0.5mm`, `1/32in`); ↑ ↓ step to the next round size. A change also
-  restyles the selected lines, arrows or texts.
-- Each document keeps its own sizes (`project.sizes`, saved with it): the
-  first time one is needed it is set from the view (what the old default
-  looked like at that zoom), rounded to a round number, and then stays put.
-  So a km drawing gets km-sized text. An empty drawing switched to another
-  unit picks its sizes again.
+**Ink sizes are on the drawing, in the document unit**: pen, marker and
+arrow widths and text heights. A 5 mm text is 5 mm at every zoom, and the
+size you pick doesn't depend on the zoom you are at.
+
+- The fields (Sketch window and options bar) show and take the document
+  unit; type a value, with a unit if you like (`0.5mm`, `1/32in`); ↑ ↓
+  step to the next round size. A change also restyles the selected ink of
+  that kind.
+- Each document keeps its own ink sizes (`project.sizes`, saved with it):
+  the first time one is needed it is set from the view (what the old
+  default looked like at that zoom), rounded, and then stays put. So a km
+  drawing gets km-sized text. An empty drawing switched to another unit
+  picks them again.
 - The eraser is a cursor and stays in screen pixels; dimensions, relation
   badges, handles and snap markers are editor overlays and stay in pixels
-  too.
-- Files saved before had line weights in screen pixels: they are converted
-  at the zoom that fits the drawing, so they open looking as they did
-  (`core/sizes.js`).
+  too (`core/sizes.js`).
 
 ## Snapping and navigation (desktop)
 

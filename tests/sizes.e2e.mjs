@@ -1,4 +1,5 @@
-// End-to-end test: line weights, pen / marker / arrow widths and text heights
+// End-to-end test: pen / marker / arrow widths and text heights are drawing
+// units; the CAD line weight is px at 100 % zoom for the whole sketch
 // are sizes on the drawing (document unit), the same whatever the zoom.
 //
 // Usage: node tests/sizes.e2e.mjs [rootDir]
@@ -80,26 +81,31 @@ check(k.length === 2 && k[0].width === k[1].width, `arrows drawn at two zooms ar
 await page.keyboard.press('Escape');
 await setZoom(4);
 await page.keyboard.press('l');
-check(await page.isVisible('#optbar input[data-size="line"]'), 'the options bar has the line weight in mm');
+check(await page.isVisible('#optbar input[data-size="linePx"]') && /px/.test(await page.textContent('#optbar .size-opt')), 'the options bar has the line weight in px');
 await page.mouse.click(cx - 200, cy); await page.mouse.click(cx + 200, cy);
 await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
-const lw = await page.evaluate(() => { const a = window._app, l = a.activeSketch().entities.find(e => e.constructor.kind === 'line'); return { style: l.style.lineWidth, doc: a.project.sizes.line }; });
-check(lw.style === lw.doc, `a new line takes the document weight (${lw.style} mm)`);
-const px = (z) => page.evaluate((z) => { const a = window._app; a.view.zoom = z; const l = a.activeSketch().entities.find(e => e.constructor.kind === 'line'); return a.renderer.styleFor(l, true).width; }, z);
+const lw = await page.evaluate(() => { const a = window._app; a._render(); const l = a.activeSketch().entities.find(e => e.constructor.kind === 'line'); return { own: l.style?.lineWidth, w: a.project.sizes.linePx, px: a.renderer.styleFor(l, true).width }; });
+check(lw.own === undefined && lw.w === 1.4 && Math.abs(lw.px - 1.4) < 1e-9, `a new line has the sketch's weight, 1.4 px at 100 % zoom (${lw.px} px)`);
+const px = (z) => page.evaluate((z) => { const a = window._app; a.view.zoom = z; a._render(); const l = a.activeSketch().entities.find(e => e.constructor.kind === 'line'); return a.renderer.styleFor(l, true).width; }, z);
 const p4 = await px(4), p8 = await px(8), tiny = await px(0.001);
-check(Math.abs(p8 - 2 * p4) < 1e-9, `on screen it is twice as thick at twice the zoom (${p4} → ${p8} px)`);
+check(Math.abs(p8 - 2 * p4) < 1e-9 && Math.abs(p8 - 2.8) < 1e-9, `it zooms with the drawing: 1.4 px at 100 %, 2.8 px at 200 % (${p4} → ${p8} px)`);
 check(tiny >= 0.75, `never thinner than a hairline when far out (${tiny} px)`);
-// set the weight with a line selected: it and the next ones take it
+// the weight is the whole sketch's: a second line, then change it from
+// Properties with nothing selected
 await setZoom(4);
+await page.keyboard.press('l');
+await page.mouse.click(cx - 200, cy + 60); await page.mouse.click(cx + 200, cy + 60);
+await page.keyboard.press('Escape'); await page.keyboard.press('Escape');
 await page.keyboard.press('s');
-await page.evaluate(() => { const a = window._app; a.activeSketch().entities.find(e => e.constructor.kind === 'line').selected = true; a.setTool('line'); a.refreshUI(); });
-await page.fill('#optbar input[data-size="line"]', '0.7');
-await page.press('#optbar input[data-size="line"]', 'Enter');
-check(await page.evaluate(() => window._app.activeSketch().entities.find(e => e.constructor.kind === 'line').style.lineWidth) === 0.7, 'the selected line takes the typed weight (0.7 mm)');
-
+await page.evaluate(() => { const a = window._app; a.clearSelection(); a.windows.toggle('props', true); a.refreshUI(); });
+check(/Sketch/.test(await page.textContent('#sel-body')) && await page.isVisible('#sel-body input[data-size="linePx"]'), 'with nothing selected, Properties shows the Sketch line weight');
+await page.fill('#sel-body input[data-size="linePx"]', '3px');
+await page.press('#sel-body input[data-size="linePx"]', 'Enter');
+const all = await page.evaluate(() => { const a = window._app; a.view.zoom = 4; a._render(); return a.activeSketch().entities.filter(e => e.constructor.kind === 'line').map(l => a.renderer.styleFor(l, true).width); });
+check(all.length === 2 && all.every(w => Math.abs(w - 3) < 1e-9), `"3px": every line of the sketch is 3 px at 100 % zoom, at once (${all.join(', ')})`);
 // ---- Saved with the document ----
 const saved = await page.evaluate(() => window._app.project.toJSON().sizes);
-check(saved.line === 0.7 && Math.abs(saved.pen - 1.27) < 1e-9, `sizes are saved with the document (${JSON.stringify(saved)})`);
+check(saved.linePx === 3 && Math.abs(saved.pen - 1.27) < 1e-9, `sizes are saved with the document (${JSON.stringify(saved)})`);
 
 // ---- km document: sizes in km ----
 await page.evaluate(() => { const a = window._app; a.project = new a.project.constructor(); a.project.addSketch('S'); a.project.units = 'km'; a._syncUnits(); a.view.zoom = 0.003; a.refreshUI(); });
@@ -107,15 +113,15 @@ await page.keyboard.press('n');
 const kmPen = await page.inputValue('#sketch-body input[data-size="pen"]');
 check(/km/.test(await page.textContent('#sketch-body .size-opt')) && +kmPen >= 100, `in a km drawing the pen size is in km (${kmPen} km)`);
 
-// ---- An older file (pixel weights) looks as it did ----
+// ---- An older file (pixel weights) ----
 await page.evaluate(() => {
   const a = window._app, P = (id, x, y) => ({ type: 'point', id, x, y });
   a.project = a.project.constructor.fromJSON({ version: 3, activeLayerId: 'l', layers: [{ id: 'l', name: 'L' }],
     sketches: [{ id: 's', name: 'S', entities: [{ type: 'line', id: 'a', p1: P('p', 0, 0), p2: P('q', 400, 0), style: { lineWidth: 2 } }], constraints: [] }] });
-  a._afterStateSwap(); a.zoomFit();
+  a._afterStateSwap(); a.view.zoom = 4;
 });
-const old = await page.evaluate(() => { const a = window._app, l = a.activeSketch().entities[0]; return { zoom: a.view.zoom, px: a.renderer.styleFor(l, true).width }; });
-check(Math.abs(old.px - 2) <= 1, `an older 2 px line still looks about 2 px when the drawing fits the view (${old.px.toFixed(2)} px at zoom ${old.zoom.toFixed(2)})`);
+const old = await page.evaluate(() => { const a = window._app, l = a.activeSketch().entities[0]; a._render(); return { w: a.project.sizes.linePx, px: a.renderer.styleFor(l, true).width }; });
+check(old.w === 2 && Math.abs(old.px - 2) < 1e-9, `an older 2 px line is the sketch weight, 2 px at 100 % (${old.px} px)`);
 
 check(!errors.length, 'no page errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
 await browser.close();

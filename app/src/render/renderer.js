@@ -2,7 +2,7 @@ import { EPS, TAU, angleArcFromPoints, angleSectorForValue, drawDirectedArcPath,
 import { Arc, Circle, Line, Point, refreshHandleVisibility } from '../core/entities.js';
 import { CONSTRAINT_GLYPHS, distanceFrame } from '../core/constraints.js';
 import { resolveStyle, dashFor, withAlpha } from '../core/style.js';
-import { MIN_LINE_PX } from '../core/sizes.js';
+import { linePxAt } from '../core/sizes.js';
 import { getTheme, INK } from './theme.js';
 import { BOX_PAD, PAPER, TEXT_LINE, isText, textBox, textCorners, textFont, textLines } from '../core/strokes.js';
 import { headSize, headedEnds, isArrow } from '../core/arrows.js';
@@ -110,10 +110,9 @@ export class Renderer {
     // Export (render/export.js): a drawing to show, not to edit. No state
     // colours: shapes in ink, construction geometry in grey.
     if (this.exportMode) color = construction ? t.inactive : t.ink;
-    // Line weight is a size on the drawing (drawing units, core/sizes.js):
-    // thicker when zoomed in, never thinner than a hairline.
-    const own = Number.isFinite(src.style?.lineWidth) ? src.style.lineWidth : this.defaultLineWidth;
-    const px = own > 0 ? Math.max(MIN_LINE_PX, own * this.view.zoom) : st.lineWidth;
+    // The sketch's line weight: px at 100 % zoom, zooming with the drawing
+    // (core/sizes.js).
+    const px = linePxAt(this.linePx, this.view.zoom);
     const width = px + (entity.selected && !this.exportMode ? 0.6 : 0);
     return {
       color,
@@ -129,7 +128,7 @@ export class Renderer {
   /** @param fillDisplay  layerId → { painted:[{color,opacity,region}] } */
   drawEntities(project, fillDisplay = new Map()) {
     const ctx = this.ctx, v = this.view;
-    this.defaultLineWidth = project.sizes?.line;     // shapes without a weight of their own
+    this.linePx = project.sizes?.linePx;             // the whole sketch's line weight
     const activeId = project.activeSketchId;
     // One pass to bucket entities by layer, then draw layers bottom → top.
     const buckets = new Map(project.layers.map(l => [l, new Map()]));

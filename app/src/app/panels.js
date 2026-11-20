@@ -1,4 +1,4 @@
-import { evaluate } from '../core/expr.js';
+import { DOC_UNITS, UNIT_NAMES, evaluate } from '../core/expr.js';
 import { dist } from '../core/math.js';
 import { Arc, Bezier, Circle, Line, Point } from '../core/entities.js';
 import { bezierLength } from '../core/bezier.js';
@@ -81,10 +81,19 @@ export class PanelsMixin {
       return;
     }
     if (sel.length === 0) {
+      // Nothing selected: the sketch's own settings.
       body.innerHTML = `<div class="ps-empty">
         <strong>Nothing selected</strong>
         <span>Click a shape to see its values, relations and dimensions. Ctrl-click adds to the selection; select two shapes to relate them.</span>
-      </div>`;
+      </div>
+      <div class="sb-subhead">Sketch</div>
+      <div class="prop-row"><label for="sk-units">Unit</label><select id="sk-units" data-sketch-units>${DOC_UNITS.map(u => `<option value="${u}"${u === this.project.units ? ' selected' : ''}>${u} · ${UNIT_NAMES[u]}</option>`).join('')}</select></div>
+      <div class="prop-row"><label>Line weight</label>${this.sizeFieldHTML('linePx', '')}</div>
+      <div class="hint">The line weight is for the whole sketch (every line, circle, arc and curve), in px at 100 % zoom: it zooms with the drawing. Also in the options bar of the drawing tools.</div>`;
+      this.bindSizeFields(body);
+      body.querySelector('[data-sketch-units]')?.addEventListener('change', async (e) => {
+        if (!(await this.setDocumentUnits(e.target.value))) e.target.value = this.project.units;
+      });
       return;
     }
 

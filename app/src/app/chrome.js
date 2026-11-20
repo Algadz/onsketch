@@ -71,8 +71,9 @@ export class ChromeMixin {
       if (go !== 'go') return false;
     }
     this.project.units = u;
-    // An empty drawing picks its sizes again, at this unit's scale.
-    if (!has) this.project.sizes = {};
+    // An empty drawing picks its ink sizes again, at this unit's scale (the
+    // line weight is in px: it stays).
+    if (!has) this.project.sizes = { linePx: this.project.sizes?.linePx };
     this._syncUnits();
     this.commit({ diagnostics: 'sync' });
     this.refreshUI();
@@ -275,7 +276,7 @@ export class ChromeMixin {
     let html = `<span class="opt-tool">${TOOL_ICONS[t.id] || ''}<b>${t.label}</b></span>`;
     const sep = '<span class="opt-sep"></span>';
     if (DRAW_TOOLS.has(t.id)) {
-      html += sep + this.sizeFieldHTML('line', 'Weight');
+      html += sep + this.sizeFieldHTML('linePx', 'Line weight');
       html += `<label class="opt">Line <select data-pen="lineStyle">${Object.entries(LINE_STYLES).map(([k, v]) => `<option value="${k}"${p.lineStyle === k ? ' selected' : ''}>${v.label}</option>`).join('')}</select></label>`;
       html += sep + `<button class="tbtn toggle${this.constructionMode ? ' on' : ''}" data-opt="construction" title="Draw construction (reference) geometry">${ACTION_ICONS.construction}<span class="btn-label">Construction</span></button>`;
       if (t.id === 'curve') {

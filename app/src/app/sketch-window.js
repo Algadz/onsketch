@@ -3,7 +3,6 @@ import { BOX_COLORS, PAPER, cleanBox, isText } from '../core/strokes.js';
 import { ARROW_HEADS, ARROW_TIPS, isArrow } from '../core/arrows.js';
 import { INK } from '../render/theme.js';
 import { TOOL_ICONS, toolDef } from '../ui/tool-defs.js';
-import { Point } from '../core/entities.js';
 import { evaluate } from '../core/expr.js';
 import { SIZE_LABELS, ensureSizes, stepSize } from '../core/sizes.js';
 
@@ -45,8 +44,12 @@ export class SketchWindowMixin {
    *  unit (0.5, 2mm, 1/8in), ↑ ↓ step to the next round size. */
   sizeFieldHTML(key, label, attr = 'data-size', value = null) {
     const v = value ?? this.docSizes()[key];
-    const u = esc(this.project.units);
-    return `<label class="opt size-opt" title="${esc(SIZE_LABELS[key])} on the drawing, in ${u}: the same at every zoom. Type a value (units convert: 0.5mm, 1/8in); ↑ ↓ step">${label ? esc(label) + ' ' : ''}<input type="text" class="size-in" inputmode="decimal" ${attr}="${key}" value="${fmtSize(v)}" spellcheck="false" autocomplete="off"><span class="opt-val">${u}</span></label>`;
+    const px = key === 'linePx';
+    const u = px ? 'px' : esc(this.project.units);
+    const what = px
+      ? 'Line weight of the whole sketch (every line, circle, arc and curve), in px at 100 % zoom: thicker when you zoom in, thinner when you zoom out. ↑ ↓ step'
+      : `${esc(SIZE_LABELS[key])} on the drawing, in ${u}: the same at every zoom. Type a value (units convert: 0.5mm, 1/8in); ↑ ↓ step`;
+    return `<label class="opt size-opt" title="${what}">${label ? esc(label) + ' ' : ''}<input type="text" class="size-in" inputmode="decimal" ${attr}="${key}" value="${fmtSize(v)}" spellcheck="false" autocomplete="off"><span class="opt-val">${u}</span></label>`;
   }
 
   bindSizeFields(root, attr = 'data-size') {
@@ -54,7 +57,8 @@ export class SketchWindowMixin {
       const key = inp.getAttribute(attr);
       const apply = () => {
         let v;
-        try { v = evaluate(inp.value.replace(/^=\s*/, '')); } catch { v = NaN; }
+        const text = inp.value.replace(/^=\s*/, '');
+        try { v = key === 'linePx' ? evaluate(text.replace(/\s*px\s*$/i, '')) : evaluate(text); } catch { v = NaN; }
         if (!(v > 0) || !Number.isFinite(v)) { inp.classList.add('bad'); return; }
         inp.classList.remove('bad');
         this.setDocSize(key, v);
@@ -75,18 +79,14 @@ export class SketchWindowMixin {
     });
   }
 
-  /** Sets a document size; the selected shapes, arrows or texts of that
-   *  kind take it too (one undo step). */
+  /** Sets a document size (one undo step). The line weight is the whole
+   *  sketch's; a pen / arrow / text size also restyles the selected ink of
+   *  that kind. */
   setDocSize(key, v) {
     const sizes = this.docSizes();
     sizes[key] = v;
-    if (key === 'line') {
-      this._penChanged(false);                  // next shapes
-      const sketch = this.activeSketch();
-      for (const e of sketch?.entities || []) {
-        if (!e.selected || e instanceof Point) continue;
-        e.style = { ...(e.style || {}), lineWidth: v };
-      }
+    if (key === 'linePx') {
+      // the whole sketch: every shape is drawn with it
     } else if (key === 'arrow' || key === 'text') {
       this._refineInk({ [key + 'Size']: v }, false);
     }

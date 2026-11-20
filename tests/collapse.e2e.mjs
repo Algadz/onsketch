@@ -121,7 +121,8 @@ const fixPoint = (page, kind, key) => app(page, ([kind, key]) => {
   await page.keyboard.press('Control+z'); await page.waitForTimeout(150);
 
   // A circle's edge dragged onto its centre stops at ~2 px too.
-  await app(page, () => window._app.setTool('circle'));
+  // (the Properties window would float over where this clicks)
+  await app(page, () => { window._app.windows.toggle('props', false); window._app.setTool('circle'); });
   await page.mouse.click(X + 500, Y + 100); await page.mouse.click(X + 600, Y + 100); await page.keyboard.press('Escape');
   await app(page, () => window._app.setTool('select'));
   await dragTo(page, [X + 600, Y + 100], [X + 500.5, Y + 100.5]);

@@ -27,7 +27,7 @@ import { PatternConstraint } from './patterns.js';
 import { reviveStroke, strokeToJSON } from './strokes.js';
 import { imageSource, registerImage, usedImageIds } from './images.js';
 import { DOC_UNITS } from './expr.js';
-import { cleanSizes, migratePixelLineWidths } from './sizes.js';
+import { cleanSizes, sketchWideLineWeight } from './sizes.js';
 
 /** Constraints that tie a point to itself or to a line it is an end of:
  *  always true, never useful, dropped on load. */
@@ -451,8 +451,11 @@ export class Project {
     p.assignConstraintLayers();
     p.orientAngleDimensions();
     // Sizes are in drawing units; files without them had pixel line weights.
-    if (o.sizes && typeof o.sizes === 'object') p.sizes = cleanSizes(o.sizes) || {};
-    else migratePixelLineWidths(p);
+    // Ink sizes in drawing units; one line weight for the whole sketch, in
+    // px at 100 % zoom (shapes saved with their own give it up: the most
+    // common becomes the sketch's). Files without sizes had pixel weights.
+    p.sizes = (o.sizes && typeof o.sizes === 'object' && cleanSizes(o.sizes)) || {};
+    sketchWideLineWeight(p, { pixels: !(o.sizes && typeof o.sizes === 'object') });
     return p;
   }
 
