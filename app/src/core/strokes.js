@@ -14,6 +14,8 @@
             (core/arrows.js)
      image  { id, layerId, kind: 'image', image, opacity, pts: [topLeft, topRight, bottomLeft] }
             (core/images.js; the picture's data is in project.images)
+     shape  { id, layerId, kind: 'shape', shape, color, opacity, width, fill?, dash?,
+              pts: [topLeft, topRight, bottomLeft] }  (core/shapes.js)
    plus, on any item:
      group  'g12'          items with the same group select and move together
      link   { to, t?, f }  follows a point / line / circle / arc (core/ink-links.js)
@@ -32,9 +34,10 @@
 
 import { ARROW_HEADS, ARROW_TIPS, cleanAttach } from './arrows.js';
 import { imageCorners, imageHit, isImage } from './images.js';
+import { SHAPE_FILLS, SHAPE_IDS, isShape, shapeCorners, shapeHit } from './shapes.js';
 
 export const STROKE_KINDS = ['pen', 'marker'];
-export const INK_KINDS = ['pen', 'marker', 'arrow', 'text', 'image'];
+export const INK_KINDS = ['pen', 'marker', 'arrow', 'text', 'image', 'shape'];
 
 /** Font used for text, on the canvas and in the inline editor. */
 export const TEXT_FONT = 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
@@ -69,6 +72,11 @@ export function strokeToJSON(s) {
     if (s.box) o.box = s.box.border ? { color: s.box.color, border: true } : { color: s.box.color };
   } else if (isImage(s)) o.image = s.image;
   else o.width = s.width;
+  if (isShape(s)) {
+    o.shape = s.shape;
+    if (s.fill && s.fill !== 'none') o.fill = s.fill;
+    if (s.dash) o.dash = true;
+  }
   if (s.kind === 'arrow') {
     if (s.tips && s.tips !== 'end') o.tips = s.tips;
     if (s.head && s.head !== 'filled') o.head = s.head;
@@ -78,7 +86,7 @@ export function strokeToJSON(s) {
   }
   // Attached arrow ends and pictures (whose corners must stay square
   // through many turns) are saved at full precision.
-  o.pts = s.points.flatMap(p => (s.at || isImage(s) ? [p.x, p.y] : [round(p.x), round(p.y)]));
+  o.pts = s.points.flatMap(p => (s.at || isImage(s) || isShape(s) ? [p.x, p.y] : [round(p.x), round(p.y)]));
   if (s.group) o.group = s.group;
   if (s.link) o.link = linkToJSON(s.link);
   return o;
@@ -136,6 +144,16 @@ export function reviveStroke(o) {
     return { ...base, kind: 'image', image: o.image, points: points.slice(0, 3) };
   }
   const width = Number(o.width);
+  if (o.kind === 'shape') {
+    if (points.length < 3) return null;
+    const sh = {
+      ...base, kind: 'shape', shape: SHAPE_IDS.includes(o.shape) ? o.shape : 'rect',
+      width: Number.isFinite(width) && width > 0 ? width : 1, points: points.slice(0, 3),
+    };
+    if (SHAPE_FILLS.includes(o.fill) && o.fill !== 'none') sh.fill = o.fill;
+    if (o.dash) sh.dash = true;
+    return sh;
+  }
   if (o.kind === 'arrow') {
     if (points.length < 2) return null;
     const a = {
@@ -211,6 +229,7 @@ export function distanceToStroke(stroke, p) {
 /** True when a circle of radius r at p touches the stroke's ink. */
 export function strokeHit(stroke, p, r) {
   if (isImage(stroke)) return imageHit(stroke, p, r);
+  if (isShape(stroke)) return shapeHit(stroke, p, r);
   // An arrow's head is wider than its line.
   const reach = stroke.kind === 'arrow' ? stroke.width * 1.8 : stroke.width / 2;
   return distanceToStroke(stroke, p) <= r + reach;
@@ -314,6 +333,10 @@ export function textBounds(item) { return aabb(textCorners(item, false)); }
 export function inkBounds(item) {
   if (isText(item)) return aabb(textCorners(item, true));
   if (isImage(item)) return aabb(imageCorners(item));
+  if (isShape(item)) {
+    const b = aabb(shapeCorners(item)), h = (item.width || 0) / 2;
+    return { minX: b.minX - h, minY: b.minY - h, maxX: b.maxX + h, maxY: b.maxY + h };
+  }
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   for (const p of item.points) {
     if (p.x < minX) minX = p.x; if (p.y < minY) minY = p.y;
@@ -349,6 +372,7 @@ export function inkHit(item, p, r) {
 /** True when the item lies entirely inside the world box. */
 export function inkInBox(item, x0, y0, x1, y1) {
   if (isText(item)) return textCorners(item).every(p => p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1);
+  if (isShape(item)) return shapeCorners(item).every(p => p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1);
   if (isImage(item)) return imageCorners(item).every(p => p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1);
   return item.points.every(p => p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1);
 }

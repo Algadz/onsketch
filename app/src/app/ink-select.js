@@ -1,7 +1,8 @@
 import { PAPER, cleanBox, inkHit, inkInBox, isText, placeTextCenter, textCenter } from '../core/strokes.js';
 import { isArrow, setArrowEnd } from '../core/arrows.js';
 import { imageCorners, imageSize, isImage } from '../core/images.js';
-import { arrowStyleHTML, bindArrowStyle, bindBoxSwatches, boxModeHTML, boxSwatchesHTML } from './sketch-window.js';
+import { isShape, shapeLabel } from '../core/shapes.js';
+import { arrowStyleHTML, bindArrowStyle, bindBoxSwatches, boxModeHTML, boxSwatchesHTML, shapePickerHTML, shapeStyleHTML } from './sketch-window.js';
 import { groupOf, withGroups } from '../core/ink-links.js';
 import { INK } from '../render/theme.js';
 
@@ -86,7 +87,7 @@ export class InkSelectMixin {
   }
 
   _inkWord(it) {
-    return it.kind === 'text' ? 'text' : it.kind === 'image' ? 'image' : it.kind === 'arrow' ? 'arrow' : 'stroke';
+    return it.kind === 'text' ? 'text' : it.kind === 'image' ? 'image' : it.kind === 'arrow' ? 'arrow' : it.kind === 'shape' ? 'shape' : 'stroke';
   }
 
   /** Everything under the cursor that a click can select, in the order
@@ -141,6 +142,7 @@ export class InkSelectMixin {
     const sketch = this.activeSketch();
     if (sketch?.strokes.includes(c)) {
       if (c.kind === 'text') { const t = String(c.text).split('\n')[0]; return `Text “${t.length > 18 ? t.slice(0, 17) + '…' : t}”`; }
+      if (isShape(c)) return shapeLabel(c.shape);
       return c.kind === 'image' ? 'Image' : c.kind === 'arrow' ? 'Arrow' : c.kind === 'marker' ? 'Marker stroke' : 'Pen stroke';
     }
     return this._entityLabel(c);
@@ -202,11 +204,12 @@ export class InkSelectMixin {
     const shown = (c) => c === INK ? '#111418' : c;
     const opacity = same(items, 'opacity') ? first.opacity : null;
     const units = esc(this.project.units);
-    const arrows = items.filter(isArrow);
-    const lines = strokes.length - arrows.length;
+    const arrows = items.filter(isArrow), shapes = items.filter(isShape);
+    const lines = strokes.length - arrows.length - shapes.length;
     const what = [
       lines ? `${lines} stroke${lines === 1 ? '' : 's'}` : '',
       arrows.length ? `${arrows.length} arrow${arrows.length === 1 ? '' : 's'}` : '',
+      shapes.length ? (shapes.length === 1 ? shapeLabel(shapes[0].shape).toLowerCase() : `${shapes.length} shapes`) : '',
       texts.length ? `${texts.length} text${texts.length === 1 ? '' : 's'}` : '',
       images.length ? `${images.length} image${images.length === 1 ? '' : 's'}` : '',
     ].filter(Boolean).join(', ');
@@ -218,7 +221,7 @@ export class InkSelectMixin {
     html += `<div class="prop-row"><label>opacity</label><div class="range-row"><input type="range" min="0.05" max="1" step="0.05" data-ink-k="opacity" value="${opacity ?? first.opacity}"><span>${opacity == null ? 'mixed' : Math.round(opacity * 100) + '%'}</span></div></div>`;
     if (strokes.length) {
       const width = same(strokes, 'width') ? strokes[0].width : null;
-      html += `<div class="prop-row"><label>width</label><div class="unit-row"><input type="number" min="0.01" step="any" data-ink-k="width" value="${width == null ? '' : Number(width.toPrecision(4))}" placeholder="mixed"><span>${units}</span></div></div>`;
+      html += `<div class="prop-row"><label>${shapes.length === strokes.length ? 'outline' : 'width'}</label><div class="unit-row"><input type="number" min="0.01" step="any" data-ink-k="width" value="${width == null ? '' : Number(width.toPrecision(4))}" placeholder="mixed"><span>${units}</span></div></div>`;
     }
     if (arrows.length) {
       const pick = (k, d) => (arrows.every(a => (a[k] ?? d) === (arrows[0][k] ?? d)) ? (arrows[0][k] ?? d) : null);
@@ -230,6 +233,12 @@ export class InkSelectMixin {
         const names = [...new Set(attached.flatMap(a => a.at.filter(Boolean).map(x => lookup.get(x.to)).filter(Boolean).map(e => esc(this._entityLabel(e)))))];
         html += `<div class="prop-row"><label>attached</label><span class="prop-val">${names.join(', ') || 'a shape'} <button class="mini-btn" data-ink-act="detach" title="Free the arrow ends from the shapes">Detach</button></span></div>`;
       }
+    }
+    if (shapes.length) {
+      const pick = (k, d) => (shapes.every(a => (a[k] ?? d) === (shapes[0][k] ?? d)) ? (shapes[0][k] ?? d) : null);
+      html += shapePickerHTML(pick('shape', 'rect'), 'data-ink-shape').replace('<label>Shape</label>', '<label>shape</label>');
+      html += shapeStyleHTML({ shape: shapes.length === 1 ? shapes[0].shape : null, fill: pick('fill', 'none'), dash: pick('dash', false) }, 'data-ink-shapestyle', true)
+        .replace('<label>Fill</label>', '<label>fill</label>').replace('<label>Line</label>', '<label>line</label>');
     }
     if (texts.length) {
       const size = same(texts, 'size') ? texts[0].size : null;
@@ -246,11 +255,13 @@ export class InkSelectMixin {
         html += `<div class="prop-row"><label>box colour</label>${boxSwatchesHTML(c, 'data-ink-boxcolor')}</div>`;
       }
     }
-    if (images.length === 1) {
-      const { w, h } = imageSize(images[0]);
+    const frames = items.filter(s => isImage(s) || isShape(s));
+    if (frames.length === 1 && items.length === 1) {
+      const { w, h } = imageSize(frames[0]);
       const num = (v) => Number(v.toPrecision(5));
-      html += `<div class="prop-row"><label>image width</label><div class="unit-row"><input type="number" min="0.001" step="any" data-ink-k="imgW" value="${num(w)}"><span>${units}</span></div></div>`;
-      html += `<div class="prop-row"><label>image height</label><div class="unit-row"><input type="number" min="0.001" step="any" data-ink-k="imgH" value="${num(h)}"><span>${units}</span></div></div>`;
+      const noun = isImage(frames[0]) ? 'image' : 'box';
+      html += `<div class="prop-row"><label>${noun} width</label><div class="unit-row"><input type="number" min="0.001" step="any" data-ink-k="imgW" value="${num(w)}"><span>${units}</span></div></div>`;
+      html += `<div class="prop-row"><label>${noun} height</label><div class="unit-row"><input type="number" min="0.001" step="any" data-ink-k="imgH" value="${num(h)}"><span>${units}</span></div></div>`;
       html += `<div class="prop-row"><label>keep ratio</label><input type="checkbox" data-ink-k="imgRatio"${this._imgKeepRatio === false ? '' : ' checked'}></div>`;
     }
     if (this.project.layers.length > 1) {
@@ -259,7 +270,7 @@ export class InkSelectMixin {
       </select></div>`;
     }
     html += this._inkGroupLinkHTML(items);
-    html += `<div class="hint">Drag to move${texts.length ? ', double-click a text to edit it' : ''}${images.length ? '; the box handles resize and turn' : ''}. Delete removes. Ink is not solved or dimensioned.</div>`;
+    html += `<div class="hint">Drag to move${texts.length ? ', double-click a text to edit it' : ''}${frames.length ? '; the box handles resize and turn' : ''}. Delete removes. Ink is not solved or dimensioned.</div>`;
     return html;
   }
 
@@ -293,7 +304,7 @@ export class InkSelectMixin {
   _bindInkSection(body) {
     const items = this.selectedStrokes();
     if (!items.length) return;
-    const texts = items.filter(isText), images = items.filter(isImage);
+    const texts = items.filter(isText);
     const strokes = items.filter(s => !isText(s) && !isImage(s));
     body.querySelectorAll('[data-ink-k]').forEach(inp => {
       const k = inp.dataset.inkK;
@@ -316,8 +327,9 @@ export class InkSelectMixin {
         } else if (k === 'imgW' || k === 'imgH') {
           const v = parseFloat(inp.value);
           if (!(v > 0)) { inp.classList.add('bad'); return; }
-          resizeImage(images[0], k === 'imgW' ? 'w' : 'h', v, this._imgKeepRatio !== false);
-          this.rebaseInk(images);
+          const frame = items.find(x => isImage(x) || isShape(x));
+          resizeImage(frame, k === 'imgW' ? 'w' : 'h', v, this._imgKeepRatio !== false);
+          this.rebaseInk([frame]);
         } else if (k === 'bold') {
           for (const t of texts) t.bold = inp.checked;
         } else if (k === 'angle') {
@@ -344,6 +356,18 @@ export class InkSelectMixin {
       }
       done();
     });
+    body.querySelectorAll('[data-ink-shape]').forEach(b => b.addEventListener('click', () => {
+      for (const sh of items.filter(isShape)) sh.shape = b.dataset.inkShape;
+      done();
+    }));
+    body.querySelectorAll('[data-ink-shapestyle]').forEach(b => b.addEventListener('click', () => {
+      const [k, v] = b.dataset.inkShapestyle.split(':');
+      for (const sh of items.filter(isShape)) {
+        if (k === 'dash') { if (v === 'true') sh.dash = true; else delete sh.dash; }
+        else if (v === 'none') delete sh.fill; else sh.fill = v;
+      }
+      done();
+    }));
     body.querySelectorAll('[data-ink-boxmode]').forEach(b => b.addEventListener('click', () => {
       const mode = b.dataset.inkBoxmode;
       for (const t of texts) {

@@ -611,7 +611,7 @@ export class App {
       row.type = 'button';
       row.className = 'context-menu-item' + (it.selected ? ' is-selected' : '');
       row.dataset.inkPick = it.id;
-      row.innerHTML = `<span class="glyph">${it.kind === 'text' ? 'T' : it.kind === 'image' ? '▣' : it.kind === 'arrow' ? '→' : '〜'}</span>
+      row.innerHTML = `<span class="glyph">${it.kind === 'text' ? 'T' : it.kind === 'image' ? '▣' : it.kind === 'arrow' ? '→' : it.kind === 'shape' ? '◇' : '〜'}</span>
         <span>${escHTML(this.candidateLabel(it))}</span><span class="meta">${it.selected ? '✓ ' : ''}${it.group ? 'group' : ''}</span>`;
       row.addEventListener('click', () => { this.hideContextMenu(); this.selectOnly(it); });
       menu.appendChild(row);
@@ -718,7 +718,7 @@ export class App {
     if (!this.snapActive()) return null;
     // Arrow ends snap like line ends (and attach to what they land on),
     // when drawing an arrow or dragging the end of a selected one.
-    const drawing = ['line','centerLine','rectangle','centerRectangle','circle','threePointCircle','hexagon','arc','point','curve','arrow'].includes(this.toolName)
+    const drawing = ['line','centerLine','rectangle','centerRectangle','circle','threePointCircle','hexagon','arc','point','curve','arrow','shape'].includes(this.toolName)
       || (this.toolName === 'select' && this.tool && this.tool.arrowEnd);
     const dragging = this.toolName === 'select' && this.tool && this.tool.dragging;
     if (!drawing && !dragging) return null;

@@ -138,7 +138,7 @@ const lineMidOnScreen = (page, t = 0.5) => app(page, (t) => {
   let da = await dimAt();
   await touch('touchStart', [[da.x, da.y]]); await page.waitForTimeout(600); await touch('touchEnd', []);
   const dmenu = await app(page, () => [document.querySelector('#context-menu .context-menu-title')?.textContent, [...document.querySelectorAll('#context-menu .action')].map(e => e.dataset.action).join(',')]);
-  check(/Dimension D4/.test(dmenu[0]) && dmenu[1] === 'edit,delete', `phone: long press on a dimension offers Edit value and Delete (${dmenu})`);
+  check(/Dimension D4/.test(dmenu[0]) && dmenu[1] === 'edit,driven,delete', `phone: long press on a dimension offers Edit value, Make driven and Delete (${dmenu})`);
   await page.tap('#context-menu [data-action="delete"]');
   const gone = await app(page, () => !window._app.activeSketch().constraints.some(c => c.name === 'D4'));
   check(gone, 'phone: Delete dimension removes it');

@@ -1,6 +1,7 @@
 import { Arc, Circle, Line, Point } from './entities.js';
 import { isText, placeTextCenter, textCenter, unionBounds } from './strokes.js';
 import { isImage } from './images.js';
+import { isShape } from './shapes.js';
 
 /* =============== LINKED INK ====================================
    A stroke or a text can be linked to a point, a line, a circle or an
@@ -100,7 +101,7 @@ export function linkItems(items, anchor) {
     t = lineFraction(anchor, { x: (b.minX + b.maxX) / 2, y: (b.minY + b.maxY) / 2 });
   }
   for (const it of items) {
-    it.link = { to: anchor.id, f: anchorFrame(anchor, t, isImage(it)) };
+    it.link = { to: anchor.id, f: anchorFrame(anchor, t, isImage(it) || isShape(it)) };
     if (t != null) it.link.t = t;
   }
   return true;
@@ -133,7 +134,7 @@ export function syncLinks(items, lookup, skip = null) {
   for (const it of items) {
     if (!it.link || (skip && skip.has(it))) continue;
     const anchor = lookup.get(it.link.to);
-    const frame = anchor ? anchorFrame(anchor, it.link.t, isImage(it)) : null;
+    const frame = anchor ? anchorFrame(anchor, it.link.t, isImage(it) || isShape(it)) : null;
     if (!frame) { delete it.link; changed = true; continue; }
     if (sameFrame(frame, it.link.f)) continue;
     carry(it, frame);

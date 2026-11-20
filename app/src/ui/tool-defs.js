@@ -20,6 +20,7 @@ export const TOOL_ICONS = {
   pen: svg('<path d="M4 20l1-4L16 5l3 3L8 19z"/><path d="M14 7l3 3"/><path d="M4 20l4-1"/>'),
   marker: svg('<path d="M9 15l-3 3v2h4l3-3"/><path d="M9 15l6-10 4 4-10 6z"/><path d="M4 21h16" stroke-width="3" opacity="0.45"/>'),
   arrow: svg('<path d="M5 19 18 6"/><path d="M9 5h10v10"/>'),
+  shape: svg('<rect x="3.5" y="11.5" width="9" height="9" rx="1"/><circle cx="16.5" cy="8" r="4.5"/><path d="M8 3.5l1.2 2.6 2.8.3-2.1 1.9.6 2.8L8 9.7l-2.5 1.4.6-2.8L4 6.4l2.8-.3z"/>'),
   text: svg('<path d="M5 7V5h14v2"/><path d="M12 5v14"/><path d="M9 19h6"/>'),
   eraser: svg('<path d="M9 20h11"/><path d="M4.5 15.5l9-9a2 2 0 0 1 2.8 0l2.2 2.2a2 2 0 0 1 0 2.8L11 19H8z"/><path d="M9 11l5 5"/>'),
   curve: svg('<path d="M4 19C4 9 13 15 20 5"/><path d="M4 19L9 10.5" stroke-width="1" opacity="0.6"/><path d="M20 5L14.2 13.5" stroke-width="1" opacity="0.6"/><rect x="8" y="9.5" width="2.4" height="2.4" fill="currentColor" stroke="none"/><rect x="13" y="12.4" width="2.4" height="2.4" fill="currentColor" stroke="none"/><circle cx="4" cy="19" r="1.4" fill="currentColor" stroke="none"/><circle cx="20" cy="5" r="1.4" fill="currentColor" stroke="none"/>'),
@@ -85,6 +86,7 @@ export const TOOLS = [
   { id: 'pen',              label: 'Pen',             key: 'N',       group: 'freehand' },
   { id: 'marker',           label: 'Marker',          key: 'G',       group: 'freehand' },
   { id: 'arrow',            label: 'Arrow',           key: 'W',       group: 'freehand' },
+  { id: 'shape',            label: 'Shapes',          key: 'U',       group: 'freehand' },
   { id: 'text',             label: 'Text',            key: 'T',       group: 'freehand' },
   { id: 'eraser',           label: 'Eraser',          key: 'E',       group: 'freehand' },
 ];

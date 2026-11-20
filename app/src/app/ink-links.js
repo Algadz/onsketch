@@ -3,7 +3,7 @@ import { anchorFrame, anchorLookup, canAnchor, groupItems, linkItems, rebaseLink
 import { inkBounds, isText, unionBounds } from '../core/strokes.js';
 import { isImage } from '../core/images.js';
 
-const inkWord = (it) => (isText(it) ? 'text' : isImage(it) ? 'image' : it.kind === 'arrow' ? 'arrow' : 'stroke');
+const inkWord = (it) => (isText(it) ? 'text' : isImage(it) ? 'image' : it.kind === 'arrow' ? 'arrow' : it.kind === 'shape' ? 'shape' : 'stroke');
 import { detachMovedEnds, syncArrowEnds } from '../core/arrows.js';
 
 /* =============== GROUP AND LINK INK ============================

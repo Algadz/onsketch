@@ -11,6 +11,7 @@ import { BezierTool } from '../tools/bezier.js';
 import { EraserTool, InkTool } from '../tools/freehand.js';
 import { TextTool } from '../tools/text.js';
 import { ArrowTool } from '../tools/arrow.js';
+import { ShapeTool } from '../tools/shape.js';
 import { SmartDimensionTool } from '../tools/smartdim.js';
 import { trackOnce } from '../ui/analytics.js';
 
@@ -143,6 +144,7 @@ export class RenderEventsMixin {
       case 'eraser':    this.tool = new EraserTool(this); break;
       case 'text':      this.tool = new TextTool(this); break;
       case 'arrow':     this.tool = new ArrowTool(this); break;
+      case 'shape':     this.tool = new ShapeTool(this); break;
     }
     if (this.tool.activate) this.tool.activate();
     document.querySelectorAll('[data-tool]').forEach(b => b.classList.toggle('active', b.dataset.tool === name));
@@ -331,7 +333,7 @@ export class RenderEventsMixin {
    *  snapping matters. */
   _placingOrDragging() {
     const t = this.tool;
-    return ['line', 'centerLine', 'rectangle', 'centerRectangle', 'circle', 'threePointCircle', 'hexagon', 'arc', 'point', 'curve', 'arrow'].includes(this.toolName)
+    return ['line', 'centerLine', 'rectangle', 'centerRectangle', 'circle', 'threePointCircle', 'hexagon', 'arc', 'point', 'curve', 'arrow', 'shape'].includes(this.toolName)
       || !!(t && (t.dragging || t.arrowEnd));
   }
 
@@ -422,6 +424,7 @@ export class RenderEventsMixin {
       else if (k === 'e') this.setTool('eraser');
       else if (k === 't') this.setTool('text');
       else if (k === 'w') this.setTool('arrow');
+      else if (k === 'u') this.setTool('shape');
       else if (k === 'i' && !ev.ctrlKey && !ev.metaKey && !ev.altKey) this.openImagePicker();
       else if (k === 'm') this.setDimensionsVisible(!this.showDimensions);
       else if (k === 'k') this.setRelationsVisible(!this.showRelations);

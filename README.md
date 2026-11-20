@@ -42,6 +42,7 @@ npm run test:ctxmenu # no browser context menu in the editor (only the app's), e
 npm run test:sizes   # line weight (screen px, sketch-wide, same at every zoom), pen / arrow / text sizes in drawing units
 npm run test:groups  # groups (click, click again inside, Esc), clicking through overlapping items, right-click list
 npm run test:driven  # driving / driven dimensions (Properties, rows, right-click), refused when over-defining; size fields drag like Blender
+npm run test:shapes  # Shapes tool: rectangles, ellipses, stars… (Shift, Ctrl, fill, line, Properties, eraser, saved)
 node tests/style.e2e.mjs  # restyling arrows / texts after drawing, touch tap-through guard
 node tests/analytics.e2e.mjs  # Umami events: what is counted, once per visit, nothing sent from tests
 npm run test:mobile  # phone / tablet layout and touch input on emulated devices
@@ -144,6 +145,21 @@ cached modules after a deploy. `npm test` fails if the stamp is out of date.
   handles to re-aim it (snapping and attaching the same way); dragging an
   end off its shape, or the whole arrow away, detaches it. Properties
   shows the style and what the arrow is attached to (Detach).
+- **Shapes (U)**, in the Sketch window: rectangle, rounded rectangle,
+  ellipse, triangle, diamond, pentagon, hexagon, star, heart, speech
+  bubble, check mark and cross. Pick one (the grid in the window or the
+  options bar), then drag a box on the canvas; the shape fills it. Shift
+  gives equal sides (a square, a circle, a regular star), Ctrl draws from
+  the middle, corners snap with Snap on (Alt: no snap). Outline width in
+  the document unit (drag the field, Blender-style), Fill: none / tint
+  (the colour, light) / solid / paper (the canvas colour, hides what is
+  behind), Line: solid / dashed; the colour is the shared one. The shape
+  just drawn is selected, so restyling it is one click; picking another
+  shape only sets the next one. With the Select tool shapes move, resize,
+  stretch and turn with the transform box, can be grouped, linked to a
+  shape, copied and erased like any ink, and Properties changes the
+  shape, fill, line and box size. Shapes are ink: never solved or
+  dimensioned, and they don't close areas for the Fill tool.
 - **Resize and turn ink**: select strokes, arrows, texts or a group (no
   shapes) and a transform box appears. Corner handles resize keeping
   proportions (Shift: free), edge handles stretch one way (Shift: keep

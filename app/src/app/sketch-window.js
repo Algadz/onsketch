@@ -1,6 +1,7 @@
 import { PALETTE } from '../core/style.js';
 import { BOX_COLORS, PAPER, cleanBox, isText } from '../core/strokes.js';
 import { ARROW_HEADS, ARROW_TIPS, isArrow } from '../core/arrows.js';
+import { OPEN_SHAPES, SHAPES, SHAPE_FILLS, SHAPE_IDS, isShape, shapeGlyph } from '../core/shapes.js';
 import { INK } from '../render/theme.js';
 import { TOOL_ICONS, toolDef } from '../ui/tool-defs.js';
 import { evaluate } from '../core/expr.js';
@@ -10,7 +11,7 @@ const esc = (t) => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt
 
 /* =============== SKETCH WINDOW =================================
    Floating window for the freehand side of OnSketch: Fill, Pen, Marker,
-   Text and Eraser, and the settings of the current tool (the colour is
+   Arrow, Shapes (rectangle, ellipse, star…), Text and Eraser, and the settings of the current tool (the colour is
    the one shared colour of the Colors window).
 
    Ink is separate from geometry:
@@ -20,7 +21,9 @@ const esc = (t) => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt
    - their colour is the shared colour, never the constraint-state colour.
    Settings are per browser (saved with the drawing style).
    ============================================================ */
-export const SKETCH_TOOLS = ['fill', 'pen', 'marker', 'arrow', 'text', 'eraser'];
+export const SKETCH_TOOLS = ['fill', 'pen', 'marker', 'arrow', 'shape', 'text', 'eraser'];
+/** Style targets: ink whose style the controls edit while selected. */
+const isStyled = (s) => isArrow(s) || isText(s) || isShape(s);
 
 /** The eraser is a cursor: its size stays in screen pixels. Every other
  *  size is on the drawing, in the document unit (core/sizes.js). */
@@ -33,6 +36,7 @@ export const INK_DEFAULTS = {
   eraserSize: 16,
   textSize: 18, textBold: false, textBox: 'none', textBoxColor: PAPER,
   arrowSize: 2, arrowTips: 'end', arrowHead: 'filled', arrowDash: false,
+  shapeKind: 'rect', shapeFill: 'none', shapeDash: false,
 };
 
 export class SketchWindowMixin {
@@ -135,7 +139,7 @@ export class SketchWindowMixin {
     sizes[key] = v;
     if (key === 'linePx') {
       // the whole sketch: every shape is drawn with it
-    } else if (key === 'arrow' || key === 'text') {
+    } else if (key === 'arrow' || key === 'text' || key === 'shape') {
       this._refineInk({ [key + 'Size']: v }, false);
     }
     if (live) { this.requestRender(); return; }      // while scrubbing: no undo step yet
@@ -160,6 +164,14 @@ export class SketchWindowMixin {
         tips: ARROW_TIPS.includes(p.arrowTips) ? p.arrowTips : 'end',
         head: ARROW_HEADS.includes(p.arrowHead) ? p.arrowHead : 'filled',
         dash: !!p.arrowDash,
+      };
+    }
+    if (kind === 'shape') {
+      return {
+        size: sizes.shape, opacity: 1,
+        shape: SHAPE_IDS.includes(p.shapeKind) ? p.shapeKind : 'rect',
+        fill: SHAPE_FILLS.includes(p.shapeFill) ? p.shapeFill : 'none',
+        dash: !!p.shapeDash,
       };
     }
     if (kind === 'text') {
@@ -230,19 +242,20 @@ export class SketchWindowMixin {
    *  Text tools only; `anyTool` skips that check). */
   _styleTargets(anyTool = false) {
     if (this._textEdit) return this.toolName === 'text' || anyTool ? [this._textEdit.item] : [];
-    if (!anyTool && !['select', 'arrow', 'text'].includes(this.toolName)) return [];
+    if (!anyTool && !['select', 'arrow', 'shape', 'text'].includes(this.toolName)) return [];
     const sketch = this.activeSketch(); if (!sketch) return [];
     const layerId = this.project.activeLayerId;
-    return sketch.strokes.filter(s => s.selected && s.layerId === layerId && (isArrow(s) || isText(s)));
+    return sketch.strokes.filter(s => s.selected && s.layerId === layerId && isStyled(s));
   }
 
   /** Settings as the controls show them: the style of the first selected
    *  item of that kind, else the settings for the next one. */
   _shownSettings(kind) {
     const s = this.inkSettings(kind);
-    if (kind !== 'arrow' && kind !== 'text') return s;
-    const it = this._styleTargets().find(x => (kind === 'arrow' ? isArrow(x) : isText(x)));
+    if (kind !== 'arrow' && kind !== 'text' && kind !== 'shape') return s;
+    const it = this._styleTargets().find(x => (kind === 'arrow' ? isArrow(x) : kind === 'shape' ? isShape(x) : isText(x)));
     if (!it) return s;
+    if (kind === 'shape') return { ...s, size: it.width, fill: it.fill || 'none', dash: !!it.dash, open: OPEN_SHAPES.has(it.shape) };
     if (kind === 'arrow') {
       return { ...s, size: it.width, tips: it.tips || 'end', head: it.head || 'filled', dash: !!it.dash };
     }
@@ -272,6 +285,12 @@ export class SketchWindowMixin {
           else if (k === 'arrowTips') { if (v === 'end') delete it.tips; else it.tips = v; }
           else if (k === 'arrowHead') { if (v === 'filled') delete it.head; else it.head = v; }
           else if (k === 'arrowDash') { if (v) it.dash = true; else delete it.dash; }
+          else continue;
+          hit = true;
+        } else if (isShape(it)) {
+          if (k === 'shapeSize') it.width = v;
+          else if (k === 'shapeFill') { if (v === 'none') delete it.fill; else it.fill = v; }
+          else if (k === 'shapeDash') { if (v) it.dash = true; else delete it.dash; }
           else continue;
           hit = true;
         } else if (isText(it)) {
@@ -304,14 +323,15 @@ export class SketchWindowMixin {
     return this._lastSketchTool || 'pen';
   }
 
-  /** 'arrow' or 'text' when the selected ink is all arrows or all texts
+  /** 'arrow', 'shape' or 'text' when the selected ink is all of one kind
    *  (a mix with strokes keeps the window as it is). */
   _selectedStyleKind() {
     const items = this._styleTargets();
     if (!items.length) return null;
     const layerId = this.project.activeLayerId;
-    if (this.selectedStrokes().some(s => s.layerId === layerId && !isArrow(s) && !isText(s))) return null;
+    if (this.selectedStrokes().some(s => s.layerId === layerId && !isStyled(s))) return null;
     if (items.every(isArrow)) return 'arrow';
+    if (items.every(isShape)) return 'shape';
     if (items.every(isText)) return 'text';
     return null;
   }
@@ -342,13 +362,20 @@ export class SketchWindowMixin {
       const sizeRow = target === 'eraser'
         ? `<div class="range-row"><input type="range" min="${min}" max="${max}" step="1" value="${s.size}" aria-label="Eraser size"><span>${s.size} px</span></div>`
         : this.sizeFieldHTML(target, '', 'data-size', s.size);
-      opts = `<div class="prop-row"><label>${toolDef(target).label} ${target === 'text' ? 'height' : 'size'}</label>${sizeRow}</div>
+      const sizeName = target === 'text' ? 'Text height' : target === 'shape' ? 'Outline' : `${toolDef(target).label} size`;
+      // The picker is the next shape to draw: hidden while selected
+      // shapes are restyled with the Select tool (Properties has theirs).
+      const restyling = target === 'shape' && this.toolName === 'select';
+      opts = `${target === 'shape' && !restyling ? shapePickerHTML(s.shape, 'data-shape') : ''}<div class="prop-row"><label>${sizeName}</label>${sizeRow}</div>
         ${target === 'text' ? `<div class="prop-row"><label>Style</label><span class="seg"><button class="${s.bold ? '' : 'on'}" data-bold="0">Regular</button><button class="${s.bold ? 'on' : ''}" data-bold="1"><b>Bold</b></button></span></div>
           <div class="prop-row"><label>Box</label>${boxModeHTML(s.boxMode, 'data-boxmode')}</div>
           ${s.box ? `<div class="prop-row"><label>Box colour</label>${boxSwatchesHTML(s.box.color, 'data-boxcolor')}</div>` : ''}` : ''}
         ${target === 'arrow' ? arrowStyleHTML(s, 'data-arrow', true) : ''}
+        ${target === 'shape' ? shapeStyleHTML(s, 'data-shapestyle', true) : ''}
         <div class="hint">${target === 'eraser'
           ? 'Removes whole strokes and texts on the active layer. Shapes and fills are not affected.'
+          : target === 'shape'
+            ? 'Pick a shape, then drag a box on the canvas. Shift: equal sides (square, circle), Ctrl: from the middle. The Select tool\'s box handles resize and turn it.'
           : target === 'arrow'
             ? 'Drag from where the arrow starts to what it points at. With Snap on, an end dropped on a shape stays attached to it. Shift: 15° steps.'
           : target === 'text'
@@ -366,6 +393,7 @@ export class SketchWindowMixin {
     body.querySelectorAll('[data-boxmode]').forEach(b => b.addEventListener('click', () => this._setInk({ textBox: b.dataset.boxmode })));
     bindBoxSwatches(body, 'data-boxcolor', (c) => this._setInk({ textBoxColor: c }));
     bindArrowStyle(body, 'data-arrow', (k, v) => this._setInk({ [ARROW_PREF[k]]: v }));
+    this._bindShapeControls(body, 'data-shape', 'data-shapestyle');
     this.bindSizeFields(body);
     const r = body.querySelector('input[type=range]');           // the eraser (screen px)
     if (r) {
@@ -459,6 +487,11 @@ export class SketchWindowMixin {
       if (s.box) html += `<span class="opt">${boxSwatchesHTML(s.box.color, 'data-opt-boxcolor')}</span>`;
       const ink = this._shownColor();
       html += `<label class="opt">Colour <i class="opt-sw" style="--sw:${ink === INK ? 'var(--text)' : ink}"></i></label>`;
+    } else if (id === 'shape') {
+      if (!restyle) html += `<span class="opt">${shapePickerHTML(s.shape, 'data-opt-shape', false)}</span>`;
+      html += `<span class="opt">${shapeStyleHTML(s, 'data-opt-shapestyle', false)}</span>`;
+      const ink = this._shownColor();
+      html += `<label class="opt">Colour <i class="opt-sw" style="--sw:${ink === INK ? 'var(--text)' : ink}"></i></label>`;
     } else if (id === 'arrow') {
       html += `<span class="opt">${arrowStyleHTML(s, 'data-opt-arrow', false)}</span>`;
       const ink = this._shownColor();
@@ -468,7 +501,8 @@ export class SketchWindowMixin {
       const ink = this.pen.fillColor;
       html += `<label class="opt">Colour <i class="opt-sw" style="--sw:${ink === INK ? 'var(--text)' : ink}"></i></label>`;
     }
-    const hint = restyle ? `Restyles the selected ${id === 'arrow' ? 'arrows' : 'texts'}; it also sets the style of the next one.`
+    const hint = restyle ? `Restyles the selected ${id === 'arrow' ? 'arrows' : id === 'shape' ? 'shapes' : 'texts'}; it also sets the style of the next one.`
+      : id === 'shape' ? 'Drag a box. Shift: equal sides, Ctrl: from the middle.'
       : id === 'eraser' ? 'Drag over strokes and texts to erase them (active layer only).'
       : id === 'text' ? 'Click to place text, Enter to finish, Shift+Enter for a new line. {D1} shows a value. Click a text to edit it.'
       : id === 'arrow' ? `Drag to what you point at. Ends snap to shapes and stay attached. Shift: 15° steps.${this.touchUI ? '' : ` ${/Mac|iPhone|iPad/.test(navigator.platform || '') ? '⌥ Option' : 'Alt'}: no snap.`}`
@@ -492,6 +526,26 @@ export class SketchWindowMixin {
     bar.querySelectorAll('[data-opt-boxmode]').forEach(b => b.addEventListener('click', (e) => { e.preventDefault(); this._setInk({ textBox: b.dataset.optBoxmode }); }));
     bindBoxSwatches(bar, 'data-opt-boxcolor', (c) => this._setInk({ textBoxColor: c }));
     bindArrowStyle(bar, 'data-opt-arrow', (k, v) => this._setInk({ [ARROW_PREF[k]]: v }));
+    this._bindShapeControls(bar, 'data-opt-shape', 'data-opt-shapestyle');
+  }
+
+  /** Shape picker: the next shape to draw (as in drawing apps, it never
+   *  changes the selected one; Properties does that). It deselects and
+   *  takes the Shapes tool. Fill / line buttons set the next shape's style
+   *  and restyle the selected shapes. */
+  _bindShapeControls(root, pickAttr, styleAttr) {
+    root.querySelectorAll(`[${pickAttr}]`).forEach(b => b.addEventListener('click', (e) => {
+      e.preventDefault();
+      this.releaseInkCurrent();
+      this._setInk({ shapeKind: b.getAttribute(pickAttr) });
+      if (this.toolName !== 'shape') this.setTool('shape');
+      document.getElementById('status-hint').textContent = this.tool.hint?.() || '';
+    }));
+    root.querySelectorAll(`[${styleAttr}]`).forEach(b => b.addEventListener('click', (e) => {
+      e.preventDefault();
+      const [k, v] = b.getAttribute(styleAttr).split(':');
+      this._setInk(k === 'dash' ? { shapeDash: v === 'true' } : { shapeFill: v });
+    }));
   }
 }
 
@@ -561,4 +615,35 @@ export function bindBoxSwatches(root, attr, set) {
   root.querySelectorAll(`button[${attr}]`).forEach(b => b.addEventListener('click', (e) => { e.preventDefault(); set(b.getAttribute(attr)); }));
   const inp = root.querySelector(`input[${attr}="custom"]`);
   if (inp) inp.addEventListener('change', () => set(inp.value));
+}
+
+/* ---- Shape controls (Sketch window, options bar, Properties) ----
+   A grid of the shapes (drawn from their own outlines), Fill: none · tint
+   · solid · paper, and Line: solid · dashed. `s` holds shape / fill /
+   dash; null means mixed. */
+export function shapePickerHTML(current, attr, rows = true) {
+  const grid = `<span class="shape-grid" role="group" aria-label="Shape">${SHAPES.map(([id, label]) =>
+    `<button type="button" class="shape-btn${id === current ? ' on' : ''}" ${attr}="${id}" title="${label}" aria-label="${label}" aria-pressed="${id === current}">${shapeGlyph(id)}</button>`).join('')}</span>`;
+  return rows ? `<div class="prop-row shape-row"><label>Shape</label>${grid}</div>` : grid;
+}
+
+const FILL_OPTIONS = [
+  ['none', '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="2.5" y="2.5" width="11" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>', 'No fill: outline only'],
+  ['tint', '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="2.5" y="2.5" width="11" height="11" rx="1.5" fill="currentColor" fill-opacity=".25" stroke="currentColor" stroke-width="1.4"/></svg>', 'Light fill in the shape\'s colour'],
+  ['solid', '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="2.5" y="2.5" width="11" height="11" rx="1.5" fill="currentColor" stroke="currentColor" stroke-width="1.4"/></svg>', 'Solid fill in the shape\'s colour'],
+  ['paper', '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M1 8h14" stroke="currentColor" stroke-width="1.2" stroke-dasharray="2 1.5"/><rect x="2.5" y="2.5" width="11" height="11" rx="1.5" fill="var(--canvas-a, #fff)" stroke="currentColor" stroke-width="1.4"/></svg>', 'Paper fill: the canvas colour, hides what is behind'],
+];
+const LINE_OPTIONS = [
+  [false, '<svg viewBox="0 0 28 12" width="28" height="12" aria-hidden="true"><path d="M3 6h22" stroke="currentColor" stroke-width="1.6"/></svg>', 'Solid outline'],
+  [true, '<svg viewBox="0 0 28 12" width="28" height="12" aria-hidden="true"><path d="M3 6h22" stroke="currentColor" stroke-width="1.6" stroke-dasharray="4 3"/></svg>', 'Dashed outline'],
+];
+
+export function shapeStyleHTML(s, attr, rows = true) {
+  const open = s.open ?? OPEN_SHAPES.has(s.shape);
+  const fill = `<span class="seg arrow-seg">${FILL_OPTIONS.map(([v, glyph, title]) =>
+    `<button type="button" class="${s.fill === v ? 'on' : ''}" ${attr}="fill:${v}" title="${title}" aria-label="${title}"${open ? ' disabled' : ''}>${glyph}</button>`).join('')}</span>`;
+  const line = `<span class="seg arrow-seg">${LINE_OPTIONS.map(([v, glyph, title]) =>
+    `<button type="button" class="${s.dash === v ? 'on' : ''}" ${attr}="dash:${v}" title="${title}" aria-label="${title}">${glyph}</button>`).join('')}</span>`;
+  if (!rows) return fill + line;
+  return `<div class="prop-row"><label>Fill</label>${fill}</div><div class="prop-row"><label>Line</label>${line}</div>`;
 }

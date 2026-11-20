@@ -5,6 +5,7 @@
      marker  highlighter width
      arrow   arrow line width (heads scale with it)
      text    text height (letter size)
+     shape   outline width of shapes (rectangles, ellipses, stars…)
    A 5 mm text is 5 mm at every zoom; the size you pick doesn't depend on
    the zoom you are at. Each is first set from the view (what the old pixel
    default looked like at that zoom), rounded, then stays put.
@@ -24,10 +25,10 @@ export const ZOOM_100 = 4;
 export const DEFAULT_LINE_PX = 1.4;
 
 /** Ink sizes, in drawing units. */
-export const SIZE_KEYS = ['pen', 'marker', 'arrow', 'text'];
+export const SIZE_KEYS = ['pen', 'marker', 'arrow', 'text', 'shape'];
 /** Screen pixels the ink defaults looked like (used to pick a first size). */
-export const SIZE_PX = { pen: 3, marker: 18, arrow: 2, text: 18 };
-export const SIZE_LABELS = { linePx: 'Line weight', pen: 'Pen size', marker: 'Marker size', arrow: 'Arrow size', text: 'Text size' };
+export const SIZE_PX = { pen: 3, marker: 18, arrow: 2, text: 18, shape: 2 };
+export const SIZE_LABELS = { linePx: 'Line weight', pen: 'Pen size', marker: 'Marker size', arrow: 'Arrow size', text: 'Text size', shape: 'Outline width' };
 /** Never thinner than this on screen. */
 export const MIN_LINE_PX = 0.75;
 

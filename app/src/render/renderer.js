@@ -7,6 +7,7 @@ import { getTheme, INK } from './theme.js';
 import { BOX_PAD, PAPER, TEXT_LINE, isText, textBox, textCorners, textFont, textLines } from '../core/strokes.js';
 import { headSize, headedEnds, isArrow } from '../core/arrows.js';
 import { imageCorners, imageElement, isImage } from '../core/images.js';
+import { TINT, isShape, shapeCorners, shapeFilled, shapePaths } from '../core/shapes.js';
 
 function roundRect(ctx, x, y, w, h, r) {
   r = Math.max(0, Math.min(r, w / 2, h / 2));
@@ -179,6 +180,7 @@ export class Renderer {
     if (isText(st)) { this.drawTextItem(st); return; }
     if (isArrow(st)) { this.drawArrow(st); return; }
     if (isImage(st)) { this.drawImageItem(st); return; }
+    if (isShape(st)) { this.drawShapeItem(st); return; }
     const ctx = this.ctx, v = this.view;
     const pts = st.points.map(p => v.worldToScreen(p));
     if (!pts.length) return;
@@ -245,6 +247,38 @@ export class Renderer {
     }
     ctx.restore();
     if (st.selected) this._drawInkSelection(textCorners(st).map(q => v.worldToScreen(q)), 0);
+  }
+
+  /** A shape (rectangle, ellipse, star…): its outline mapped onto its
+   *  frame, filled (tint, solid or paper) under the outline. */
+  drawShapeItem(st) {
+    const ctx = this.ctx, v = this.view;
+    const ink = st.color === INK ? this.theme.ink : st.color;
+    const paths = shapePaths(st).map(p => ({ closed: p.closed, pts: p.pts.map(q => v.worldToScreen(q)) }));
+    const trace = () => {
+      ctx.beginPath();
+      for (const p of paths) {
+        p.pts.forEach((q, i) => (i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)));
+        if (p.closed) ctx.closePath();
+      }
+    };
+    ctx.save();
+    ctx.globalAlpha *= st.opacity ?? 1;
+    if (shapeFilled(st)) {
+      trace();
+      if (st.fill === 'paper') ctx.fillStyle = this.boxColor(PAPER);
+      else ctx.fillStyle = st.fill === 'tint' ? withAlpha(ink, TINT) : ink;
+      ctx.fill();
+    }
+    const w = Math.max(0.75, (st.width || 0) * v.zoom);
+    ctx.lineWidth = w;
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.strokeStyle = ink;
+    if (st.dash) ctx.setLineDash([w * 3.2, w * 2.4]);
+    trace();
+    ctx.stroke();
+    ctx.restore();
+    if (st.selected) this._drawInkSelection(shapeCorners(st).map(p => v.worldToScreen(p)), w);
   }
 
   /** An imported picture, mapped onto its three corner points (so it

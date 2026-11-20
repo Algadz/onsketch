@@ -14,7 +14,7 @@ test('round sizes', () => {
 test('ink sizes are in drawing units, set once from the view', () => {
   const p = new Project(); p.addSketch('S');
   ensureSizes(p, 4);
-  assert.deepEqual(p.sizes, { pen: 0.8, marker: 5, arrow: 0.5, text: 5, linePx: 1.4 });
+  assert.deepEqual(p.sizes, { pen: 0.8, marker: 5, arrow: 0.5, text: 5, shape: 0.5, linePx: 1.4 });
   ensureSizes(p, 40);                        // zooming in later changes nothing
   assert.equal(p.sizes.pen, 0.8);
   const back = Project.fromJSON(JSON.parse(JSON.stringify(p.toJSON())));
