@@ -50,8 +50,8 @@ function installFake() {
     functions: { invoke: async (name, { body }) => {
       window.__billingCalls = [...(window.__billingCalls || []), { name, body }];
       if (name !== 'billing' || !session()) return { data: null, error: new Error('Unauthorized') };
-      if (body.action === 'checkout') return { data: { url: `https://onsketch.lemonsqueezy.test/checkout/${body.interval}?user=${session().user.id}` }, error: null };
-      if (body.action === 'portal') return { data: { url: 'https://onsketch.lemonsqueezy.test/billing' }, error: null };
+      if (body.action === 'checkout') return { data: { url: `https://checkout.stripe.test/c/${body.interval}?user=${session().user.id}` }, error: null };
+      if (body.action === 'portal') return { data: { url: 'https://billing.stripe.test/p' }, error: null };
       return { data: null, error: new Error('Unknown action') };
     } },
     rpc: async (fn, args) => {
@@ -587,7 +587,7 @@ if (process.env.SHOT_DIR) { await page.click('#site-account .site-acc-btn'); awa
 if (process.env.SHOT_DIR) await page.keyboard.press('Escape');
 
 // Pricing: free user → checkout through the billing function.
-await page.route(/lemonsqueezy\.test/, r => r.fulfill({ status: 200, contentType: 'text/html', body: '<title>checkout</title>' }));
+await page.route(/stripe\.test/, r => r.fulfill({ status: 200, contentType: 'text/html', body: '<title>checkout</title>' }));
 await page.goto(base.replace('/app/', '/pricing/'));
 await page.waitForSelector('.pr-cta[data-plan="pro"] [data-a="buy"]');
 check((await page.textContent('[data-price]')) === '$89' && /7\.42/.test(await page.textContent('[data-sub]')), 'pricing: yearly by default, $89 ($7.42 a month)');
@@ -595,8 +595,8 @@ await page.click('.pr-toggle [data-interval="month"]');
 check((await page.textContent('[data-price]')) === '$9.99' && (await page.textContent('.pr-cta[data-plan="pro"] .btn')) === 'Get Pro monthly', 'pricing: monthly $9.99');
 check((await page.textContent('.pr-cta[data-plan="free"]')).includes('Your plan'), 'pricing: Free marked as your plan');
 await page.click('.pr-cta[data-plan="pro"] [data-a="buy"]');
-await page.waitForURL(/lemonsqueezy\.test\/checkout\/month\?user=u1/);
-check(true, 'Get Pro opens the Lemon Squeezy checkout for this user, monthly');
+await page.waitForURL(/checkout\.stripe\.test\/c\/month\?user=u1/);
+check(true, 'Get Pro opens the Stripe checkout for this user, monthly');
 
 // Back from paying: the page waits for the webhook, then shows Pro.
 await page.goto(base.replace('/app/', '/pricing/?welcome=1'));
@@ -608,7 +608,7 @@ await page.waitForFunction(() => document.getElementById('pr-banner').classList.
 check(/Pro is on/.test(await page.textContent('#pr-banner')) && !/welcome/.test(page.url()), 'the webhook lands: "OnSketch Pro is on", URL cleaned');
 check(/Renews on/.test(await page.textContent('.pr-cta[data-plan="pro"]')), 'pricing as Pro: your plan, with the renewal date');
 await page.click('.pr-cta[data-plan="pro"] [data-a="portal"]');
-await page.waitForURL(/lemonsqueezy\.test\/billing/);
+await page.waitForURL(/billing\.stripe\.test\/p/);
 check(true, 'Manage subscription opens the customer portal');
 
 // Pro in My sketches and the editor: no limit, private sketches.

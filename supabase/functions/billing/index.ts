@@ -1,25 +1,27 @@
-// Supabase Edge Function: billing
+// Supabase Edge Function: billing (Stripe)
 //
 // Called by the signed-in app (Verify JWT ON, the default):
 //   POST { action: 'checkout', interval: 'month' | 'year' }  → { url }
-//     A Lemon Squeezy checkout for OnSketch Pro, with the user's id in
-//     custom data (the webhook reads it back), their email pre-filled, and
-//     a return to https://onsketch.io/pricing/?welcome=1 after paying.
+//     A Stripe Checkout session for OnSketch Pro (a subscription), with the
+//     user's id as client_reference_id and in the subscription's metadata
+//     (the stripe-webhook function reads it back), their email pre-filled
+//     (or their Stripe customer reused), and a return to
+//     https://onsketch.io/pricing/?welcome=1 after paying.
 //   POST { action: 'portal' }  → { url }
-//     A fresh customer-portal link (manage, cancel, invoices; Lemon
-//     Squeezy's links expire after a day, so they are fetched on demand).
+//     A fresh Stripe customer-portal session (change card, switch monthly /
+//     yearly, cancel, invoices).
 //
 // Secrets (Edge Functions → Secrets):
-//   LEMONSQUEEZY_API_KEY   API key (Lemon Squeezy → Settings → API)
-//   LEMONSQUEEZY_STORE_ID  numeric store id (Settings → Stores)
-// Optional: LEMONSQUEEZY_MONTHLY_ID / LEMONSQUEEZY_YEARLY_ID (defaults
-// below), SITE_URL (default https://onsketch.io).
-// The ids may be variant ids or product ids: a product id is resolved to
-// its first published variant.
+//   STRIPE_SECRET_KEY     sk_test_… or sk_live_… (Developers → API keys)
+//   STRIPE_PRICE_MONTHLY  price_… of the monthly Pro price
+//   STRIPE_PRICE_YEARLY   price_… of the yearly Pro price
+// Optional:
+//   STRIPE_AUTOMATIC_TAX  "1" to have Stripe Tax add sales tax / VAT at
+//                         checkout (Stripe Tax must be set up first)
+//   SITE_URL              default https://onsketch.io
 // No imports at the top: tests run handleBilling() under Node.
 
-const API = 'https://api.lemonsqueezy.com/v1';
-const DEFAULT_IDS = { month: '1511119', year: '1511125' };
+const API = 'https://api.stripe.com/v1';
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -29,30 +31,33 @@ const cors = {
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json' } });
 
-type Env = { apiKey: string; storeId: string; ids: { month: string; year: string }; site: string };
+type Env = { secretKey: string; prices: { month: string; year: string }; automaticTax: boolean; site: string };
 type Deps = { env: Env; getUser: (req: Request) => Promise<any>; getPlanRow: (userId: string) => Promise<any>; fetch: typeof fetch };
 
-async function ls(deps: Deps, path: string, init: RequestInit = {}) {
+/** Stripe's form encoding, nested keys included: { a: { b: 1 } } → a[b]=1. */
+export function formEncode(obj: Record<string, unknown>, prefix = ''): string {
+  const out: string[] = [];
+  for (const [k, v] of Object.entries(obj)) {
+    if (v === undefined || v === null) continue;
+    const key = prefix ? `${prefix}[${k}]` : k;
+    if (typeof v === 'object') out.push(formEncode(v as Record<string, unknown>, key));
+    else out.push(`${encodeURIComponent(key)}=${encodeURIComponent(String(v))}`);
+  }
+  return out.filter(Boolean).join('&');
+}
+
+async function stripe(deps: Deps, path: string, params: Record<string, unknown>) {
   const res = await deps.fetch(API + path, {
-    ...init,
-    headers: { Accept: 'application/vnd.api+json', 'Content-Type': 'application/vnd.api+json', Authorization: `Bearer ${deps.env.apiKey}`, ...(init.headers || {}) },
+    method: 'POST',
+    headers: { Authorization: `Bearer ${deps.env.secretKey}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: formEncode(params),
   });
   const body = await res.json().catch(() => ({}));
   return { ok: res.ok, status: res.status, body };
 }
 
-/** A variant id from a variant or product id, or an error saying why not
- *  (bad API key, or an id this key can't see: test vs live mode). */
-export async function resolveVariant(deps: Deps, id: string): Promise<{ id: string } | { error: string }> {
-  const v = await ls(deps, `/variants/${encodeURIComponent(id)}`);
-  if (v.status === 401 || v.status === 403) return { error: 'Lemon Squeezy refused the API key (LEMONSQUEEZY_API_KEY).' };
-  if (v.ok && v.body?.data?.id) return { id: String(v.body.data.id) };
-  const list = await ls(deps, `/variants?filter[product_id]=${encodeURIComponent(id)}`);
-  const variants = (list.body?.data || []) as any[];
-  const pick = variants.find(x => x.attributes?.status === 'published') || variants.find(x => x.attributes?.status !== 'pending') || variants[0];
-  if (pick) return { id: String(pick.id) };
-  return { error: `Lemon Squeezy has no product or variant ${id} for this API key (a test-mode key only sees test-mode products, a live key only live ones).` };
-}
+/** A Stripe customer id saved by the webhook (Lemon Squeezy's were numbers). */
+const stripeCustomer = (row: any) => (typeof row?.customer_id === 'string' && row.customer_id.startsWith('cus_') ? row.customer_id : null);
 
 export async function handleBilling(req: Request, deps: Deps): Promise<Response> {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
@@ -64,45 +69,50 @@ export async function handleBilling(req: Request, deps: Deps): Promise<Response>
 
   if (body.action === 'portal') {
     const row = await deps.getPlanRow(user.id);
-    if (!row?.subscription_id) return json(404, { error: 'No subscription on this account.' });
-    if (!deps.env.apiKey) return row.portal_url ? json(200, { url: row.portal_url }) : json(500, { error: 'Billing is not configured.' });
-    const sub = await ls(deps, `/subscriptions/${encodeURIComponent(row.subscription_id)}`);
-    const url = sub.body?.data?.attributes?.urls?.customer_portal || row.portal_url;
-    return url ? json(200, { url }) : json(502, { error: "Couldn't reach the billing service." });
+    const customer = stripeCustomer(row);
+    if (!customer) {
+      // A subscription from before Stripe: its saved portal link, if any.
+      return row?.portal_url ? json(200, { url: row.portal_url }) : json(404, { error: 'No subscription on this account.' });
+    }
+    if (!deps.env.secretKey) return json(500, { error: 'Billing is not configured.' });
+    const res = await stripe(deps, '/billing_portal/sessions', { customer, return_url: `${deps.env.site}/pricing/` });
+    const url = res.body?.url;
+    if (!res.ok || !url) {
+      console.error('billing: portal', res.status, JSON.stringify(res.body?.error || res.body));
+      return json(502, { error: `Couldn't open the subscription page. (${res.body?.error?.message || 'Stripe error ' + res.status})` });
+    }
+    return json(200, { url });
   }
 
   if (body.action === 'checkout') {
     const interval = body.interval === 'year' ? 'year' : 'month';
-    if (!deps.env.apiKey || !deps.env.storeId) return json(500, { error: 'Billing is not configured.' });
+    const price = deps.env.prices[interval];
+    if (!deps.env.secretKey || !price) return json(500, { error: 'Billing is not configured.' });
     const row = await deps.getPlanRow(user.id);
-    if (row?.plan === 'premium' && ['active', 'on_trial', 'past_due'].includes(row.status)) return json(409, { error: 'You already have OnSketch Pro.' });
-    const resolved = await resolveVariant(deps, deps.env.ids[interval]);
-    if ('error' in resolved) {
-      console.error('billing: checkout', interval, resolved.error);
-      return json(502, { error: `This plan is not available right now. (${resolved.error})` });
+    if (row?.plan === 'premium' && ['active', 'trialing', 'past_due', 'on_trial'].includes(row.status)) return json(409, { error: 'You already have OnSketch Pro.' });
+    const customer = stripeCustomer(row);
+    const params: Record<string, unknown> = {
+      mode: 'subscription',
+      line_items: { 0: { price, quantity: 1 } },
+      client_reference_id: user.id,
+      metadata: { user_id: user.id },
+      subscription_data: { metadata: { user_id: user.id } },
+      success_url: `${deps.env.site}/pricing/?welcome=1`,
+      cancel_url: `${deps.env.site}/pricing/`,
+      allow_promotion_codes: 'true',
+    };
+    if (customer) params.customer = customer;
+    else if (user.email) params.customer_email = user.email;
+    if (deps.env.automaticTax) {
+      params.automatic_tax = { enabled: 'true' };
+      params.billing_address_collection = 'required';
+      if (customer) params.customer_update = { address: 'auto', name: 'auto' };
     }
-    const variant = resolved.id;
-    const res = await ls(deps, '/checkouts', {
-      method: 'POST',
-      body: JSON.stringify({
-        data: {
-          type: 'checkouts',
-          attributes: {
-            checkout_data: { email: user.email || undefined, custom: { user_id: user.id } },
-            checkout_options: { embed: false, media: true, logo: true },
-            product_options: { redirect_url: `${deps.env.site}/pricing/?welcome=1`, enabled_variants: [Number(variant)] },
-          },
-          relationships: {
-            store: { data: { type: 'stores', id: String(deps.env.storeId) } },
-            variant: { data: { type: 'variants', id: String(variant) } },
-          },
-        },
-      }),
-    });
-    const url = res.body?.data?.attributes?.url;
+    const res = await stripe(deps, '/checkout/sessions', params);
+    const url = res.body?.url;
     if (!res.ok || !url) {
-      console.error('billing: create checkout', res.status, JSON.stringify(res.body?.errors || res.body));
-      return json(502, { error: `Couldn't start the checkout. (${res.body?.errors?.[0]?.detail || 'Lemon Squeezy error ' + res.status})` });
+      console.error('billing: create checkout', res.status, JSON.stringify(res.body?.error || res.body));
+      return json(502, { error: `Couldn't start the checkout. (${res.body?.error?.message || 'Stripe error ' + res.status})` });
     }
     return json(200, { url });
   }
@@ -116,9 +126,9 @@ if (typeof Deno !== 'undefined') {
   const url = Deno.env.get('SUPABASE_URL'), anon = Deno.env.get('SUPABASE_ANON_KEY'), service = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   const admin = createClient(url, service, { auth: { persistSession: false } });
   const env: Env = {
-    apiKey: Deno.env.get('LEMONSQUEEZY_API_KEY') || '',
-    storeId: Deno.env.get('LEMONSQUEEZY_STORE_ID') || '',
-    ids: { month: Deno.env.get('LEMONSQUEEZY_MONTHLY_ID') || DEFAULT_IDS.month, year: Deno.env.get('LEMONSQUEEZY_YEARLY_ID') || DEFAULT_IDS.year },
+    secretKey: Deno.env.get('STRIPE_SECRET_KEY') || '',
+    prices: { month: Deno.env.get('STRIPE_PRICE_MONTHLY') || '', year: Deno.env.get('STRIPE_PRICE_YEARLY') || '' },
+    automaticTax: Deno.env.get('STRIPE_AUTOMATIC_TAX') === '1',
     site: (Deno.env.get('SITE_URL') || 'https://onsketch.io').replace(/\/$/, ''),
   };
   Deno.serve((req: Request) => handleBilling(req, {

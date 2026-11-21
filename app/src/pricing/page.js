@@ -6,8 +6,8 @@ import { track, trackErrors } from '../ui/analytics.js';
 /* =============== PRICING (/pricing/) ===========================
    Free vs OnSketch Pro, monthly / yearly. The buttons depend on who is
    looking: signed out → sign in first (and come back here); free →
-   checkout (Lemon Squeezy, through the "billing" Edge Function); Pro →
-   Manage subscription (customer portal). After paying, Lemon Squeezy
+   checkout (Stripe Checkout, through the "billing" Edge Function); Pro →
+   Manage subscription (Stripe customer portal). After paying, Stripe
    returns to /pricing/?welcome=1: the page waits for the webhook to
    switch the account to Pro.
    ============================================================ */
@@ -78,7 +78,7 @@ class Pricing {
     } else {
       free.innerHTML = '<span class="pr-current">✓ Your plan</span>';
       proCta.innerHTML = `<button type="button" class="btn primary" data-a="buy">Get Pro ${this.interval === 'year' ? 'yearly' : 'monthly'}</button>
-        <p class="pr-note">Secure checkout by Lemon Squeezy.</p>`;
+        <p class="pr-note">Secure checkout by Stripe.</p>`;
       proCta.querySelector('[data-a="buy"]').addEventListener('click', () => this.checkout(this.interval));
     }
   }

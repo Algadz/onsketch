@@ -1,12 +1,15 @@
-// Lemon Squeezy webhook and billing Edge Functions, run under Node with
-// test doubles for the database and the Lemon Squeezy API.
+// Stripe webhook and billing Edge Functions, run under Node with test
+// doubles for the database and the Stripe API.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { handleWebhook, hmacHex, planRow } from '../../supabase/functions/lemonsqueezy-webhook/index.ts';
-import { handleBilling } from '../../supabase/functions/billing/index.ts';
+import { handleWebhook, hmacHex, planRow, verifySignature } from '../../supabase/functions/stripe-webhook/index.ts';
+import { formEncode, handleBilling } from '../../supabase/functions/billing/index.ts';
 
 const SECRET = 'whsec_test';
 const USER = '6b93c7ee-02cc-4c5b-b6bd-e20d70ae4695';
+const NOW = Date.UTC(2026, 10, 21, 12) ;
+const T = Math.floor(NOW / 1000);
+const DAY = 86400;
 
 function fakeAdmin() {
   const tables = { billing_events: [], account_plans: [] };
@@ -19,123 +22,166 @@ function fakeAdmin() {
         if (i >= 0) tables[t][i] = row; else tables[t].push(row);
         return { error: null };
       },
+      select: () => ({ eq: (k, v) => ({ maybeSingle: async () => ({ data: tables[t].find(r => r[k] === v) || null }) }) }),
     }),
   };
 }
-const event = (name, attrs, { user = USER, test = true } = {}) => ({
-  meta: { event_name: name, test_mode: test, custom_data: user ? { user_id: user } : undefined },
-  data: { type: 'subscriptions', id: '987', attributes: { status: 'active', variant_id: 1511125, product_id: 55, customer_id: 42,
-    renews_at: '2027-11-08T00:00:00Z', ends_at: null, urls: { customer_portal: 'https://x.lemonsqueezy.com/billing?sig=1' }, ...attrs } },
+const sub = (over = {}) => ({
+  id: 'sub_1', object: 'subscription', status: 'active', customer: 'cus_9', metadata: { user_id: USER },
+  cancel_at_period_end: false, cancel_at: null,
+  items: { data: [{ current_period_end: T + 365 * DAY, price: { id: 'price_y', recurring: { interval: 'year' } } }] },
+  ...over,
 });
-async function send(body, { sign = true, secret = SECRET } = {}) {
+const event = (type, object, { live = false } = {}) => ({ id: 'evt_1', type, livemode: live, data: { object } });
+async function send(body, { sign = true, secret = SECRET, t = T } = {}) {
   const raw = JSON.stringify(body);
   const headers = { 'Content-Type': 'application/json' };
-  if (sign) headers['X-Signature'] = await hmacHex(secret, raw);
-  return new Request('https://fn/lemonsqueezy-webhook', { method: 'POST', headers, body: raw });
+  if (sign) headers['Stripe-Signature'] = `t=${t},v1=${await hmacHex(secret, `${t}.${raw}`)}`;
+  return new Request('https://fn/stripe-webhook', { method: 'POST', headers, body: raw });
 }
+const hook = async (body, admin, opts = {}) => handleWebhook(await send(body, opts), { secret: SECRET, admin, now: NOW, ...opts.hook });
 
-test('webhook: a bad or missing signature is refused and nothing is written', async () => {
+test('webhook: a bad, missing or stale signature is refused and nothing is written', async () => {
   const admin = fakeAdmin();
-  assert.equal((await handleWebhook(await send(event('subscription_created', {}), { sign: false }), { secret: SECRET, admin })).status, 401);
-  assert.equal((await handleWebhook(await send(event('subscription_created', {}), { secret: 'other' }), { secret: SECRET, admin })).status, 401);
-  assert.equal(admin.tables.account_plans.length + admin.tables.billing_events.length, 0);
+  const body = event('customer.subscription.created', sub());
+  assert.equal((await hook(body, admin, { sign: false })).status, 401);
+  assert.equal((await hook(body, admin, { secret: 'other' })).status, 401);
+  assert.equal((await hook(body, admin, { t: T - 600 })).status, 401, 'older than 5 minutes');
+  assert.equal(admin.tables.billing_events.length + admin.tables.account_plans.length, 0);
+  assert.ok(await verifySignature(`t=${T},v1=bad,v1=${await hmacHex(SECRET, `${T}.x`)}`, 'x', SECRET, NOW), 'any of several v1 signatures');
 });
 
-test('webhook: subscription created → Pro, yearly, with portal and renewal date', async () => {
+test('webhook: a new subscription gives Pro, yearly, with its renewal date and customer', async () => {
   const admin = fakeAdmin();
-  const res = await handleWebhook(await send(event('subscription_created', {})), { secret: SECRET, admin });
+  const res = await hook(event('customer.subscription.created', sub()), admin);
   assert.equal(res.status, 200);
   const row = admin.tables.account_plans[0];
   assert.equal(row.user_id, USER);
   assert.equal(row.plan, 'premium');
+  assert.equal(row.status, 'active');
   assert.equal(row.interval, 'year');
-  assert.equal(row.subscription_id, '987');
-  assert.equal(row.portal_url, 'https://x.lemonsqueezy.com/billing?sig=1');
-  assert.equal(admin.tables.billing_events.length, 1);
+  assert.equal(row.renews_at, new Date((T + 365 * DAY) * 1000).toISOString());
+  assert.equal(row.ends_at, null);
+  assert.equal(row.customer_id, 'cus_9');
+  assert.equal(row.subscription_id, 'sub_1');
+  assert.equal(row.test_mode, true);
+  assert.equal(admin.tables.billing_events[0].event_name, 'customer.subscription.created');
 });
 
-test('webhook: cancelled keeps Pro until the end date; expired and paused end it', () => {
-  const future = new Date(Date.now() + 86400e3).toISOString(), past = new Date(Date.now() - 86400e3).toISOString();
-  assert.equal(planRow(USER, event('x', { status: 'cancelled', ends_at: future }).data, false).plan, 'premium');
-  assert.equal(planRow(USER, event('x', { status: 'cancelled', ends_at: past }).data, false).plan, 'free');
-  assert.equal(planRow(USER, event('x', { status: 'expired' }).data, false).plan, 'free');
-  assert.equal(planRow(USER, event('x', { status: 'paused' }).data, false).plan, 'free');
-  assert.equal(planRow(USER, event('x', { status: 'past_due' }).data, false).plan, 'premium');
-  assert.equal(planRow(USER, event('x', { variant_id: 1511119 }).data, false).interval, 'month');
-});
-
-test('webhook: events without an OnSketch user, or not about subscriptions, are only logged', async () => {
+test('webhook: cancelled at the period end stays Pro until then; deleted is Free', async () => {
   const admin = fakeAdmin();
-  assert.equal((await handleWebhook(await send(event('subscription_created', {}, { user: null })), { secret: SECRET, admin })).status, 200);
-  assert.equal((await handleWebhook(await send({ meta: { event_name: 'order_created', custom_data: { user_id: USER } }, data: { type: 'orders', id: '1' } }), { secret: SECRET, admin })).status, 200);
+  await hook(event('customer.subscription.updated', sub({ cancel_at_period_end: true })), admin);
+  let row = admin.tables.account_plans[0];
+  assert.equal(row.plan, 'premium');
+  assert.equal(row.status, 'cancelled');
+  assert.equal(row.ends_at, new Date((T + 365 * DAY) * 1000).toISOString());
+  assert.equal(row.renews_at, null);
+  await hook(event('customer.subscription.deleted', sub({ status: 'canceled', ended_at: T })), admin);
+  row = admin.tables.account_plans[0];
+  assert.equal(row.plan, 'free');
+  assert.equal(row.status, 'canceled');
+});
+
+test('webhook: past due keeps Pro; unpaid, paused and incomplete are Free', () => {
+  assert.equal(planRow(USER, sub({ status: 'past_due' }), false).plan, 'premium');
+  for (const s of ['unpaid', 'paused', 'incomplete', 'incomplete_expired']) assert.equal(planRow(USER, sub({ status: s }), false).plan, 'free', s);
+  assert.equal(planRow(USER, sub({ current_period_end: T + 30 * DAY, items: { data: [{ price: { recurring: { interval: 'month' } } }] } }), false).interval, 'month',
+    'older API versions: the period end on the subscription');
+});
+
+test('webhook: no OnSketch user, or another event type, is only logged', async () => {
+  const admin = fakeAdmin();
+  assert.equal((await hook(event('customer.subscription.created', sub({ metadata: {} })), admin)).status, 200);
+  assert.equal((await hook(event('invoice.paid', { object: 'invoice', subscription: 'sub_1' }), admin)).status, 200);
   assert.equal(admin.tables.account_plans.length, 0);
   assert.equal(admin.tables.billing_events.length, 2);
-});
-
-/* ---- billing function ---- */
-function deps({ user = { id: USER, email: 'a@b.c' }, plan = null, variants = { '1511125': true }, products = {} } = {}) {
-  const calls = [];
-  const fakeFetch = async (url, init = {}) => {
-    calls.push({ url, init });
-    const path = url.replace('https://api.lemonsqueezy.com/v1', '');
-    const reply = (status, body) => new Response(JSON.stringify(body), { status });
-    let m;
-    if ((m = /^\/variants\/(\d+)$/.exec(path))) return variants[m[1]] ? reply(200, { data: { id: m[1] } }) : reply(404, { errors: [{ detail: 'Not found' }] });
-    if ((m = /^\/variants\?filter\[product_id\]=(\d+)$/.exec(path))) return reply(200, { data: (products[m[1]] || []).map(id => ({ id, attributes: { status: 'published' } })) });
-    if (path === '/checkouts') return reply(201, { data: { attributes: { url: 'https://onsketch.lemonsqueezy.com/checkout/custom/abc' } } });
-    if ((m = /^\/subscriptions\/(\w+)$/.exec(path))) return reply(200, { data: { attributes: { urls: { customer_portal: 'https://fresh-portal' } } } });
-    return reply(404, {});
-  };
-  return { calls, d: { env: { apiKey: 'k', storeId: '777', ids: { month: '1511119', year: '1511125' }, site: 'https://onsketch.io' },
-    fetch: fakeFetch, getUser: async () => user, getPlanRow: async () => plan } };
-}
-const call = (body) => new Request('https://fn/billing', { method: 'POST', body: JSON.stringify(body), headers: { Authorization: 'Bearer t' } });
-
-test('billing: checkout carries the user id, email, store, variant and return page', async () => {
-  const { d, calls } = deps();
-  const res = await handleBilling(call({ action: 'checkout', interval: 'year' }), d);
-  assert.equal(res.status, 200);
-  assert.equal((await res.json()).url, 'https://onsketch.lemonsqueezy.com/checkout/custom/abc');
-  const sent = JSON.parse(calls.find(c => c.url.endsWith('/checkouts')).init.body).data;
-  assert.equal(sent.attributes.checkout_data.custom.user_id, USER);
-  assert.equal(sent.attributes.checkout_data.email, 'a@b.c');
-  assert.equal(sent.attributes.product_options.redirect_url, 'https://onsketch.io/pricing/?welcome=1');
-  assert.equal(sent.relationships.store.data.id, '777');
-  assert.equal(sent.relationships.variant.data.id, '1511125');
-});
-
-test('billing: a product id is resolved to its variant', async () => {
-  const { d, calls } = deps({ variants: {}, products: { '1511119': ['222333'] } });
-  const res = await handleBilling(call({ action: 'checkout', interval: 'month' }), d);
-  assert.equal(res.status, 200);
-  const sent = JSON.parse(calls.find(c => c.url.endsWith('/checkouts')).init.body).data;
-  assert.equal(sent.relationships.variant.data.id, '222333');
-});
-
-test('billing: signed out 401, already Pro 409, portal returns a fresh link', async () => {
-  assert.equal((await handleBilling(call({ action: 'checkout' }), deps({ user: null }).d)).status, 401);
-  assert.equal((await handleBilling(call({ action: 'checkout' }), deps({ plan: { plan: 'premium', status: 'active' } }).d)).status, 409);
-  const res = await handleBilling(call({ action: 'portal' }), deps({ plan: { plan: 'premium', subscription_id: '987', portal_url: 'https://old' } }).d);
-  assert.equal((await res.json()).url, 'https://fresh-portal');
-  assert.equal((await handleBilling(call({ action: 'portal' }), deps().d)).status, 404);
+  assert.equal(admin.tables.billing_events[1].subscription_id, 'sub_1');
 });
 
 test('webhook: once live only, test-mode events are logged but change no plan', async () => {
   const admin = fakeAdmin();
-  const res = await handleWebhook(await send(event('subscription_created', {}, { test: true })), { secret: SECRET, admin, liveOnly: true });
-  assert.equal(res.status, 200);
+  await hook(event('customer.subscription.created', sub()), admin, { hook: { liveOnly: true } });
   assert.equal(admin.tables.account_plans.length, 0);
   assert.equal(admin.tables.billing_events.length, 1);
-  await handleWebhook(await send(event('subscription_created', {}, { test: false })), { secret: SECRET, admin, liveOnly: true });
+  await hook(event('customer.subscription.created', sub(), { live: true }), admin, { hook: { liveOnly: true } });
   assert.equal(admin.tables.account_plans[0].plan, 'premium');
+  assert.equal(admin.tables.account_plans[0].test_mode, false);
 });
 
-test('billing: says why a plan is unavailable (bad key, or an id the key cannot see)', async () => {
-  const unknown = deps({ variants: {}, products: {} });
-  const res = await handleBilling(call({ action: 'checkout', interval: 'month' }), unknown.d);
+test('webhook: a late "deleted" of an older subscription doesn\'t end a newer one', async () => {
+  const admin = fakeAdmin();
+  await hook(event('customer.subscription.created', sub({ id: 'sub_new' })), admin);
+  await hook(event('customer.subscription.deleted', sub({ id: 'sub_old', status: 'canceled' })), admin);
+  assert.equal(admin.tables.account_plans[0].plan, 'premium');
+  assert.equal(admin.tables.account_plans[0].subscription_id, 'sub_new');
+});
+
+/* ---- billing function ---- */
+function deps({ user = { id: USER, email: 'a@b.c' }, plan = null, fail = null } = {}) {
+  const calls = [];
+  const fakeFetch = async (url, init) => {
+    calls.push({ url, init, params: new URLSearchParams(init.body) });
+    const reply = (status, body) => new Response(JSON.stringify(body), { status });
+    if (fail) return reply(fail, { error: { message: 'Invalid API Key provided' } });
+    if (url.endsWith('/checkout/sessions')) return reply(200, { id: 'cs_1', url: 'https://checkout.stripe.com/c/pay/cs_1' });
+    if (url.endsWith('/billing_portal/sessions')) return reply(200, { url: 'https://billing.stripe.com/p/session/x' });
+    return reply(404, { error: { message: 'no' } });
+  };
+  return { calls, d: { env: { secretKey: 'sk_test_x', prices: { month: 'price_m', year: 'price_y' }, automaticTax: false, site: 'https://onsketch.io' },
+    fetch: fakeFetch, getUser: async () => user, getPlanRow: async () => plan } };
+}
+const call = (body) => new Request('https://fn/billing', { method: 'POST', body: JSON.stringify(body), headers: { Authorization: 'Bearer t' } });
+
+test('billing: Stripe form encoding, nested keys included', () => {
+  assert.equal(formEncode({ a: 1, b: { c: 'x y', d: { 0: 2 } }, e: undefined }), 'a=1&b%5Bc%5D=x%20y&b%5Bd%5D%5B0%5D=2');
+});
+
+test('billing: checkout carries the user id, email, price and return pages', async () => {
+  const { d, calls } = deps();
+  const res = await handleBilling(call({ action: 'checkout', interval: 'year' }), d);
+  assert.equal(res.status, 200);
+  assert.equal((await res.json()).url, 'https://checkout.stripe.com/c/pay/cs_1');
+  const p = calls[0].params;
+  assert.equal(calls[0].init.headers.Authorization, 'Bearer sk_test_x');
+  assert.equal(p.get('mode'), 'subscription');
+  assert.equal(p.get('line_items[0][price]'), 'price_y');
+  assert.equal(p.get('client_reference_id'), USER);
+  assert.equal(p.get('subscription_data[metadata][user_id]'), USER);
+  assert.equal(p.get('customer_email'), 'a@b.c');
+  assert.equal(p.get('success_url'), 'https://onsketch.io/pricing/?welcome=1');
+  assert.equal(p.get('automatic_tax[enabled]'), null);
+});
+
+test('billing: a returning customer is reused; Stripe Tax when switched on', async () => {
+  const { d, calls } = deps({ plan: { plan: 'free', status: 'canceled', customer_id: 'cus_9' } });
+  d.env.automaticTax = true;
+  await handleBilling(call({ action: 'checkout', interval: 'month' }), d);
+  const p = calls[0].params;
+  assert.equal(p.get('customer'), 'cus_9');
+  assert.equal(p.get('customer_email'), null);
+  assert.equal(p.get('line_items[0][price]'), 'price_m');
+  assert.equal(p.get('automatic_tax[enabled]'), 'true');
+  assert.equal(p.get('customer_update[address]'), 'auto');
+});
+
+test('billing: signed out 401, already Pro 409, portal for the customer', async () => {
+  assert.equal((await handleBilling(call({ action: 'checkout' }), deps({ user: null }).d)).status, 401);
+  assert.equal((await handleBilling(call({ action: 'checkout' }), deps({ plan: { plan: 'premium', status: 'active' } }).d)).status, 409);
+  const { d, calls } = deps({ plan: { plan: 'premium', status: 'active', subscription_id: 'sub_1', customer_id: 'cus_9' } });
+  const res = await handleBilling(call({ action: 'portal' }), d);
+  assert.equal((await res.json()).url, 'https://billing.stripe.com/p/session/x');
+  assert.equal(calls[0].params.get('customer'), 'cus_9');
+  assert.equal(calls[0].params.get('return_url'), 'https://onsketch.io/pricing/');
+  assert.equal((await handleBilling(call({ action: 'portal' }), deps().d)).status, 404);
+  const old = await handleBilling(call({ action: 'portal' }), deps({ plan: { plan: 'premium', subscription_id: '987', customer_id: '42', portal_url: 'https://old-portal' } }).d);
+  assert.equal((await old.json()).url, 'https://old-portal', 'a subscription from before Stripe: its saved link');
+});
+
+test('billing: says what Stripe refused; not configured is a 500', async () => {
+  const res = await handleBilling(call({ action: 'checkout', interval: 'month' }), deps({ fail: 401 }).d);
   assert.equal(res.status, 502);
-  assert.match((await res.json()).error, /no product or variant 1511119.*test-mode/);
-  const badKey = deps();
-  badKey.d.fetch = async () => new Response(JSON.stringify({ errors: [{ status: '401' }] }), { status: 401 });
-  assert.match((await (await handleBilling(call({ action: 'checkout', interval: 'year' }), badKey.d)).json()).error, /refused the API key/);
+  assert.match((await res.json()).error, /Invalid API Key/);
+  const none = deps();
+  none.d.env.prices.year = '';
+  assert.equal((await handleBilling(call({ action: 'checkout', interval: 'year' }), none.d)).status, 500);
 });

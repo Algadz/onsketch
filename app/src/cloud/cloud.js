@@ -125,7 +125,7 @@ export class Cloud {
     return { plan, limit: PLAN_LIMITS[plan], canPrivate: plan === 'premium' || rules.freePrivate, status: row?.status || null, interval: row?.interval || null,
       renewsAt: row?.renews_at || null, endsAt: row?.ends_at || null, hasSubscription: !!row?.subscription_id };
   }
-  /** Lemon Squeezy through the "billing" Edge Function: 'checkout'
+  /** Stripe through the "billing" Edge Function: 'checkout'
    *  ({ interval: 'month' | 'year' }) or 'portal'. Resolves to a URL. */
   async billing(action, options = {}) {
     const { data, error } = await this.client.functions.invoke('billing', { body: { action, ...options } });
