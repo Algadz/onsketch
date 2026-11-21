@@ -18,8 +18,11 @@
 //   STRIPE_PRICE_YEARLY   price_… of the yearly Pro price
 //   STRIPE_PRICE_MONTHLY  optional: price_… of a monthly price
 // Optional:
-//   STRIPE_AUTOMATIC_TAX  "1" to have Stripe Tax add sales tax / VAT at
-//                         checkout (Stripe Tax must be set up first)
+//   STRIPE_MANAGED_PAYMENTS "0" to turn off Managed Payments (on by default:
+//                         Stripe, as "Link", is the merchant of record, adds
+//                         and remits sales tax / VAT, as Lemon Squeezy did)
+//   STRIPE_AUTOMATIC_TAX  "1", only with Managed Payments off: Stripe Tax
+//                         adds tax where OnSketch has registrations
 //   SITE_URL              default https://onsketch.io
 // No imports at the top: tests run handleBilling() under Node.
 
@@ -38,7 +41,7 @@ const cors = {
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json' } });
 
-type Env = { secretKey: string; prices: { month: string; year: string }; automaticTax: boolean; site: string };
+type Env = { secretKey: string; prices: { month: string; year: string }; automaticTax: boolean; managedPayments?: boolean; site: string };
 type Deps = { env: Env; getUser: (req: Request) => Promise<any>; getPlanRow: (userId: string) => Promise<any>; fetch: typeof fetch };
 
 /** Stripe's form encoding, nested keys included: { a: { b: 1 } } → a[b]=1. */
@@ -111,7 +114,11 @@ export async function handleBilling(req: Request, deps: Deps): Promise<Response>
     };
     if (customer) params.customer = customer;
     else if (user.email) params.customer_email = user.email;
-    if (deps.env.automaticTax) {
+    if (deps.env.managedPayments !== false) {
+      // Merchant of record: Stripe handles tax (no automatic_tax or
+      // customer_update allowed; the customer's name and address are kept up to date by it).
+      params.managed_payments = { enabled: 'true' };
+    } else if (deps.env.automaticTax) {
       params.automatic_tax = { enabled: 'true' };
       params.billing_address_collection = 'required';
       if (customer) params.customer_update = { address: 'auto', name: 'auto' };
@@ -137,6 +144,7 @@ if (typeof Deno !== 'undefined') {
     secretKey: Deno.env.get('STRIPE_SECRET_KEY') || '',
     prices: { month: Deno.env.get('STRIPE_PRICE_MONTHLY') || '', year: Deno.env.get('STRIPE_PRICE_YEARLY') || '' },
     automaticTax: Deno.env.get('STRIPE_AUTOMATIC_TAX') === '1',
+    managedPayments: Deno.env.get('STRIPE_MANAGED_PAYMENTS') !== '0',
     site: (Deno.env.get('SITE_URL') || 'https://onsketch.io').replace(/\/$/, ''),
   };
   Deno.serve((req: Request) => handleBilling(req, {

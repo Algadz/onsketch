@@ -150,11 +150,13 @@ test('billing: checkout carries the user id, email, price and return pages', asy
   assert.equal(p.get('customer_email'), 'a@b.c');
   assert.equal(p.get('success_url'), 'https://onsketch.io/pricing/?welcome=1');
   assert.equal(p.get('automatic_tax[enabled]'), null);
+  assert.equal(p.get('managed_payments[enabled]'), 'true', 'Managed Payments (merchant of record) by default');
+  assert.equal(p.get('customer_update[address]'), null);
 });
 
-test('billing: a returning customer is reused; Stripe Tax when switched on', async () => {
+test('billing: a returning customer is reused; Stripe Tax when Managed Payments is off', async () => {
   const { d, calls } = deps({ plan: { plan: 'free', status: 'canceled', customer_id: 'cus_9' } });
-  d.env.automaticTax = true;
+  d.env.automaticTax = true; d.env.managedPayments = false;
   await handleBilling(call({ action: 'checkout', interval: 'month' }), d);
   const p = calls[0].params;
   assert.equal(p.get('customer'), 'cus_9');

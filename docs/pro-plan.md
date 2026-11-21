@@ -70,10 +70,25 @@ checkout and portal parameters, Stripe Tax). `tests/cloud.e2e.mjs` covers
 the pricing page, checkout, the wait after paying, Manage subscription and
 Pro in My sketches with a fake billing function.
 
-Earlier, Pro was sold through Lemon Squeezy (a merchant of record: it was
-the seller and handled sales tax / VAT). With Stripe, **OnSketch is the
-seller**: Stripe processes the payments, but registering for and paying
-sales tax / VAT is the owner's job (Stripe Tax can calculate and collect it).
+Tax, as with Lemon Squeezy before: the checkout uses **Stripe Managed
+Payments** (`managed_payments[enabled]`), so Stripe, as *Link*, is the
+merchant of record: it adds the buyer's sales tax / VAT on top of the $29
+(the price's `tax_behavior` is `exclusive`), files and remits it in 80+
+countries, and handles fraud, disputes and payment support. Buyers see
+"Sold through Link" and `LINK.COM* …` on their statement. The product's
+tax code is `txcd_10103000` (SaaS, personal use), which Managed Payments
+accepts. Only subscriptions started with Managed Payments on are covered:
+`STRIPE_MANAGED_PAYMENTS=0` would turn it off (then `STRIPE_AUTOMATIC_TAX`
+and your own tax registrations apply).
+
+**Live setup done on 2026-11-21** (live mode, account `acct_1UeKobGYm9gp2h2d`):
+product `prod_VfglFyP8I3sPmx`, price `price_1UeLNxGYm9gp2h2d2LM2f7Yv`
+($29/year, lookup key `onsketch_pro_yearly`), customer portal
+`bpc_1UeLOBGYm9gp2h2dhQxxsPpu` (default), webhook `we_1UeLONGYm9gp2h2doOP3RTEK`;
+Supabase secrets `STRIPE_SECRET_KEY`, `STRIPE_PRICE_YEARLY`,
+`STRIPE_WEBHOOK_SECRET`; functions `billing` and `stripe-webhook` deployed;
+`lemonsqueezy-webhook` and the `LEMONSQUEEZY_*` secrets removed; `0008`
+run. The steps below are for setting it up again (or in a sandbox).
 
 ## Setup (once, by the owner)
 
@@ -149,7 +164,9 @@ signing secret. They go into Supabase secrets only, never in code.
     `update account_plans set plan = 'free' where test_mode;`
     Then go through Stripe's go-live checklist
     (docs.stripe.com/get-started/checklist/go-live).
-11. **Tax**: OnSketch is the seller. Stripe Tax collects nothing until you
+11. **Tax**: handled by Managed Payments (above): activate it under
+    Settings → Managed Payments, use an eligible tax code. Only without
+    Managed Payments is OnSketch the seller: then Stripe Tax collects nothing until you
     have an active **registration** where your customers are, even with it
     switched on (and gives no error). So: Settings → Tax → origin address,
     check where you must register (Stripe's threshold monitoring helps),
