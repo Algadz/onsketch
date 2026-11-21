@@ -72,8 +72,9 @@ Pro in My sketches with a fake billing function.
 
 Tax, as with Lemon Squeezy before: the checkout uses **Stripe Managed
 Payments** (`managed_payments[enabled]`), so Stripe, as *Link*, is the
-merchant of record: it adds the buyer's sales tax / VAT on top of the $29
-(the price's `tax_behavior` is `exclusive`), files and remits it in 80+
+merchant of record: the buyer's sales tax / VAT is **included** in the $29
+(the price's `tax_behavior` is `inclusive`: the price is the same
+everywhere, the tax comes out of it), and Stripe files and remits it in 80+
 countries, and handles fraud, disputes and payment support. Buyers see
 "Sold through Link" and `LINK.COM* …` on their statement. The product's
 tax code is `txcd_10103000` (SaaS, personal use), which Managed Payments
@@ -82,8 +83,10 @@ accepts. Only subscriptions started with Managed Payments on are covered:
 and your own tax registrations apply).
 
 **Live setup done on 2026-11-21** (live mode, account `acct_1UeKobGYm9gp2h2d`):
-product `prod_VfglFyP8I3sPmx`, price `price_1UeLNxGYm9gp2h2d2LM2f7Yv`
-($29/year, lookup key `onsketch_pro_yearly`), customer portal
+product `prod_VfglFyP8I3sPmx`, price `price_1UeLs4GYm9gp2h2dtGWxDwWw`
+($29/year tax included, lookup key `onsketch_pro_yearly`; the first,
+tax-exclusive price `price_1UeLNxGYm9gp2h2d2LM2f7Yv` is archived: a
+price's tax behaviour can't be changed once set), customer portal
 `bpc_1UeLOBGYm9gp2h2dhQxxsPpu` (default), webhook `we_1UeLONGYm9gp2h2doOP3RTEK`;
 Supabase secrets `STRIPE_SECRET_KEY`, `STRIPE_PRICE_YEARLY`,
 `STRIPE_WEBHOOK_SECRET`; functions `billing` and `stripe-webhook` deployed;

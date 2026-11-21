@@ -12,7 +12,7 @@ import { track, trackErrors } from '../ui/analytics.js';
    switch the account to Pro.
    ============================================================ */
 /** Pro is sold yearly only (one Stripe price); keep in step with it. */
-const PRICE = { price: '$29', per: 'per year', sub: 'That is $2.42 a month, billed yearly, plus sales tax or VAT where it applies. Cancel any time.' };
+const PRICE = { price: '$29', per: 'per year', sub: 'That is $2.42 a month, billed yearly, sales tax and VAT included. Cancel any time.' };
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const day = (iso) => new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
