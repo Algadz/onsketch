@@ -14,8 +14,16 @@
 //                          logged but no longer change anyone's plan
 // SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are provided by Supabase.
 //
-// The user comes from the subscription's metadata.user_id, set by the
-// "billing" function when it creates the checkout.
+// The user: the account whose saved Stripe customer is the subscription's
+// customer (Stripe's own object graph), else the subscription's
+// metadata.user_id, set by the "billing" function at checkout (a first
+// subscription, before the customer is saved).
+//
+// Also logged (not acted on): invoice.paid / invoice.payment_failed and the
+// risk events charge.refunded, charge.dispute.created and
+// radar.early_fraud_warning.created, so they show in billing_events with
+// the user. To take Pro away after a refund or a dispute, cancel the
+// subscription in Stripe: the customer.subscription.deleted event follows.
 // No imports at the top: tests run handleWebhook() under Node.
 
 /** Events that carry a subscription object. */
@@ -91,8 +99,16 @@ export async function handleWebhook(req: Request, { secret, admin, liveOnly = fa
   const type = String(event?.type || '');
   const sub = event?.data?.object;
   const isSub = sub?.object === 'subscription';
-  const userId = String((isSub ? sub?.metadata?.user_id : sub?.client_reference_id || sub?.metadata?.user_id) || '');
   const testMode = event?.livemode === false;
+  const customer = typeof sub?.customer === 'string' ? sub.customer : sub?.customer?.id || null;
+  let userId = '';
+  if (customer) {
+    try {
+      const owner = (await admin.from('account_plans').select('user_id').eq('customer_id', customer).maybeSingle()).data;
+      if (owner?.user_id) userId = String(owner.user_id);
+    } catch { /* no row */ }
+  }
+  if (!userId) userId = String((isSub ? sub?.metadata?.user_id : sub?.client_reference_id || sub?.metadata?.user_id) || '');
 
   await admin.from('billing_events').insert({
     event_name: type, user_id: UUID.test(userId) ? userId : null,
@@ -100,7 +116,7 @@ export async function handleWebhook(req: Request, { secret, admin, liveOnly = fa
   });
 
   if (!SUBSCRIPTION_EVENTS.has(type) || !isSub) return new Response('Ignored', { status: 200 });
-  if (!UUID.test(userId)) return new Response('No OnSketch user in the subscription metadata; logged', { status: 200 });
+  if (!UUID.test(userId)) return new Response('No OnSketch user for this customer or in the metadata; logged', { status: 200 });
   if (liveOnly && testMode) return new Response('Test-mode event ignored (live only); logged', { status: 200 });
 
   const row = planRow(userId, sub, testMode);

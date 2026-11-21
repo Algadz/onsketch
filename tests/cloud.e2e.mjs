@@ -590,13 +590,12 @@ if (process.env.SHOT_DIR) await page.keyboard.press('Escape');
 await page.route(/stripe\.test/, r => r.fulfill({ status: 200, contentType: 'text/html', body: '<title>checkout</title>' }));
 await page.goto(base.replace('/app/', '/pricing/'));
 await page.waitForSelector('.pr-cta[data-plan="pro"] [data-a="buy"]');
-check((await page.textContent('[data-price]')) === '$89' && /7\.42/.test(await page.textContent('[data-sub]')), 'pricing: yearly by default, $89 ($7.42 a month)');
-await page.click('.pr-toggle [data-interval="month"]');
-check((await page.textContent('[data-price]')) === '$9.99' && (await page.textContent('.pr-cta[data-plan="pro"] .btn')) === 'Get Pro monthly', 'pricing: monthly $9.99');
+check((await page.textContent('[data-price]')) === '$29' && /2\.42/.test(await page.textContent('[data-sub]')) && !(await page.$('.pr-toggle')), 'pricing: yearly only, $29 ($2.42 a month), no monthly toggle');
+check((await page.textContent('.pr-cta[data-plan="pro"] .btn')) === 'Get Pro', 'pricing: one Get Pro button');
 check((await page.textContent('.pr-cta[data-plan="free"]')).includes('Your plan'), 'pricing: Free marked as your plan');
 await page.click('.pr-cta[data-plan="pro"] [data-a="buy"]');
-await page.waitForURL(/checkout\.stripe\.test\/c\/month\?user=u1/);
-check(true, 'Get Pro opens the Stripe checkout for this user, monthly');
+await page.waitForURL(/checkout\.stripe\.test\/c\/year\?user=u1/);
+check(true, 'Get Pro opens the Stripe checkout for this user, yearly');
 
 // Back from paying: the page waits for the webhook, then shows Pro.
 await page.goto(base.replace('/app/', '/pricing/?welcome=1'));

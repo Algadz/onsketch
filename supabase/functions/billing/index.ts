@@ -1,7 +1,8 @@
 // Supabase Edge Function: billing (Stripe)
 //
 // Called by the signed-in app (Verify JWT ON, the default):
-//   POST { action: 'checkout', interval: 'month' | 'year' }  → { url }
+//   POST { action: 'checkout' }  → { url }   (Pro is yearly only; a
+//     'month' interval is honoured only if STRIPE_PRICE_MONTHLY is set)
 //     A Stripe Checkout session for OnSketch Pro (a subscription), with the
 //     user's id as client_reference_id and in the subscription's metadata
 //     (the stripe-webhook function reads it back), their email pre-filled
@@ -12,9 +13,10 @@
 //     yearly, cancel, invoices).
 //
 // Secrets (Edge Functions → Secrets):
-//   STRIPE_SECRET_KEY     sk_test_… or sk_live_… (Developers → API keys)
-//   STRIPE_PRICE_MONTHLY  price_… of the monthly Pro price
+//   STRIPE_SECRET_KEY     a restricted key rk_… (recommended; permissions in
+//                         docs/pro-plan.md) or a secret key sk_…
 //   STRIPE_PRICE_YEARLY   price_… of the yearly Pro price
+//   STRIPE_PRICE_MONTHLY  optional: price_… of a monthly price
 // Optional:
 //   STRIPE_AUTOMATIC_TAX  "1" to have Stripe Tax add sales tax / VAT at
 //                         checkout (Stripe Tax must be set up first)
@@ -22,6 +24,11 @@
 // No imports at the top: tests run handleBilling() under Node.
 
 const API = 'https://api.stripe.com/v1';
+/** Pinned, so the account's default version can't change the responses.
+ *  Create the webhook endpoint on the same version. */
+export const STRIPE_VERSION = '2026-10-28.endive';
+/** Tags the sessions in the Dashboard (Checkout → integration). */
+export const INTEGRATION_ID = 'onsketch_pro_checkout_qwhzmtkr';
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -49,7 +56,7 @@ export function formEncode(obj: Record<string, unknown>, prefix = ''): string {
 async function stripe(deps: Deps, path: string, params: Record<string, unknown>) {
   const res = await deps.fetch(API + path, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${deps.env.secretKey}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+    headers: { Authorization: `Bearer ${deps.env.secretKey}`, 'Content-Type': 'application/x-www-form-urlencoded', 'Stripe-Version': STRIPE_VERSION },
     body: formEncode(params),
   });
   const body = await res.json().catch(() => ({}));
@@ -85,7 +92,7 @@ export async function handleBilling(req: Request, deps: Deps): Promise<Response>
   }
 
   if (body.action === 'checkout') {
-    const interval = body.interval === 'year' ? 'year' : 'month';
+    const interval = body.interval === 'month' && deps.env.prices.month ? 'month' : 'year';
     const price = deps.env.prices[interval];
     if (!deps.env.secretKey || !price) return json(500, { error: 'Billing is not configured.' });
     const row = await deps.getPlanRow(user.id);
@@ -100,6 +107,7 @@ export async function handleBilling(req: Request, deps: Deps): Promise<Response>
       success_url: `${deps.env.site}/pricing/?welcome=1`,
       cancel_url: `${deps.env.site}/pricing/`,
       allow_promotion_codes: 'true',
+      integration_identifier: INTEGRATION_ID,
     };
     if (customer) params.customer = customer;
     else if (user.email) params.customer_email = user.email;

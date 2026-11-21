@@ -2,7 +2,7 @@
 
 ## What Pro gives
 
-| | Free | Pro ($9.99/month or $89/year) |
+| | Free | Pro ($29/year) |
 |---|---|---|
 | Drawing tools | all | all |
 | Export (PNG, SVG, copy, DXF, print / PDF to scale) | yes | yes |
@@ -58,7 +58,7 @@ Manage subscription ──▶ billing function {action:'portal'} ──▶ Strip
   the subscription's metadata are only logged.
 - Database: no Stripe-specific migration. `0005_billing.sql` (columns,
   `billing_events`, `plan_of()`) works for both providers.
-- App: `/pricing/` (monthly / yearly, state for signed out, Free, Pro;
+- App: `/pricing/` (yearly only, state for signed out, Free, Pro;
   waits for the webhook after paying), "Upgrade to Pro" or "Manage
   subscription" in the account menus, My sketches (usage bar, upgrade card,
   Make private / Make public), the save form's note, the landing page nav.
@@ -77,64 +77,86 @@ sales tax / VAT is the owner's job (Stripe Tax can calculate and collect it).
 
 ## Setup (once, by the owner)
 
+Values to collect on the way: the yearly price id, an API key, the webhook
+signing secret. They go into Supabase secrets only, never in code.
+
 1. **Supabase SQL Editor**: run `supabase/migrations/0005_billing.sql`
    (if not done yet), then `supabase/migrations/0008_private_pro_only.sql`.
-2. **Stripe account**: sign up at stripe.com. Everything below can be done
-   in **test mode** first (the "Test mode" switch, top right) before the
-   account is activated.
-3. **Product and prices** (Product catalog → + Add product):
-   - Name `OnSketch Pro`.
-   - Price 1: **Recurring**, $9.99, **Monthly**.
-   - Price 2 (Add another price): **Recurring**, $89, **Yearly**.
-   - Open each price and copy its id (`price_…`).
-4. **Customer portal** (Settings → Billing → Customer portal): turn on
-   *Customers can update payment methods*, *view invoice history*,
-   *cancel subscriptions* (at the end of the billing period), and under
-   *Subscriptions → Customers can switch plans* add both OnSketch Pro
-   prices (the pricing page FAQ says monthly ↔ yearly is switched there).
-   Save. (In test mode this is a separate setting: save it in both modes.)
-5. **API key** (Developers → API keys): copy the **Secret key** (`sk_test_…`
-   in test mode). A restricted key also works: Checkout Sessions *write*,
-   Customer portal *write*, Customers *read*, Subscriptions *read*.
-6. **Webhook** (Developers → Webhooks → + Add endpoint):
+2. **A sandbox to build in**: Stripe recommends a sandbox (an isolated test
+   environment) over the shared test mode: account menu (top left) →
+   **Sandboxes → Create sandbox** (e.g. "onsketch-dev"), then switch to it.
+   Steps 3–7 happen in the sandbox; no real money moves there. (The shared
+   *Test mode* works the same way if you prefer it.)
+3. **Product and price** (Product catalog → + Add product): name
+   `OnSketch Pro`, **Recurring**, **$29**, **Yearly**. If you'll collect tax
+   (step 11), pick the product's **tax code** now (Software as a service)
+   and the price's **tax behaviour** (exclusive: tax added on top;
+   inclusive: $29 includes it). Open the price and copy its id `price_…`.
+   (Already made the live $29 price? Do the same in the sandbox: sandbox
+   and live don't share products.)
+4. **Customer portal** (Settings → Billing → Customer portal): allow
+   updating payment methods, invoice history, and cancelling **at the end
+   of the billing period**. Plan switching isn't needed (one price). Save.
+5. **Restricted API key** (Developers → API keys → **Create restricted
+   key**), name "onsketch-supabase", with:
+   - Checkout Sessions: **Write**
+   - Customer portal: **Write**
+   - Customers: **Write**
+   - Prices and Products: **Read**
+   - Subscriptions: **Read**
+   Copy it (`rk_test_…`). If a checkout later fails with a permission
+   error, the message names the missing permission: add it to the key.
+6. **Webhook** (Developers → Webhooks → **Add destination** → Webhook
+   endpoint):
+   - API version: **2026-10-28.endive** (the version the functions pin)
    - URL `https://rwmzpzaqijgdfsjmpqbd.supabase.co/functions/v1/stripe-webhook`
-   - Events: `customer.subscription.created`,
-     `customer.subscription.updated`, `customer.subscription.deleted`,
-     `customer.subscription.paused`, `customer.subscription.resumed`
-     (optionally `checkout.session.completed` and `invoice.payment_failed`:
-     they are only logged).
-   - After saving, reveal the endpoint's **Signing secret** (`whsec_…`).
-7. **Supabase → Edge Functions → Secrets**, add:
-   - `STRIPE_SECRET_KEY`: the secret key (step 5)
-   - `STRIPE_PRICE_MONTHLY`: the monthly `price_…` (step 3)
-   - `STRIPE_PRICE_YEARLY`: the yearly `price_…` (step 3)
+   - Events: `customer.subscription.created`, `.updated`, `.deleted`,
+     `.paused`, `.resumed` (these set the plan), and `invoice.paid`,
+     `invoice.payment_failed`, `charge.refunded`, `charge.dispute.created`,
+     `radar.early_fraud_warning.created` (logged in `billing_events` with
+     the user, for support).
+   - Then reveal the destination's **Signing secret** (`whsec_…`).
+7. **Supabase → Edge Functions → Secrets** (or `npx supabase secrets set …`):
+   - `STRIPE_SECRET_KEY`: the restricted key (step 5)
+   - `STRIPE_PRICE_YEARLY`: the `price_…` (step 3)
    - `STRIPE_WEBHOOK_SECRET`: the signing secret (step 6)
-   You can delete the old `LEMONSQUEEZY_*` secrets.
-8. **Deploy the two functions** (Supabase → Edge Functions; with the CLI:
-   `supabase functions deploy billing` and
-   `supabase functions deploy stripe-webhook`):
-   - `billing`: replace its code with `supabase/functions/billing/index.ts`;
-     *Verify JWT* **on**.
-   - `stripe-webhook` (new function): paste
-     `supabase/functions/stripe-webhook/index.ts`; *Verify JWT* **off**.
-   - Delete the old `lemonsqueezy-webhook` function.
-9. **Test**: on onsketch.io/pricing, buy Pro with the test card
-   `4242 4242 4242 4242` (any future date, any CVC). Check that the page
-   says "OnSketch Pro is on", that `account_plans` has the row
-   (`customer_id` `cus_…`) and `billing_events` the events; open Manage
-   subscription, switch to yearly, then cancel and check that the page
-   says "Ends on …". Stripe → Developers → Webhooks shows each delivery
-   and its response if something doesn't arrive.
-10. **Going live** (account activated): switch the dashboard to live mode
-    and repeat steps 3 to 7 there (live products, prices, portal settings,
-    secret key `sk_live_…`, webhook and its new signing secret): live and
-    test mode don't share any of them. Add the secret `STRIPE_LIVE_ONLY` =
-    `1` so leftover test events can't give Pro, and end the test
-    subscriptions: `update account_plans set plan = 'free' where test_mode;`
-11. **Tax** (your decision, see above): to have Stripe add sales tax / VAT,
-    set up Stripe Tax (Settings → Tax: origin address, registrations) and
-    add the secret `STRIPE_AUTOMATIC_TAX` = `1`. The prices on the pricing
-    page are then before tax where tax applies.
+   Delete the old `LEMONSQUEEZY_*` secrets (and `STRIPE_PRICE_MONTHLY` if
+   set: Pro is yearly only).
+8. **Deploy the two functions**, either:
+   - dashboard: Edge Functions → **billing** → Code → replace with
+     `supabase/functions/billing/index.ts` → Deploy (*Verify JWT* **on**);
+     **Deploy a new function → Via Editor**, name `stripe-webhook`, paste
+     `supabase/functions/stripe-webhook/index.ts` → Deploy, then *Verify
+     JWT* **off** (Stripe sends a signature, not a Supabase token); delete
+     `lemonsqueezy-webhook`.
+   - or CLI, from a checkout of the repo (`supabase/config.toml` sets the
+     JWT switches): `npx supabase login`, `npx supabase link --project-ref
+     rwmzpzaqijgdfsjmpqbd`, `npx supabase functions deploy billing`,
+     `npx supabase functions deploy stripe-webhook`,
+     `npx supabase functions delete lemonsqueezy-webhook`.
+9. **Test** on onsketch.io/pricing (signed in, not Pro): **Get Pro**, pay
+   with `4242 4242 4242 4242`, any future date, any CVC. The page should say
+   "OnSketch Pro is on"; `account_plans` has your row with `plan` premium
+   and `customer_id` `cus_…`; **Manage subscription** opens the portal;
+   cancel there and the page says "Ends on …". If Pro never comes on, look
+   at the webhook destination's deliveries in Stripe: 401 = wrong signing
+   secret or *Verify JWT* still on; 404 = function name; 500 = the
+   function's Logs in Supabase.
+10. **Going live** (account activated): in live mode, redo steps 3–7
+    (live product/price, portal settings, a live restricted key `rk_live_…`,
+    a live webhook destination with its own signing secret) and replace the
+    secrets. Add `STRIPE_LIVE_ONLY` = `1`, and end the test subscriptions:
+    `update account_plans set plan = 'free' where test_mode;`
+    Then go through Stripe's go-live checklist
+    (docs.stripe.com/get-started/checklist/go-live).
+11. **Tax**: OnSketch is the seller. Stripe Tax collects nothing until you
+    have an active **registration** where your customers are, even with it
+    switched on (and gives no error). So: Settings → Tax → origin address,
+    check where you must register (Stripe's threshold monitoring helps),
+    register with the tax authority, add the registrations in Stripe, then
+    add the Supabase secret `STRIPE_AUTOMATIC_TAX` = `1` (the checkout then
+    asks for the billing address and adds tax). See
+    docs.stripe.com/billing/taxes/collect-taxes.
 
 Subscribers from the Lemon Squeezy days keep their row: Pro until their
 subscription's `ends_at` (or as it is), and Manage subscription opens their

@@ -4,17 +4,15 @@ import { notice } from '../ui/dialogs.js';
 import { track, trackErrors } from '../ui/analytics.js';
 
 /* =============== PRICING (/pricing/) ===========================
-   Free vs OnSketch Pro, monthly / yearly. The buttons depend on who is
+   Free vs OnSketch Pro (yearly only). The buttons depend on who is
    looking: signed out → sign in first (and come back here); free →
    checkout (Stripe Checkout, through the "billing" Edge Function); Pro →
    Manage subscription (Stripe customer portal). After paying, Stripe
    returns to /pricing/?welcome=1: the page waits for the webhook to
    switch the account to Pro.
    ============================================================ */
-const PRICES = {
-  month: { price: '$9.99', per: 'per month', sub: 'Billed monthly. Cancel any time.' },
-  year: { price: '$89', per: 'per year', sub: 'That is $7.42 a month, billed yearly. Cancel any time.' },
-};
+/** Pro is sold yearly only (one Stripe price); keep in step with it. */
+const PRICE = { price: '$29', per: 'per year', sub: 'That is $2.42 a month, billed yearly. Cancel any time.' };
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const day = (iso) => new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
@@ -22,7 +20,7 @@ const day = (iso) => new Date(iso).toLocaleDateString(undefined, { day: 'numeric
 class Pricing {
   constructor() {
     const params = new URLSearchParams(location.search);
-    this.interval = params.get('interval') === 'month' ? 'month' : 'year';
+    this.interval = 'year';
     this.welcome = params.has('welcome');
     this.autostart = params.get('checkout');                 // set when coming back from sign-in
     this.user = null; this.plan = null; this.cloud = null;
@@ -39,7 +37,6 @@ class Pricing {
   async start() {
     this.applyRules(false);
     mountAccount($('#site-account'));
-    document.querySelectorAll('.pr-toggle [data-interval]').forEach(b => b.addEventListener('click', () => { this.interval = b.dataset.interval; track('pricing-interval', { interval: this.interval }); this.render(); }));
     this.render();
     if (!isConfigured()) return;
     try {
@@ -50,13 +47,12 @@ class Pricing {
     } catch { /* offline: the page still explains the plans */ }
     this.render();
     if (this.welcome) this.waitForPro();
-    else if (this.autostart && this.user && this.plan?.plan !== 'premium') this.checkout(this.autostart === 'month' ? 'month' : 'year');
+    else if (this.autostart && this.user && this.plan?.plan !== 'premium') this.checkout('year');
     if (this.autostart || this.welcome) history.replaceState(null, '', location.pathname);
   }
 
   render() {
-    document.querySelectorAll('.pr-toggle [data-interval]').forEach(b => b.setAttribute('aria-checked', b.dataset.interval === this.interval));
-    const p = PRICES[this.interval];
+    const p = PRICE;
     $('[data-price]').textContent = p.price;
     $('[data-per]').textContent = p.per;
     $('[data-sub]').textContent = p.sub;
@@ -77,7 +73,7 @@ class Pricing {
       proCta.querySelector('[data-a="portal"]')?.addEventListener('click', (e) => this.portal(e.currentTarget));
     } else {
       free.innerHTML = '<span class="pr-current">✓ Your plan</span>';
-      proCta.innerHTML = `<button type="button" class="btn primary" data-a="buy">Get Pro ${this.interval === 'year' ? 'yearly' : 'monthly'}</button>
+      proCta.innerHTML = `<button type="button" class="btn primary" data-a="buy">Get Pro</button>
         <p class="pr-note">Secure checkout by Stripe.</p>`;
       proCta.querySelector('[data-a="buy"]').addEventListener('click', () => this.checkout(this.interval));
     }

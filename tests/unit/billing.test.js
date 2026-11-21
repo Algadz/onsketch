@@ -185,3 +185,34 @@ test('billing: says what Stripe refused; not configured is a 500', async () => {
   none.d.env.prices.year = '';
   assert.equal((await handleBilling(call({ action: 'checkout', interval: 'year' }), none.d)).status, 500);
 });
+
+test('billing: pinned API version and integration tag; yearly when no monthly price', async () => {
+  const { d, calls } = deps();
+  d.env.prices.month = '';
+  await handleBilling(call({ action: 'checkout', interval: 'month' }), d);
+  assert.equal(calls[0].init.headers['Stripe-Version'], '2026-10-28.endive');
+  assert.equal(calls[0].params.get('line_items[0][price]'), 'price_y', 'yearly only: a monthly request gets the yearly price');
+  assert.match(calls[0].params.get('integration_identifier'), /^onsketch_pro_checkout_[a-z]{8}$/);
+});
+
+test('webhook: the user is found by the saved Stripe customer, metadata is the fallback', async () => {
+  const admin = fakeAdmin();
+  const OTHER = '11111111-2222-4333-8444-555555555555';
+  admin.tables.account_plans.push({ user_id: OTHER, plan: 'free', customer_id: 'cus_9', subscription_id: 'sub_0' });
+  await hook(event('customer.subscription.created', sub({ metadata: {} })), admin);
+  assert.equal(admin.tables.account_plans.length, 1);
+  assert.equal(admin.tables.account_plans[0].user_id, OTHER);
+  assert.equal(admin.tables.account_plans[0].plan, 'premium');
+  await hook(event('customer.subscription.created', sub({ customer: 'cus_new' })), admin);
+  assert.ok(admin.tables.account_plans.some(r => r.user_id === USER && r.customer_id === 'cus_new'), 'a first subscription: from the metadata');
+});
+
+test('webhook: refunds, disputes and fraud warnings are logged with the customer\'s user', async () => {
+  const admin = fakeAdmin();
+  admin.tables.account_plans.push({ user_id: USER, plan: 'premium', customer_id: 'cus_9', subscription_id: 'sub_1' });
+  for (const t of ['charge.refunded', 'charge.dispute.created', 'radar.early_fraud_warning.created']) {
+    assert.equal((await hook(event(t, { object: t.startsWith('radar') ? 'radar.early_fraud_warning' : 'charge', customer: 'cus_9' }), admin)).status, 200);
+  }
+  assert.deepEqual(admin.tables.billing_events.map(e => e.user_id), [USER, USER, USER]);
+  assert.equal(admin.tables.account_plans[0].plan, 'premium', 'no automatic change: the owner decides in Stripe');
+});
