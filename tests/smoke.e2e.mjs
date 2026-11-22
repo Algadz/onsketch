@@ -1053,6 +1053,8 @@ await page.evaluate(() => { const a = window._app; a.project.layer('ly1').visibl
   const xr = await page.evaluate(() => { const s = window._app.activeSketch(); const c = s.constraints.find(c => c.kind === 'distance');
     const l = s.entities[0]; return { axis: c.axis, dx: +(l.p2.x - l.p1.x).toFixed(4), dy: +(l.p2.y - l.p1.y).toFixed(4) }; });
   check(xr.axis === 'x' && xr.dx === 50 && xr.dy !== 0, `X dimension placed above sets the horizontal distance (${JSON.stringify(xr)})`);
+  check(await page.evaluate(() => window._app.toolName) === 'select', 'once a dimension is set, the tool goes back to Select');
+  await page.keyboard.press('d');                                        // Smart Dimension again
   at = await scr(10, 3); await page.mouse.click(at.x, at.y);             // pick the line again
   at = await scr(45, 0); await page.mouse.move(at.x, at.y, { steps: 2 }); await page.mouse.click(at.x, at.y);
   await page.waitForSelector('.dim-input'); await page.fill('.dim-input', '12'); await page.keyboard.press('Enter');

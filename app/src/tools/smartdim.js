@@ -308,6 +308,9 @@ export class SmartDimensionTool extends Tool {
       this.inputEl = null;
       this._commit(parsed.value, parsed.expr);
       this._reset();
+      // One dimension per use: back to Select once it is set (D picks the
+      // tool again). Esc / cancel keeps the tool for another try.
+      this.app.setTool('select');
       this.app.requestRender();
       return null;
     }, () => {
