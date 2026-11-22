@@ -80,6 +80,10 @@ export class PanelsMixin {
       this._bindInkSection(body);
       return;
     }
+    if (sel.length === 0 && this._sliderSel) {
+      const html = this._sliderSectionHTML();
+      if (html) { body.innerHTML = html; this._bindSliderSection(body); return; }
+    }
     if (sel.length === 0) {
       // Nothing selected: the sketch's own settings.
       body.innerHTML = `<div class="ps-empty">

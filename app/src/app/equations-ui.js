@@ -209,6 +209,10 @@ export class EquationsMixin {
         let n = 1;
         while (validateName(this.project, 'var' + n)) n++;
         this.project.variables.push({ name: 'var' + n, expr: '10' });
+      } else if (b.dataset.eq === 'slider') {
+        this.toggleVariableSlider(this.project.variables[+b.dataset.i]);
+        this._refreshEquationsPanel();
+        return;
       } else if (b.dataset.eq === 'del-var') {
         this.project.variables.splice(+b.dataset.i, 1);
       } else if (b.dataset.eq === 'names') {
@@ -366,11 +370,12 @@ export class EquationsMixin {
       : null;
     let html = `<div class="eq-head"><span>Global variables</span><button class="link-btn" data-eq="add-var">+ Add</button></div>`;
     if (!vars.length) html += '<div class="hint">None yet. Variables can be used in any dimension, e.g. <code>=width/2</code>.</div>';
-    html += '<div class="eq-grid">';
+    html += '<div class="eq-grid eq-vars">';
     vars.forEach((v, i) => {
       html += `<input class="eq-name" data-k="var-name" data-i="${i}" value="${esc(v.name)}" aria-label="Variable name">
         <input class="eq-expr${v.error ? ' bad' : ''}" data-k="var-expr" data-i="${i}" value="${esc(v.expr)}" title="${esc(v.error || '')}" aria-label="Variable expression">
         <span class="eq-val${PLAIN.test(v.expr || '') ? ' scrub' : ''}" data-val="var:${i}" ${PLAIN.test(v.expr || '') ? `data-scrub="var:${i}" title="Drag left / right to change (Shift: fine, Ctrl: round)"` : 'title="Set by an expression"'}>${v.error ? '!' : fmt(v.value, false)}</span>
+        <button class="eq-slider${v.slider ? ' on' : ''}" data-eq="slider" data-i="${i}" title="${v.slider ? 'Remove its slider from the sketch' : 'Show a slider for it on the sketch'}" aria-label="${v.slider ? 'Remove slider' : 'Add slider'}" aria-pressed="${!!v.slider}">⊸</button>
         <button class="fwin-x" data-eq="del-var" data-i="${i}" title="Delete variable">&times;</button>`;
     });
     html += '</div>';

@@ -1,3 +1,4 @@
+import { drawSliderBars } from '../app/sliders.js';
 import { Arc, Bezier, Circle, Line, Point } from '../core/entities.js';
 import { bezierBBox } from '../core/bezier.js';
 import { inkBounds } from '../core/strokes.js';
@@ -90,6 +91,7 @@ function paint(ctx, view, src, opts) {
       for (const s of project.visibleSketches()) for (const e of s.entities) walk(e);
       r.drawDimensions(sketch, entMap, src.redundantIds, src.layerState || (() => 'active'));
     }
+    if (src.sliders) drawSliderBars(r, view, project);     // variable sliders, as labels
     return r;
   });
 }
@@ -101,10 +103,10 @@ function measureContext() {
 /** With dimensions shown, their labels can sit outside the shapes: draw
  *  once (no pixels) to find them and grow the box to hold them. */
 function boundsWithDimensions(src, opts, bounds, view) {
-  if (!opts.dimensions) return bounds;
+  if (!opts.dimensions && !src.sliders) return bounds;
   const r = paint(new SvgContext(view.cssW, view.cssH, measureContext()), view, src, { ...opts, backdrop: false });
   const b = { ...bounds };
-  for (const d of r.lastDimRects || []) {
+  for (const d of [...(r.lastDimRects || []), ...(r.lastSliderRects || []).map(s => ({ x: s.b.x, y: s.b.y, w: s.b.w, h: s.b.h }))]) {
     for (const [x, y] of [[d.x, d.y], [d.x + d.w, d.y + d.h]]) {
       const w = view.screenToWorld({ x, y });
       b.minX = Math.min(b.minX, w.x); b.maxX = Math.max(b.maxX, w.x);

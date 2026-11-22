@@ -1919,3 +1919,9 @@
   touch-action: manipulation;
 }
 .chain-done[hidden] { display: none; }
+
+/* Equations window: a variable's "slider on the sketch" button */
+.eq-grid.eq-vars { grid-template-columns: 74px minmax(0, 1fr) 52px 22px 22px; }
+.eq-slider { width: 22px; height: 22px; border: 1px solid transparent; border-radius: 5px; background: none; color: var(--text-muted); cursor: pointer; font-size: 14px; padding: 0; }
+.eq-slider:hover { background: var(--hover); color: var(--text); }
+.eq-slider.on { color: var(--accent); border-color: var(--accent-border); background: var(--accent-softer); }

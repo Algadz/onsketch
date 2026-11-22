@@ -42,6 +42,7 @@ npm run test:ctxmenu # no browser context menu in the editor (only the app's), e
 npm run test:sizes   # line weight (screen px, sketch-wide, same at every zoom), pen / arrow / text sizes in drawing units
 npm run test:groups  # groups (click, click again inside, Esc), clicking through overlapping items, right-click list
 npm run test:driven  # driving / driven dimensions (Properties, rows, right-click), refused when over-defining; size fields drag like Blender
+npm run test:sliders # variable sliders on the sketch: add, drag live, undo, type, move, range, save, export, delete
 npm run test:locus   # trace path of a point: crank circle, slider segment, follows changes, undo, fixed / free points
 npm run test:shapes  # Shapes tool: rectangles, ellipses, stars… (Shift, Ctrl, fill, line, Properties, eraser, saved)
 node tests/style.e2e.mjs  # restyling arrows / texts after drawing, touch tap-through guard
@@ -490,6 +491,15 @@ touch input. Plan and audit: `docs/mobile-plan.md`.
   it, as in Blender: the step fits the value's size, Shift is 10× finer,
   Ctrl snaps to round numbers, Esc restores, release is one undo step; a
   click edits the text. Values set by an equation don't scrub.
+- **Sliders on the sketch**: ⊸ on a variable's row (Equations window)
+  shows a slider for it on the drawing (`h ──●──── 50 mm`), placed where
+  no window covers it; it pans and zooms with the drawing at a constant
+  size. Drag the knob or press on the track (Shift: finer): the sketch
+  and traced paths follow live, release is one undo step. Click the value
+  to type one, drag the name to move the slider, click the name to select
+  it: Properties sets min / max / step and removes it (Delete too; the
+  variable stays). A variable set by a formula shows greyed. Saved with
+  the variable (works in library copies); exports draw it as a label.
 - The Equations window (Σ in the menu bar) lists the global variables and
   only the **dimensions set by a formula** (plain values and driven ones are
   edited on the canvas or in Properties): rename them (references follow),

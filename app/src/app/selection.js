@@ -45,12 +45,14 @@ export class SelectionMixin {
     }
     this.clearStrokeSelection();
     this._groupFocus = null;                 // leaving a group (ink-select.js)
+    this._sliderSel = null;                  // a selected variable slider (sliders.js)
     this.selectionOrder = [];
     this.refreshUI();
     this.requestRender();
   }
 
   deleteSelection() {
+    if (this._sliderSel && this.removeSlider(this._sliderSel)) return;   // a selected variable slider (the variable stays)
     const sketch = this.activeSketch(); if (!sketch) return;
     // Selected shapes, whatever their layer.
     const toDelete = sketch.entities.filter(e => e.selected || e.children().some(c => c.selected));

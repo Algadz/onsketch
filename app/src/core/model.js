@@ -283,7 +283,7 @@ export class Project {
       version: 3, name:this.name, units:this.units, sizes: { ...(this.sizes || {}) },
       ...(this.background ? { background: this.background } : {}),
       ...(this.display ? { display: { ...this.display } } : {}),
-      ...(this.variables.length ? { variables: this.variables.map(v => ({ name: v.name, expr: v.expr })) } : {}),
+      ...(this.variables.length ? { variables: this.variables.map(v => (v.slider ? { name: v.name, expr: v.expr, slider: { ...v.slider } } : { name: v.name, expr: v.expr })) } : {}),
       activeSketchId:this.activeSketchId,
       activeLayerId:this.activeLayerId,
       layers:this.layers.map(l => l.toJSON()),
@@ -299,7 +299,12 @@ export class Project {
     p.background = /^#[0-9a-f]{6}$/i.test(o.background || '') ? o.background : null;
     p.display = cleanDisplay(o.display);
     p.variables = Array.isArray(o.variables)
-      ? o.variables.filter(v => v && typeof v.name === 'string' && typeof v.expr === 'string').map(v => ({ name: v.name, expr: v.expr }))
+      ? o.variables.filter(v => v && typeof v.name === 'string' && typeof v.expr === 'string').map(v => {
+        const out = { name: v.name, expr: v.expr };
+        const sl = v.slider, n = (k) => Number(sl?.[k]);
+        if (sl && ['x', 'y', 'min', 'max', 'step'].every(k => Number.isFinite(n(k))) && n('step') > 0) out.slider = { x: n('x'), y: n('y'), min: Math.min(n('min'), n('max')), max: Math.max(n('min'), n('max')), step: n('step') };
+        return out;
+      })
       : [];
     // Layers arrived in v3. Older files get the single default layer and
     // every entity lands on it (assignLayer below).

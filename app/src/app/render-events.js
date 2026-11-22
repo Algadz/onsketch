@@ -92,6 +92,7 @@ export class RenderEventsMixin {
         this.renderer.drawSnapMarker(this.lastSnap);
       }
     }
+    this._drawSliders?.();                        // variable sliders on the sketch
     this._drawTwoPointTouch?.();                  // touch: aim, pending point, ✓ Done
   }
 
@@ -221,6 +222,8 @@ export class RenderEventsMixin {
         ev.preventDefault();
         return;
       }
+      // A variable slider on the sketch (sliders.js) takes the press.
+      if (ev.button === 0 && !this._spaceHeld && this._sliderPointerDown(ev, screen)) return;
       c.setPointerCapture(ev.pointerId);
       // Pan: middle button, or Space + drag (Alt is "no snap").
       if (ev.button === 1 || (ev.button === 0 && this._spaceHeld)) {

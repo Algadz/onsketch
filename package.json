@@ -35,7 +35,8 @@
     "test:groups": "node tests/groups.e2e.mjs",
     "test:driven": "node tests/driven.e2e.mjs",
     "test:shapes": "node tests/shapes.e2e.mjs",
-    "test:locus": "node tests/locus.e2e.mjs"
+    "test:locus": "node tests/locus.e2e.mjs",
+    "test:sliders": "node tests/sliders.e2e.mjs"
   },
   "devDependencies": {
     "eslint": "^9.39.0",

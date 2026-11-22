@@ -30,6 +30,7 @@ export class ExportMixin {
       labelFor: (c, text) => this.dimensionLabel(c, text),
       layerState: (c) => this.constraintLayerState(c),
       redundantIds: this._lastSolve?.redundantIds,
+      sliders: (this.project.variables || []).some(v => v.slider),
     };
   }
   _exportName() {
