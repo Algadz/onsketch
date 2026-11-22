@@ -23,16 +23,21 @@ import { track } from '../ui/analytics.js';
      the finger (switching sides only past 40 % / 60 % of the width), so
      it never hides where the finger is heading and doesn't chase it.
      It waits 150 ms (or a move) before showing, so taps don't flash it.
-   - Two-point tools (line, rectangle, circle…) place their first point
-     where the finger lands and their second where it lifts: one drag
-     draws one shape. A tap sets the first point (shown as a dot) and the
-     next touch aims the second, placed on lift, so tap–tap works too and
-     you see the result before committing it. A line drawn by one drag
-     stands alone; lines placed tap by tap chain, and tapping the last
-     point again (or Done) ends the chain.
+   - Two-point tools (line, rectangle, circle…): every point is placed
+     the same way. Touch, and a crosshair (with the snap and the
+     magnifier) shows where it would go; slide to aim; lift to place. A
+     quick tap places it where you tap. The point waiting for its partner
+     pulses, and once it is there the next touch shows the line or shape
+     from it at once, so it is always clear which point comes next. The
+     status pill says the step: ① start, ② end (or "next point"). Lines
+     chain: each end starts the next segment; tap the pulsing point, the
+     ✓ Done chip beside it, or Done in the bar to stop.
    ============================================================ */
 const TWO_POINT = { line: 'startPt', centerLine: 'center', rectangle: 'start', centerRectangle: 'center', circle: 'center', hexagon: 'center' };
 const TWO_POINT_MOVE_PX = 10;
+const FIRST = { line: 'start point', centerLine: 'midpoint', rectangle: 'first corner', centerRectangle: 'center', circle: 'center', hexagon: 'center' };
+const SECOND = { line: 'end point', centerLine: 'one end', rectangle: 'opposite corner', centerRectangle: 'a corner', circle: 'a point on the circle', hexagon: 'a corner' };
+const cap = (t) => t.charAt(0).toUpperCase() + t.slice(1);
 const PEN_SEEN_KEY = 'onsketch:pen-seen';     // '1' once a pen touched the canvas on this device
 const LONG_PRESS_MS = 450;
 const SLOP_PX = 8;
@@ -119,6 +124,7 @@ export class TouchMixin {
       if (n === 1 && !this.stylusMode) {
         this.hideContextMenu();
         T.pending = { ev, id: ev.pointerId, start: pos, t0: performance.now(), timer: setTimeout(() => this._longPress(), LONG_PRESS_MS) };
+        this._twoPointFeedback(ev);               // show the aim / the line from the pending point at once
         return true;
       }
       // Second finger (or any finger in stylus mode): gesture.
@@ -190,6 +196,7 @@ export class TouchMixin {
     const T = this._touch; const pend = T && T.pending;
     if (!pend || T.ptrs.size !== 1) return;
     pend.longPressed = true;
+    this._clearTwoPointFeedback();
     const { screen, world } = this._canvasHandlers.getWorld(pend.ev);
     if (this._valueInput) return;                 // a value box is open: nothing to show
     const c = this.hitDimAtScreen(screen.x, screen.y) || this.hitRelationAtScreen(screen.x, screen.y);
@@ -208,49 +215,144 @@ export class TouchMixin {
     return k ? this.tool[k] || null : null;
   }
 
-  /** Touch / pen down with a two-point tool. @returns {boolean} handled */
+  /** Touch / pen down with a two-point tool: start aiming the point
+   *  (nothing is placed until the finger lifts). @returns {boolean} handled */
   _twoPointDown(world, snap, screen, ev) {
     this._twoPt = null;
     if (!(this.toolName in TWO_POINT)) return false;
     const armed = !!this._twoPointAnchor();
     this._twoPt = { armed, start: screen };
-    if (armed) {                                   // aim the second point: placed on lift
-      this.tool.onPointerMove(world, snap, ev);
-      return true;
-    }
-    this.tool.onPointerDown(world, snap, ev);      // first point where the finger lands
-    this.tool.cursor = null;                       // no preview until the finger moves
-    this.requestRender();
+    this._twoPointAim(world, snap, ev);
     return true;
   }
 
-  /** Touch / pen up with a two-point tool. @returns {boolean} handled */
+  /** While aiming (finger down): the crosshair, or the line / shape from
+   *  the pending point. */
+  _twoPointAim(world, snap, ev) {
+    if (this._twoPointAnchor()) { this._touchAim = null; this.tool.onPointerMove(world, snap, ev); }
+    else { this._touchAim = snap && !snap.rejected ? { x: snap.x, y: snap.y } : { ...world }; this.tool.cursor = null; }
+    this.requestRender();
+  }
+
+  /** Finger moved with a two-point tool (from render-events' move). */
+  _twoPointMove(world, snap, ev) {
+    if (!this._twoPt || !(this.toolName in TWO_POINT)) return;
+    this._twoPointAim(world, snap, ev);
+  }
+
+  /** Touch / pen up with a two-point tool: the point goes where the
+   *  finger lifts. @returns {boolean} handled */
   _twoPointUp(world, snap, screen, ev) {
     const g = this._twoPt;
     this._twoPt = null;
+    this._touchAim = null;
     if (!g || !(this.toolName in TWO_POINT)) return false;
     if (ev.type === 'pointercancel') { this._abortTwoPoint(g); return true; }
     const moved = Math.hypot(screen.x - g.start.x, screen.y - g.start.y) > TWO_POINT_MOVE_PX;
-    const isLine = this.toolName === 'line';
-    if (g.armed) {
-      if (!this._twoPointAnchor()) return true;
-      this.tool.onPointerDown(world, snap, ev);
-      // Tapping the chain's last point again ends the chain.
-      if (isLine && this.tool.invalidEnd && !moved) this.tool.terminateChain(false);
-      this.tool.cursor = null;                     // no stale preview: touch has no hover
-    } else if (moved && this._twoPointAnchor()) {
-      this.tool.onPointerDown(world, snap, ev);    // one drag = one shape
-      if (isLine) this.tool.terminateChain(false); // stands alone (or cancelled if too short)
-      this.tool.cursor = null;
-    }
+    this.tool.onPointerDown(world, snap, ev);
+    // Tapping the pending point again ends the line chain.
+    if (g.armed && this.toolName === 'line' && this.tool.invalidEnd && !moved) this.tool.terminateChain(false);
+    this.tool.cursor = null;                       // no stale preview: touch has no hover
+    this._refreshTouchStep();
     this.requestRender();
     return true;
   }
 
-  /** Undo what the current two-point touch did (second finger, cancel). */
-  _abortTwoPoint(g) {
-    if (g.armed) { this.tool.cursor = null; this.requestRender(); return; }   // keep the first point
-    this.setTool(this.toolName);                  // drop the point this touch placed
+  /** Undo what the current two-point touch did (second finger, cancel):
+   *  nothing was placed yet, only the aim goes. */
+  _abortTwoPoint() {
+    this._touchAim = null;
+    if (this.tool) this.tool.cursor = null;
+    this.requestRender();
+  }
+
+  /** Feedback as soon as a finger lands (before it moves or lifts). */
+  _twoPointFeedback(ev) {
+    if (!(this.toolName in TWO_POINT) || !this._canvasHandlers) return;
+    const { world } = this._canvasHandlers.getWorld(ev);
+    const snap = this._snapForCurrentTool ? this._snapForCurrentTool(world) : null;
+    this.lastSnap = snap;
+    this._twoPointAim(world, snap, ev);
+  }
+  _clearTwoPointFeedback() {
+    if (!(this.toolName in TWO_POINT)) return;
+    this._touchAim = null; this.lastSnap = null;
+    if (this.tool) this.tool.cursor = null;
+    this.requestRender();
+  }
+
+  /* ---- Saying which point comes next (touch) ---- */
+
+  /** The status text of a two-point tool on touch: which step. */
+  _touchStepText() {
+    const name = this.toolName, how = 'touch, slide to aim, lift to place';
+    if (!this._twoPointAnchor()) return `① ${cap(FIRST[name])}: ${how}.`;
+    if (name === 'line') {
+      return this.tool._lastPlaced ? `Next point: ${how}. Tap ● or ✓ Done to stop.` : `② End point: ${how}. Tap ● again to cancel.`;
+    }
+    return `② ${cap(SECOND[name])}: ${how}.`;
+  }
+  /** Two-point tools say their step on touch (wraps the tool's hint). */
+  _wrapTouchHint() {
+    if (!(this.toolName in TWO_POINT) || !this.tool?.hint) return;
+    const own = this.tool.hint.bind(this.tool);
+    this.tool.hint = () => (this.touchUI ? this._touchStepText() : own());
+  }
+  _refreshTouchStep() {
+    if (!this.touchUI || !(this.toolName in TWO_POINT)) return;
+    const el = document.getElementById('status-hint');
+    if (el && !(this.toolName === 'line' && this.tool.invalidEnd)) el.textContent = this._touchStepText();
+  }
+
+  /** Drawn every frame: the aim crosshair, the pulsing pending point and
+   *  the ✓ Done chip of a line chain (touch). */
+  _drawTwoPointTouch() {
+    const chip = document.getElementById('chain-done');
+    const anchor = this.touchUI && this.toolName in TWO_POINT ? this._twoPointAnchor() : null;
+    const ctx = this.renderer.ctx, v = this.view;
+    if (this._touchAim && this.touchUI) {
+      const s = v.worldToScreen(this._touchAim);
+      ctx.save();
+      ctx.strokeStyle = this.renderer.theme.preview || '#1f7ad6'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(s.x, s.y, 13, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(s.x - 20, s.y); ctx.lineTo(s.x - 6, s.y); ctx.moveTo(s.x + 6, s.y); ctx.lineTo(s.x + 20, s.y);
+      ctx.moveTo(s.x, s.y - 20); ctx.lineTo(s.x, s.y - 6); ctx.moveTo(s.x, s.y + 6); ctx.lineTo(s.x, s.y + 20); ctx.stroke();
+      ctx.restore();
+    }
+    if (anchor) {
+      const s = v.worldToScreen(anchor), t = (performance.now() % 1200) / 1200;
+      ctx.save();
+      ctx.fillStyle = this.renderer.theme.preview || '#1f7ad6';
+      ctx.beginPath(); ctx.arc(s.x, s.y, 5, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 0.55 * (1 - t); ctx.strokeStyle = ctx.fillStyle; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(s.x, s.y, 7 + 14 * t, 0, Math.PI * 2); ctx.stroke();
+      ctx.restore();
+      // keep pulsing, gently (not every frame)
+      clearTimeout(this._pulseTimer);
+      this._pulseTimer = setTimeout(() => this.requestRender(), 60);
+    }
+    // ✓ Done beside the pending point of a line chain
+    const chaining = anchor && this.toolName === 'line' && this.tool._lastPlaced;
+    if (!chaining) { if (chip) chip.hidden = true; return; }
+    let c = chip;
+    if (!c) {
+      c = document.createElement('button');
+      c.type = 'button'; c.id = 'chain-done'; c.className = 'chain-done';
+      c.textContent = '✓ Done'; c.title = 'Stop the line here';
+      c.addEventListener('pointerdown', (e) => e.stopPropagation());
+      c.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (this.toolName === 'line' && this.tool.startPt) this.tool.terminateChain(false);
+        this._refreshTouchStep(); this.requestRender();
+      });
+      (this.canvas.parentElement || document.body).appendChild(c);
+    }
+    c.hidden = false;
+    const r = this.canvas.getBoundingClientRect(), pr = c.offsetParent?.getBoundingClientRect() || { left: 0, top: 0 };
+    const s = v.worldToScreen(anchor), w = c.offsetWidth || 70, h = c.offsetHeight || 30;
+    const x = Math.min(Math.max(8, s.x + 16), r.width - w - 8), y = Math.min(Math.max(8, s.y - h - 14), r.height - h - 8);
+    c.style.left = (r.left - pr.left + x) + 'px';
+    c.style.top = (r.top - pr.top + y) + 'px';
   }
 
   /** A second finger arrived after a drag started: put things back. */

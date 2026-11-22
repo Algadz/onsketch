@@ -156,7 +156,10 @@ for (const phone of [false, true]) {
   await page.click('#guide [data-a="tool"]');
   check(await page.evaluate(() => window._app.toolName) === 'rectangle' && !(await page.$('#guide [data-a="tool"]')), `${tag}: the step's button picks the Rectangle tool`);
   const A = [cx - 70, cy - 20], B = [cx + 70, cy + 80];
-  if (phone) { await touch('touchStart', [A]); for (let i = 1; i <= 8; i++) await touch('touchMove', [[A[0] + (B[0] - A[0]) * i / 8, A[1] + (B[1] - A[1]) * i / 8]]); await touch('touchEnd', []); await page.waitForTimeout(200); }
+  if (phone) {     // a corner by tap, the other aimed by sliding, placed on lift
+    await tap(...A);
+    await touch('touchStart', [[B[0] - 40, B[1] - 30]]); for (let i = 1; i <= 8; i++) await touch('touchMove', [[B[0] - 40 + 40 * i / 8, B[1] - 30 + 30 * i / 8]]); await touch('touchEnd', []); await page.waitForTimeout(200);
+  }
   else { await page.mouse.click(...A); await page.mouse.click(...B); }
   await page.waitForFunction(() => /Give it a size/.test(document.getElementById('guide').textContent));
   check(true, `${tag}: drawing the rectangle moves on to step 2, Give it a size`);

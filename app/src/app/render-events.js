@@ -92,6 +92,7 @@ export class RenderEventsMixin {
         this.renderer.drawSnapMarker(this.lastSnap);
       }
     }
+    this._drawTwoPointTouch?.();                  // touch: aim, pending point, ✓ Done
   }
 
   /** Canvas cursor for the active tool. The Fill tool shows a paint drop
@@ -148,6 +149,8 @@ export class RenderEventsMixin {
       case 'shape':     this.tool = new ShapeTool(this); break;
     }
     if (this.tool.activate) this.tool.activate();
+    this._touchAim = null;
+    this._wrapTouchHint?.();                      // two-point tools say their step on touch
     document.querySelectorAll('[data-tool]').forEach(b => b.classList.toggle('active', b.dataset.tool === name));
     document.getElementById('status-tool').textContent = 'Tool: ' + toolDef(name).label;
     if (name === 'smartdim' && !this.showDimensions) this.setDimensionsVisible(true);
@@ -253,6 +256,7 @@ export class RenderEventsMixin {
       const snap = this._snapForCurrentTool(world);
       this.lastSnap = snap;
       this.tool.onPointerMove(world, snap, ev);
+      if (ev.pointerType && ev.pointerType !== 'mouse') this._twoPointMove?.(world, snap, ev);
       const hint = document.getElementById('cursor-hint');
       if (this.snapOn && this.snapSuppressed() && this._placingOrDragging()) {
         // Alt: say so at the cursor, where snap names usually appear.

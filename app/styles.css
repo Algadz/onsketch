@@ -1911,3 +1911,11 @@
 /* Equations window: give a dimension a formula */
 .eq-add { margin: -2px 0 8px; }
 .eq-add select { width: 100%; font: inherit; font-size: 12px; padding: 4px 6px; border: 1px dashed var(--border); border-radius: 5px; background: var(--field); color: var(--text-soft); }
+
+/* Touch: ✓ Done beside the pending point of a line chain (touch.js) */
+.chain-done {
+  position: absolute; z-index: 30; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--accent-border);
+  background: var(--panel); color: var(--accent); font: 600 14px var(--font, inherit); box-shadow: 0 2px 8px rgba(0,0,0,.15);
+  touch-action: manipulation;
+}
+.chain-done[hidden] { display: none; }

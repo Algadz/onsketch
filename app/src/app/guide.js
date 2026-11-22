@@ -134,7 +134,7 @@ export class GuideMixin {
     g.step = step;
     const items = [
       { title: 'Draw a rectangle', tool: 'rectangle', label: 'Rectangle',
-        how: touch ? 'Then drag across the canvas.' : 'Then click two corners on the canvas.' },
+        how: touch ? 'Then tap two corners on the canvas (slide before lifting to aim).' : 'Then click two corners on the canvas.' },
       { title: 'Give it a size', tool: 'smartdim', label: 'Dimension',
         how: touch ? 'Tap a side, tap again to place the dimension, then type a size like 120.' : 'Click a side, click again to place the dimension, then type a size like 120 and press Enter.' },
       { title: 'Colour it', tool: 'fill', label: 'Fill',

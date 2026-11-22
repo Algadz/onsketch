@@ -67,20 +67,40 @@ const lineMidOnScreen = (page, t = 0.5) => app(page, (t) => {
   check(await app(page, () => !!document.querySelector('#optbar [data-touch="done"]')), 'phone: drawing tools show Done');
   await page.tap('#optbar [data-touch="done"]');
 
-  // Line: one drag = one line (placed on lift); tap–tap chains; tap the last point to end.
+  // Line: every point is aimed (touch, slide) and placed on lift; the
+  // pending point pulses; segments chain; ✓ Done or tapping ● stops.
   await app(page, () => window._app.setTool('line'));
   const lines = () => app(page, () => window._app.activeSketch().entities.filter(e => e.constructor.kind === 'line').length);
+  const st = () => app(page, () => (window._app._render(), { start: window._app.tool.startPt ? { x: window._app.tool.startPt.x, y: window._app.tool.startPt.y } : null, aim: !!window._app._touchAim,
+    preview: !!window._app.tool.getPreview?.(), hint: document.getElementById('status-hint').textContent, chip: !!document.getElementById('chain-done') && !document.getElementById('chain-done').hidden }));
   const L0 = await lines();
-  await drag(Array.from({ length: 10 }, (_, i) => [60 + i * 24, 140]));
-  check(await lines() === L0 + 1 && await app(page, () => !window._app.tool.startPt), 'phone: Line, one drag draws one line, placed on lift');
-  await drag(Array.from({ length: 10 }, (_, i) => [60 + i * 24, 200 + i * 3]));
-  check(await lines() === L0 + 2, 'phone: Line, a second drag draws a second, separate line');
-  await page.touchscreen.tap(60, 260); await page.waitForTimeout(350);
-  check(await lines() === L0 + 2 && await app(page, () => !!window._app.tool.startPt), 'phone: Line, a tap sets the start only');
-  await drag(Array.from({ length: 8 }, (_, i) => [100 + i * 20, 300]));
-  check(await lines() === L0 + 3, 'phone: Line, the next touch aims the end and places it on lift');
-  await page.touchscreen.tap(240, 300); await page.waitForTimeout(350);
-  check(await lines() === L0 + 3 && await app(page, () => !window._app.tool.startPt), 'phone: Line, tapping the last point ends the chain');
+  check(/① Start point: touch, slide to aim, lift to place/.test((await st()).hint), `phone: Line says step ① in touch words (${(await st()).hint})`);
+  await touch('touchStart', [[60, 140]]);
+  let s1 = await st();
+  check(s1.aim && !s1.start, 'phone: Line, a touch shows where the start would go, nothing placed yet');
+  for (let i = 1; i <= 6; i++) await touch('touchMove', [[60 + i * 10, 140]]);
+  s1 = await st();
+  check(s1.aim && !s1.start && await lines() === L0, 'phone: Line, sliding aims the start (still nothing placed)');
+  await touch('touchEnd', []);
+  s1 = await st();
+  const startAt = await app(page, () => { const a = window._app, s = a.view.worldToScreen(a.tool.startPt), r = a.canvas.getBoundingClientRect(); return { x: s.x + r.left, y: s.y + r.top }; });
+  check(s1.start && Math.abs(startAt.x - 120) < 3 && !s1.aim && /② End point/.test(s1.hint), `phone: Line, the start is placed where the finger lifted (${startAt.x.toFixed(0)}, ${startAt.y.toFixed(0)}), then step ②`);
+  await touch('touchStart', [[220, 260]]);
+  s1 = await st();
+  check(s1.preview, 'phone: Line, with the start placed, a touch shows the line from it at once');
+  for (let i = 1; i <= 6; i++) await touch('touchMove', [[220 + i * 5, 260 - i * 20]]);
+  await touch('touchEnd', []);
+  s1 = await st();
+  check(await lines() === L0 + 1 && s1.start && /Next point/.test(s1.hint) && s1.chip, `phone: Line, lift places the end; it chains, says "Next point", shows ✓ Done (${s1.hint})`);
+  await page.touchscreen.tap(250, 300); await page.waitForTimeout(350);
+  check(await lines() === L0 + 2, 'phone: Line, a tap places the next point (chain)');
+  await page.tap('#chain-done');
+  s1 = await st();
+  check(!s1.start && !s1.chip && /① Start point/.test(s1.hint) && await lines() === L0 + 2, 'phone: Line, ✓ Done stops the chain, back to step ①');
+  await page.touchscreen.tap(80, 330); await page.waitForTimeout(350);
+  await page.touchscreen.tap(80, 330); await page.waitForTimeout(350);
+  s1 = await st();
+  check(!s1.start && await lines() === L0 + 2, 'phone: Line, tapping the pending start again cancels it');
   const doneBox = await page.locator('#optbar [data-touch="done"]').boundingBox();
   check(doneBox && doneBox.x + doneBox.width <= 390, 'phone: Done is on screen without scrolling the options bar');
   await app(page, () => window._app.setTool('select'));
