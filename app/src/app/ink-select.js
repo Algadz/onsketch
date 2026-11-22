@@ -143,6 +143,7 @@ export class InkSelectMixin {
     if (sketch?.strokes.includes(c)) {
       if (c.kind === 'text') { const t = String(c.text).split('\n')[0]; return `Text “${t.length > 18 ? t.slice(0, 17) + '…' : t}”`; }
       if (isShape(c)) return shapeLabel(c.shape);
+      if (c.traces) return 'Traced path';
       return c.kind === 'image' ? 'Image' : c.kind === 'arrow' ? 'Arrow' : c.kind === 'marker' ? 'Marker stroke' : 'Pen stroke';
     }
     return this._entityLabel(c);
@@ -207,7 +208,7 @@ export class InkSelectMixin {
     const arrows = items.filter(isArrow), shapes = items.filter(isShape);
     const lines = strokes.length - arrows.length - shapes.length;
     const what = [
-      lines ? `${lines} stroke${lines === 1 ? '' : 's'}` : '',
+      lines ? (lines === 1 && first.traces ? 'traced path' : `${lines} stroke${lines === 1 ? '' : 's'}`) : '',
       arrows.length ? `${arrows.length} arrow${arrows.length === 1 ? '' : 's'}` : '',
       shapes.length ? (shapes.length === 1 ? shapeLabel(shapes[0].shape).toLowerCase() : `${shapes.length} shapes`) : '',
       texts.length ? `${texts.length} text${texts.length === 1 ? '' : 's'}` : '',
@@ -268,6 +269,13 @@ export class InkSelectMixin {
       html += `<div class="prop-row"><label>layer</label><select data-ink-k="layer">
         ${[...this.project.layers].reverse().map(l => `<option value="${l.id}"${l.id === first.layerId ? ' selected' : ''}>${esc(l.name)}</option>`).join('')}
       </select></div>`;
+    }
+    if (items.length === 1 && first.traces) {
+      const p = this._lookupAny(first.traces.point);
+      const state = !p ? 'point deleted' : first._stale ? '<b>out of date</b>' : 'up to date';
+      html += `<div class="prop-row"><label>path of</label><span class="prop-val">${p ? esc(this._entityLabel(p)) : 'a deleted point'}</span></div>
+        <div class="prop-row"><label>status</label><span class="prop-val">${state} <button class="mini-btn" data-ink-act="recompute-path" title="Trace the point again with the sketch as it is now"${p ? '' : ' disabled'}>↻ Recompute</button></span></div>
+        <div class="hint">${esc(this._pathSummary(first.traces))}</div>`;
     }
     html += this._inkGroupLinkHTML(items);
     html += `<div class="hint">Drag to move${texts.length ? ', double-click a text to edit it' : ''}${frames.length ? '; the box handles resize and turn' : ''}. Delete removes. Ink is not solved or dimensioned.</div>`;
@@ -387,6 +395,7 @@ export class InkSelectMixin {
       else if (act === 'ungroup') this.ungroupSelectedInk();
       else if (act === 'link') this.startLinkPick();
       else if (act === 'unlink') this.unlinkSelectedInk();
+      else if (act === 'recompute-path') this.recomputePointPath(items[0]);
       else if (act === 'detach') { for (const a of items.filter(isArrow)) { setArrowEnd(a, 0, null); setArrowEnd(a, 1, null); } done(); }
     }));
   }

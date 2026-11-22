@@ -8,7 +8,8 @@
    order, delete) and is drawn on top of that layer's shapes.
 
    Saved form (one list, `sketch.strokes`, in drawing order):
-     stroke { id, layerId, kind: 'pen' | 'marker', color, opacity, width, pts: [x0, y0, x1, y1, …] }
+     stroke { id, layerId, kind: 'pen' | 'marker', color, opacity, width, dash?, traces?, pts: [x0, y0, x1, y1, …] }
+            (traces: a point's traced path, app/locus.js)
      text   { id, layerId, kind: 'text', color, opacity, size, text, bold?, box?, angle?, pts: [x, y] }
      arrow  { id, layerId, kind: 'arrow', color, opacity, width, tips?, head?, dash?, at?, pts: [tail, tip] }
             (core/arrows.js)
@@ -89,6 +90,25 @@ export function strokeToJSON(s) {
   o.pts = s.points.flatMap(p => (s.at || isImage(s) || isShape(s) ? [p.x, p.y] : [round(p.x), round(p.y)]));
   if (s.group) o.group = s.group;
   if (s.link) o.link = linkToJSON(s.link);
+  if (STROKE_KINDS.includes(s.kind)) {
+    if (s.dash) o.dash = true;
+    if (s.traces) o.traces = tracesToJSON(s.traces);
+  }
+  return o;
+}
+
+/* A traced path (app/locus.js): the point it traces and the state it
+   was traced from. */
+function tracesToJSON(t) {
+  const o = { point: t.point, fp: t.fp };
+  if (t.closed) o.closed = true;
+  if (Array.isArray(t.ends) && t.ends.length) o.ends = t.ends.slice(0, 2);
+  return o;
+}
+function reviveTraces(t) {
+  if (!t || typeof t !== 'object' || typeof t.point !== 'string') return null;
+  const o = { point: t.point, fp: typeof t.fp === 'string' ? t.fp : '', closed: !!t.closed };
+  if (Array.isArray(t.ends)) o.ends = t.ends.filter(e => typeof e === 'string').slice(0, 2);
   return o;
 }
 
@@ -169,12 +189,16 @@ export function reviveStroke(o) {
     }
     return a;
   }
-  return {
+  const st = {
     ...base,
     kind: STROKE_KINDS.includes(o.kind) ? o.kind : 'pen',
     width: Number.isFinite(width) && width > 0 ? width : 1,
     points,
   };
+  if (o.dash) st.dash = true;
+  const traces = reviveTraces(o.traces);
+  if (traces) st.traces = traces;
+  return st;
 }
 
 /** A usable text box, or null. */

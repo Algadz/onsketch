@@ -27,6 +27,7 @@ export class RenderEventsMixin {
     this._fieldCache = null; this._fieldLookup = null;   // text formulas see this frame's values
     this.refreshDrivenDimensions();           // floating dimensions show what they measure
     this.syncInkLinks();                      // linked ink follows its geometry
+    this._markStalePaths();                   // traced paths whose shapes changed
     this.renderer.drawGrid(this.gridOn, this.project.background);
     this.renderer.drawEntities(this.project, this.fillDisplay());
     this._drawInkLinks();

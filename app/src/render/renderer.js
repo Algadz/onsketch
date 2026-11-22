@@ -197,6 +197,8 @@ export class Renderer {
     }
     ctx.lineWidth = w;
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    if (st.dash) ctx.setLineDash([w * 3.2, w * 2.4]);
+    if (st._stale && !this.exportMode) ctx.globalAlpha *= 0.4;   // a traced path out of date
     ctx.beginPath();
     ctx.moveTo(pts[0].x, pts[0].y);
     for (let i = 1; i < pts.length - 1; i++) {
@@ -207,7 +209,26 @@ export class Renderer {
     ctx.lineTo(end.x, end.y);
     ctx.stroke();
     ctx.restore();
+    if (st._stale && !this.exportMode) this._drawStaleMark(pts[0]);
     if (st.selected) this._drawInkSelection(pts, w);
+  }
+
+  /** "↻ out of date" tag at the start of a traced path. */
+  _drawStaleMark(p) {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.globalAlpha = 1;
+    ctx.font = '600 11px ui-sans-serif, system-ui, sans-serif';
+    const text = '↻ out of date', w = ctx.measureText(text).width + 10;
+    const x = p.x + 8, y = p.y - 22;
+    ctx.fillStyle = this.theme.paper || '#fff';
+    ctx.strokeStyle = this.theme.selected;
+    ctx.lineWidth = 1;
+    ctx.beginPath(); roundRect(ctx, x, y, w, 17, 5); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = this.theme.selected;
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, x + 5, y + 9);
+    ctx.restore();
   }
 
   /** A text: one canvas line per text line, top-left at its point, in

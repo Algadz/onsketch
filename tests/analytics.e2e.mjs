@@ -101,8 +101,7 @@ check(await page.evaluate(() => window.__sent.length) === 0, 'nothing is sent to
 // ---- Pricing page ----
 await page.goto(`http://localhost:${port}/pricing/`);
 await page.waitForTimeout(500);
-await page.click('.pr-toggle [data-interval="month"]');
-check(await count('pricing-interval', { interval: 'month' }) === 1, 'pricing: pricing-interval {interval: month}');
+// (Pro is yearly only: no monthly / yearly toggle to count)
 
 // ---- About page (the former landing page): Umami script and tagged buttons ----
 await page.goto(`http://localhost:${port}/about/`);

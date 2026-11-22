@@ -155,6 +155,9 @@ export class InkLinksMixin {
       const t = this._inkMenuTarget;
       out.push({ id: 'select-member', glyph: '◫', label: `Select this ${this._inkWord(t)} only`, hint: 'click again', run: () => this.focusGroupMember(t) });
     }
+    if (items.length === 1 && items[0].traces) {
+      out.push({ id: 'recompute-path', glyph: '↻', label: 'Recompute path', hint: items[0]._stale ? 'out of date' : '', run: () => this.recomputePointPath(items[0]) });
+    }
     if (items.length === 1 && isText(items[0])) {
       out.push({ id: 'edit-text', glyph: 'T', label: 'Edit text', run: () => this.editText(items[0]) });
     }

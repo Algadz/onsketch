@@ -42,6 +42,7 @@ npm run test:ctxmenu # no browser context menu in the editor (only the app's), e
 npm run test:sizes   # line weight (screen px, sketch-wide, same at every zoom), pen / arrow / text sizes in drawing units
 npm run test:groups  # groups (click, click again inside, Esc), clicking through overlapping items, right-click list
 npm run test:driven  # driving / driven dimensions (Properties, rows, right-click), refused when over-defining; size fields drag like Blender
+npm run test:locus   # trace path of a point: crank circle, slider segment, out of date, Recompute, fixed / free points
 npm run test:shapes  # Shapes tool: rectangles, ellipses, stars… (Shift, Ctrl, fill, line, Properties, eraser, saved)
 node tests/style.e2e.mjs  # restyling arrows / texts after drawing, touch tap-through guard
 node tests/analytics.e2e.mjs  # Umami events: what is counted, once per visit, nothing sent from tests
@@ -160,6 +161,19 @@ cached modules after a deploy. `npm test` fails if the stamp is out of date.
   shape, copied and erased like any ink, and Properties changes the
   shape, fill, line and box size. Shapes are ink: never solved or
   dimensioned, and they don't close areas for the Fill tool.
+- **Trace path of a point**: right-click a point → *Trace path of this
+  point*. With the rest of the sketch moving as a mechanism (fixed points
+  stay put), every position the point can take is drawn as a dashed ink
+  stroke in the current colour and pen size: a crank end gives a circle, a
+  slider a segment between its dead points, a four-bar coupler point its
+  coupler curve. Works for points with one degree of freedom; a fixed point
+  or a point free in two directions gets a note saying why there is no
+  path. The path is ink (restyle, erase, group, copy, export as PNG/SVG)
+  that remembers its point: when the shapes it depends on change it fades
+  with "↻ out of date" until **Recompute** (Properties, or its right-click
+  menu). Open paths stop where the mechanism locks, or at twice the
+  sketch's size for endless ones. Only the shapes tied to the point take
+  part, so tracing stays quick (core/locus.js, app/locus.js).
 - **Resize and turn ink**: select strokes, arrows, texts or a group (no
   shapes) and a transform box appears. Corner handles resize keeping
   proportions (Shift: free), edge handles stretch one way (Shift: keep
