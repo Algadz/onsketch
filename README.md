@@ -173,7 +173,9 @@ cached modules after a deploy. `npm test` fails if the stamp is out of date.
   make it wrong (a length, angle or relation, a fixed point, or the
   linkage flipped to its other assembly), it is traced again as part of
   that change (one undo step); moving the mechanism along its motion
-  doesn't need it. If it can't be traced any more (its point deleted,
+  doesn't need it. While a value is dragged in the Equations window
+  (Blender-style), the path follows live with a quick, coarser trace, and
+  is traced again at full quality on release. If it can't be traced any more (its point deleted,
   fixed, or free in two directions), the last drawing stays, faded with
   "↻ out of date", and Properties says why. **Recompute** (Properties, or
   its right-click menu) forces a fresh trace. Open paths stop where the mechanism locks, or at twice the

@@ -14,7 +14,9 @@ import { simplifyPoints } from '../core/strokes.js';
    a change may make it wrong, it is traced again, as part of the same
    change (one undo step). If it can't be (its point deleted, fixed, or
    free in two directions), it keeps its drawing and shows as out of date
-   (faded, with a ↻ mark), with why in Properties. Recompute is still
+   (faded, with a ↻ mark), with why in Properties. While a value is
+   dragged (scrubbing in the Equations window), paths follow live with a
+   quick, coarser trace, redone at full quality when the value is set. Recompute is still
    offered (Properties, its right-click menu) to force a fresh trace.
 
      stroke.traces = { point: id, fp: fingerprint, tol, closed, ends }
@@ -29,6 +31,7 @@ import { simplifyPoints } from '../core/strokes.js';
 
 const TIME_LIMIT = 4000;        // ms for one trace asked for
 const AUTO_TIME_LIMIT = 1500;   // ms for one automatic update
+const LIVE_TIME_LIMIT = 120;    // ms for one update while a value is dragged
 
 export class LocusMixin {
   /** Shapes linked to `point` through constraints (the mechanism that
@@ -118,14 +121,16 @@ export class LocusMixin {
   }
 
   /** Traces the path of `point`. @returns {{ok, message, result?}} */
-  _tracePath(point, timeLimit = TIME_LIMIT) {
+  _tracePath(point, timeLimit = TIME_LIMIT, coarse = false) {
     const s = this._pathSystem(point);
     if (!s || !s.rows.length) return { ok: false, message: 'This point is fixed: it has no path to trace.' };
     const { size, bounds } = this._pathScale(point);
     const before = s.sys.get();
     let result;
     try {
-      result = traceLocus(s.sys, { step: size / 160, maxStep: size / 40, bounds, timeLimit });
+      result = coarse
+        ? traceLocus(s.sys, { step: size / 70, maxStep: size / 18, bounds, timeLimit, maxTurn: Math.PI / 6 })
+        : traceLocus(s.sys, { step: size / 160, maxStep: size / 40, bounds, timeLimit });
     } finally {
       s.sys.set(before);
       this._restoreSketchParams(s.rows);
@@ -245,19 +250,22 @@ export class LocusMixin {
    *  so the change and its updated paths are one step). A path that can't
    *  be traced any more (its point deleted, fixed, or free in two
    *  directions) keeps its drawing and shows as out of date, with why. */
-  _autoUpdatePaths() {
+  _autoUpdatePaths({ live = false } = {}) {
     const sketch = this.activeSketch(); if (!sketch) return false;
     const traced = sketch.strokes.filter(s => s.traces);
     let changed = false;
     for (const s of traced) {
-      if (!this._pathIsStale(s)) { s._stale = false; s._pathError = null; continue; }
+      // a quick, coarser trace drawn while a value was dragged is redone
+      // properly once the value is set
+      if (!(s._coarse && !live) && !this._pathIsStale(s)) { s._stale = false; s._pathError = null; continue; }
       const point = this._lookupAny(s.traces.point);
-      const t = point instanceof Point ? this._tracePath(point, AUTO_TIME_LIMIT) : { ok: false, message: 'Its point was deleted.' };
+      const t = point instanceof Point ? this._tracePath(point, live ? LIVE_TIME_LIMIT : AUTO_TIME_LIMIT, live) : { ok: false, message: 'Its point was deleted.' };
       if (!t.ok) { s._stale = true; s._pathError = t.message; continue; }
       s.points = t.points;
-      s.traces = { ...s.traces, fp: t.fp, tol: t.tol, closed: t.result.closed, ends: t.result.ends };
+      s.traces = { ...s.traces, fp: t.fp, tol: t.tol * (live ? 4 : 1), closed: t.result.closed, ends: t.result.ends };
       delete s.link;
       s._stale = false; s._pathError = null;
+      if (live) s._coarse = true; else delete s._coarse;
       changed = true;
     }
     return changed;

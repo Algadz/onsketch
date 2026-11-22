@@ -201,6 +201,46 @@ await page.evaluate(() => {
 k = await paths();
 check(!k[0].stale && k[0].ys.some(y => y < 0), `the mirrored assembly (rocker below): its path is traced again, below now (min y ${Math.min(...k[0].ys).toFixed(1)})`);
 
+// ---- Scrubbing a variable in the Equations window: the path follows live ----
+await page.evaluate(() => {
+  const a = window._app, P = (id, x, y) => ({ type: 'point', id, x, y });
+  const crank = 10, cpl = 25, rock = 25, G = 20, h = 50;
+  const A = { x: 0, y: crank }, O2 = { x: G, y: 0 };
+  const dx = O2.x - A.x, dy = O2.y - A.y, d = Math.hypot(dx, dy), l = (cpl * cpl - rock * rock + d * d) / (2 * d), hh = Math.sqrt(cpl * cpl - l * l);
+  const B = { x: A.x + dx * l / d - dy * hh / d, y: A.y + dy * l / d + dx * hh / d };
+  const Pp = { x: A.x + (B.x - A.x) * h / cpl, y: A.y + (B.y - A.y) * h / cpl };
+  a.project = a.project.constructor.fromJSON({ version: 5, units: 'mm', activeLayerId: 'l', layers: [{ id: 'l', name: 'L' }], variables: [{ name: 'h', expr: '50' }],
+    sketches: [{ id: 's', name: 'S', entities: [
+      { type: 'line', id: 'crank', p1: P('o1', 0, 0), p2: P('a', A.x, A.y) },
+      { type: 'line', id: 'rocker', p1: P('o2', G, 0), p2: P('b', B.x, B.y) },
+      { type: 'line', id: 'coupler', p1: P('a2', A.x, A.y), p2: P('p', Pp.x, Pp.y) },
+    ], constraints: [
+      { id: 'f1', kind: 'fix', pointId: 'o1', x: 0, y: 0 }, { id: 'f2', kind: 'fix', pointId: 'o2', x: G, y: 0 },
+      { id: 'c1', kind: 'coincident', p1: 'a', p2: 'a2' }, { id: 'on', kind: 'pointOnLine', pointId: 'b', l: { a: 'a2', b: 'p' } },
+      { id: 'd1', kind: 'distance', p1: 'o1', p2: 'a', value: crank }, { id: 'd2', kind: 'distance', p1: 'a2', p2: 'b', value: cpl },
+      { id: 'd3', kind: 'distance', p1: 'o2', p2: 'b', value: rock }, { id: 'd4', kind: 'distance', p1: 'a2', p2: 'p', value: h, expr: 'h' },
+    ] }] });
+  a._afterStateSwap(); a.windows.toggle('equations', true); a.view.zoom = 4; a.commit({ diagnostics: 'sync' }); a.refreshUI(); a._render();
+  a.tracePointPath(a._lookupAny('p'));
+  a.clearSelection(); a.clearStrokeSelection(); a.refreshUI(); a._render();
+});
+// the tip's distance from A along the path's points: h, wherever the crank is
+const tipReach = () => page.evaluate(() => { const s = window._app.activeSketch().strokes.find(x => x.traces); return { n: s.points.length, coarse: !!s._coarse, ys: s.points.map(p => p.y) }; });
+const before = await tipReach();
+const sb = await page.locator('#equations-body [data-scrub="var:0"]').boundingBox();
+await page.mouse.move(sb.x + sb.width / 2, sb.y + sb.height / 2);
+await page.mouse.down();
+await page.mouse.move(sb.x + sb.width / 2 + 100, sb.y + sb.height / 2, { steps: 10 });   // +100 px → h ≈ 60 (0.1 per px)
+const mid = await page.evaluate(() => window._app.project.variables[0].expr);
+const live = await tipReach();
+check(Number(mid) > 55 && live.coarse && Math.max(...live.ys) > Math.max(...before.ys) + 3, `while dragging h (now ${mid}), before release: the path has already followed (top ${Math.max(...before.ys).toFixed(1)} → ${Math.max(...live.ys).toFixed(1)})`);
+const tLive = await page.evaluate(() => { const a = window._app, p = a._lookupAny('p'); const t0 = performance.now(); a._tracePath(p, 120, true); return performance.now() - t0; });
+await page.mouse.up();
+const done = await tipReach();
+check(!done.coarse && done.n >= live.n, `on release it is traced again at full quality (${live.n} → ${done.n} points); a live update took ${tLive.toFixed(0)} ms`);
+const undoneH = await page.evaluate(() => { const a = window._app; a.undo(); a._render(); return [a.project.variables[0].expr, Math.max(...a.activeSketch().strokes.find(x => x.traces).points.map(p => p.y))]; });
+check(undoneH[0] === '50' && Math.abs(undoneH[1] - Math.max(...before.ys)) < 0.5, 'one undo: h back to 50 and the path with it');
+
 check(!errors.length, 'no page errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
 await browser.close();
 server.close();

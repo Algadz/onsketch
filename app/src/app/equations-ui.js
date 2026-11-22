@@ -250,6 +250,7 @@ export class EquationsMixin {
       else target.value = internalValue(target, v);
       this._applyEquations();
       this._solveAllLayers();
+      this._autoUpdatePaths?.({ live: true });       // traced paths follow live
       this._updateEquationValues();
       this.requestRender();
     };
@@ -274,7 +275,7 @@ export class EquationsMixin {
       el.classList.remove('scrubbing');
       document.body.classList.remove('scrubbing');
       if (moved && keep && last !== v0) this.commit();
-      else if (moved) this.solveAndRender();
+      else if (moved) { this.solveAndRender(); this._autoUpdatePaths?.(); this.requestRender(); }
       this._refreshEquationsPanel();
     };
     const up = () => {
