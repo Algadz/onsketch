@@ -36,6 +36,7 @@ page.route(/umami/, r => r.abort());
 let failed = 0;
 const check = (cond, msg) => { console.log((cond ? 'ok   ' : 'FAIL ') + msg); if (!cond) failed++; };
 const SHOT = process.env.SHOT;
+
 await page.goto(`http://localhost:${port}/app/`);
 await page.waitForFunction(() => window._app);
 
@@ -97,6 +98,25 @@ check(b && !b.closed && b.ends.join() === 'locked,locked', `B's path is open, bo
 check(b && Math.min(...b.xs) < 40.05 && Math.max(...b.xs) > 79.95 && Math.max(...b.ys.map(Math.abs)) < 1e-4, `B slides from 40 to 80 on the axis (${b && Math.min(...b.xs).toFixed(3)}..${b && Math.max(...b.xs).toFixed(3)})`);
 if (SHOT) await page.screenshot({ path: SHOT + '-paths.png' });
 
+// ---- Moving the mechanism along its motion keeps the paths up to date ----
+await page.keyboard.press('Escape');
+await page.evaluate(() => { const a = window._app; a.clearSelection(); a.clearStrokeSelection(); a.refreshUI(); a._render(); });
+const from = await scr(0, 20), to = await scr(14.14, 14.14);
+await page.mouse.move(from.x, from.y); await page.mouse.down();
+await page.mouse.move((from.x + to.x) / 2, (from.y + to.y) / 2 - 6, { steps: 6 }); await page.mouse.move(to.x, to.y, { steps: 6 }); await page.mouse.up();
+await page.evaluate(() => window._app._render());
+const moved = await page.evaluate(() => { const a = window._app, p = a._lookupAny('a'); return [+p.x.toFixed(2), +p.y.toFixed(2)]; });
+k = await paths();
+check(Math.abs(moved[0]) > 3 && k.every(x => !x.stale), `dragging the crank round (A now at ${moved}) leaves both paths up to date`);
+// a re-solve or an unrelated change doesn't either
+await page.evaluate(() => { const a = window._app; a.commit({ diagnostics: 'sync' }); a._render(); });
+check((await paths()).every(x => !x.stale), 'a re-solve with nothing changed: still up to date');
+// the other way of assembling it (rod crossing below the axis): B's path no longer holds
+await page.evaluate(() => { const a = window._app, p = a._lookupAny('a'), q = a._lookupAny('a2'); p.y = -Math.abs(p.y); q.y = p.y; a.commit({ diagnostics: 'sync' }); a._render(); });
+k = await paths();
+check(k.find(x => x.point === 'a').stale === false, 'A flipped below the axis is still on its circle: up to date');
+await page.evaluate(() => { const a = window._app, p = a._lookupAny('a'), q = a._lookupAny('a2'); p.y = Math.abs(p.y); q.y = p.y; p.x = 0; p.y = 20; q.x = 0; q.y = 20; a.commit({ diagnostics: 'sync' }); a._render(); });
+
 // ---- Change the crank: both paths out of date; Recompute ----
 await page.evaluate(() => { const a = window._app; a.setDimensionFromText(a.activeSketch().constraints.find(c => c.name === 'D1'), '25'); a._render(); });
 k = await paths();
@@ -130,6 +150,51 @@ for (const [id, x, y, re, what] of [['f', -30, 30, /can't move/, 'a fixed point'
   await page.click('#context-menu [data-action="trace-path"]');
   check(re.test(await hint()) && !(await paths()).some(p => p.point === id), `${what}: no path, the status bar says why ("${(await hint()).slice(0, 60)}…")`);
 }
+
+// ---- Four-bar: drag the crank, the rocker's path stays; the mirrored assembly doesn't ----
+await page.evaluate(() => {
+  const a = window._app, P = (id, x, y) => ({ type: 'point', id, x, y });
+  const A = { x: 0, y: 10 }, O2 = { x: 40, y: 0 }, b = 35, c = 30;
+  const dx = O2.x - A.x, dy = O2.y - A.y, d = Math.hypot(dx, dy), l = (b * b - c * c + d * d) / (2 * d), h = Math.sqrt(b * b - l * l);
+  const B = { x: A.x + dx * l / d - dy * h / d, y: A.y + dy * l / d + dx * h / d };
+  a.project = a.project.constructor.fromJSON({ version: 5, units: 'mm', activeLayerId: 'l', layers: [{ id: 'l', name: 'L' }],
+    sketches: [{ id: 's', name: 'S', entities: [
+      { type: 'line', id: 'crank', p1: P('o1', 0, 0), p2: P('a', A.x, A.y) },
+      { type: 'line', id: 'coupler', p1: P('a2', A.x, A.y), p2: P('b', B.x, B.y) },
+      { type: 'line', id: 'rocker', p1: P('o2', 40, 0), p2: P('b2', B.x, B.y) },
+    ], constraints: [
+      { id: 'f1', kind: 'fix', pointId: 'o1', x: 0, y: 0 }, { id: 'f2', kind: 'fix', pointId: 'o2', x: 40, y: 0 },
+      { id: 'c1', kind: 'coincident', p1: 'a', p2: 'a2' }, { id: 'c2', kind: 'coincident', p1: 'b', p2: 'b2' },
+      { id: 'd1', kind: 'distance', p1: 'o1', p2: 'a', value: 10 }, { id: 'd2', kind: 'distance', p1: 'a2', p2: 'b', value: 35 },
+      { id: 'd3', kind: 'distance', p1: 'o2', p2: 'b2', value: 30 },
+    ] }] });
+  a._afterStateSwap(); a.view.zoom = 5; a.view.panX = -100; a.view.panY = -60; a.commit({ diagnostics: 'sync' }); a.refreshUI(); a._render();
+});
+const bPos = await page.evaluate(() => { const p = window._app._lookupAny('b'); return { x: p.x, y: p.y }; });
+at = await scr(bPos.x, bPos.y);
+await page.mouse.click(at.x, at.y, { button: 'right' });
+await page.click('#context-menu [data-action="trace-path"]');
+k = await paths();
+check(k.length === 1 && k[0].point === 'b' && k[0].ys.every(y => y > 0) && !k[0].stale, `four-bar: the rocker end's path, an arc above the axis (${k[0]?.ends}, ${k[0]?.n} points)`);
+await page.keyboard.press('Escape');
+await page.evaluate(() => { const a = window._app; a.clearSelection(); a.clearStrokeSelection(); a.refreshUI(); a._render(); });
+for (const ang of [60, 150, 240]) {
+  const p0 = await page.evaluate(() => { const p = window._app._lookupAny('a'); return { x: p.x, y: p.y }; });
+  const f = await scr(p0.x, p0.y), t = await scr(10 * Math.cos(ang * Math.PI / 180), 10 * Math.sin(ang * Math.PI / 180));
+  await page.mouse.move(f.x, f.y); await page.mouse.down(); await page.mouse.move(t.x, t.y, { steps: 10 }); await page.mouse.up();
+}
+await page.evaluate(() => window._app._render());
+const crankAt = await page.evaluate(() => { const p = window._app._lookupAny('a'); return Math.round(Math.atan2(p.y, p.x) * 180 / Math.PI); });
+check(!(await paths())[0].stale, `dragging the crank round (now at ${crankAt}°) keeps the rocker's path up to date`);
+// mirror the rocker below the line from A to O2: the other assembly
+await page.evaluate(() => {
+  const a = window._app, A = a._lookupAny('a'), B = a._lookupAny('b'), B2 = a._lookupAny('b2'), O = { x: 40, y: 0 };
+  const ux = O.x - A.x, uy = O.y - A.y, L = Math.hypot(ux, uy), nx = -uy / L, ny = ux / L;
+  const dd = (B.x - A.x) * nx + (B.y - A.y) * ny;
+  B.x -= 2 * dd * nx; B.y -= 2 * dd * ny; B2.x = B.x; B2.y = B.y;
+  a.commit({ diagnostics: 'sync' }); a._render();
+});
+check((await paths())[0].stale, 'the mirrored assembly (rocker below): out of date, Recompute needed');
 
 check(!errors.length, 'no page errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
 await browser.close();

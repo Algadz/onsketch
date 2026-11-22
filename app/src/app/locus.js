@@ -11,10 +11,14 @@ import { simplifyPoints } from '../core/strokes.js';
    copy; never solved, dimensioned or snapped to.
 
    The stroke remembers its point (`traces`), so it can be recomputed on
-   demand (Properties, its right-click menu). When the shapes it depends
-   on change, it shows as out of date (faded, with a ↻ mark) until then.
+   demand (Properties, its right-click menu). Until then it shows as out
+   of date (faded, with a ↻ mark) when it may no longer be right.
 
-     stroke.traces = { point: id, fp: fingerprint, closed, ends }
+     stroke.traces = { point: id, fp: fingerprint, tol, closed, ends }
+
+   Out of date when what defines the mechanism changes (lengths, angles,
+   relations, fixed points: not positions it can move through), or when
+   the point is no longer on the drawn path (within `tol`).
 
    Only the shapes tied to the point through constraints take part, so a
    trace stays quick in a big sketch. The geometry is always put back.
@@ -128,7 +132,7 @@ export class LocusMixin {
         : 'This point can move freely in two directions, so its positions cover an area, not a path. Add a constraint or fix a point of the mechanism, then trace again.' };
     }
     const pts = simplifyPoints(result.points, size * 2e-4);
-    return { ok: true, result, points: pts.map(p => ({ x: p.x, y: p.y })), fp: this._pathFingerprint(point, s.comp) };
+    return { ok: true, result, points: pts.map(p => ({ x: p.x, y: p.y })), fp: this._pathFingerprint(point, s.comp), tol: size * 2e-3 };
   }
 
   /** Right-click a point → "Trace path". Adds the path as ink (selected). */
@@ -142,7 +146,7 @@ export class LocusMixin {
       id: newId('k'), layerId: this.project.activeLayerId, kind: 'pen',
       color: this.pen.fillColor, opacity: 1, width: s.size, dash: true,
       points: t.points,
-      traces: { point: point.id, fp: t.fp, closed: t.result.closed, ends: t.result.ends },
+      traces: { point: point.id, fp: t.fp, tol: t.tol, closed: t.result.closed, ends: t.result.ends },
     };
     this.clearSelection();
     this.clearStrokeSelection();
@@ -163,7 +167,7 @@ export class LocusMixin {
     const t = this._tracePath(point);
     if (!t.ok) { if (hint) hint.textContent = t.message + ' The old path is kept.'; return false; }
     stroke.points = t.points;
-    stroke.traces = { ...stroke.traces, fp: t.fp, closed: t.result.closed, ends: t.result.ends };
+    stroke.traces = { ...stroke.traces, fp: t.fp, tol: t.tol, closed: t.result.closed, ends: t.result.ends };
     delete stroke.link;
     stroke._stale = false;
     this._pathStaleKey = null;
@@ -181,21 +185,58 @@ export class LocusMixin {
     return ends.length === 2 && ends[0] === ends[1] ? `Open path: both ends stop ${ends[0]}.` : `Open path: it stops ${ends.join(' and ')}.`;
   }
 
-  /** A short hash of everything the point's path depends on. */
+  /** A short hash of what defines the point's mechanism: its shapes, the
+   *  relations and dimensions among them (values, equations, fixed
+   *  positions), and where held geometry sits. Positions the mechanism can
+   *  move through are left out: dragging along the path doesn't change it. */
   _pathFingerprint(point, comp = this._pathComponent(point)) {
     if (!comp) return '';
     let h = 2166136261;
     const mix = (s) => { for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619); };
-    const num = (v) => mix(Number.isFinite(v) ? v.toFixed(6) : String(v));
-    for (const e of comp.entities) for (const x of [e, ...e.children()]) {
-      mix(x.id); for (const k of x.paramKeys()) num(x[k]);
-      if (x.fixed) mix('F'); if (x.locked) mix('L');
+    const num = (v) => mix(Number.isFinite(v) ? String(Number(v.toPrecision(7))) : String(v));
+    const ents = [...comp.entities].sort((a, b) => (a.id < b.id ? -1 : 1));
+    for (const e of ents) for (const x of [e, ...e.children()]) {
+      mix(x.id);
+      if (x.locked) { mix('L'); for (const k of x.paramKeys()) num(x[k]); }   // held: its place matters
     }
-    for (const c of comp.constraints) { mix(c.kind + c.id); if (c.value != null) num(c.value); if (c.expr) mix(c.expr); }
-    return (h >>> 0).toString(36) + ':' + comp.constraints.length;
+    const cons = [...comp.constraints].sort((a, b) => (a.id < b.id ? -1 : 1));
+    for (const c of cons) {
+      const o = c.toJSON ? c.toJSON() : { kind: c.kind };
+      for (const k of Object.keys(o).sort()) {
+        if (/^label|^layerId$|^name$/.test(k)) continue;           // where a label sits, what it's called
+        const v = o[k];
+        mix(k);
+        if (typeof v === 'number') num(v); else mix(JSON.stringify(v));
+      }
+    }
+    return 'v2:' + (h >>> 0).toString(36) + ':' + cons.length;
   }
 
-  /** Marks traced paths whose shapes changed (`_stale`, not saved).
+  /** Distance from `p` to the drawn path (its points as a polyline). */
+  _distanceToPath(stroke, p) {
+    const pts = stroke.points;
+    let best = Infinity;
+    for (let i = 0; i < pts.length; i++) {
+      const A = pts[i], B = pts[i + 1] || A;
+      const dx = B.x - A.x, dy = B.y - A.y, L2 = dx * dx + dy * dy;
+      const t = L2 < 1e-24 ? 0 : Math.max(0, Math.min(1, ((p.x - A.x) * dx + (p.y - A.y) * dy) / L2));
+      best = Math.min(best, Math.hypot(p.x - A.x - t * dx, p.y - A.y - t * dy));
+    }
+    return best;
+  }
+
+  /** Out of date: what defines the mechanism changed, or the point is no
+   *  longer on the drawn path (flipped to its other assembly, or the
+   *  stroke was moved). */
+  _pathIsStale(stroke) {
+    const p = this._lookupAny(stroke.traces.point);
+    if (!(p instanceof Point)) return true;
+    if (this._pathFingerprint(p) !== stroke.traces.fp) return true;
+    const tol = stroke.traces.tol > 0 ? stroke.traces.tol : 1e-3;
+    return this._distanceToPath(stroke, p) > tol;
+  }
+
+  /** Marks traced paths that are out of date (`_stale`, not saved).
    *  Checked once per committed state, not on every frame. */
   _markStalePaths() {
     const sketch = this.activeSketch(); if (!sketch) return;
@@ -204,10 +245,7 @@ export class LocusMixin {
     const key = `${this.undoStack.length}:${this.redoStack.length}:${this.undoStack[this.undoStack.length - 1]?.length || 0}`;
     if (key === this._pathStaleKey) return;
     this._pathStaleKey = key;
-    for (const s of traced) {
-      const p = this._lookupAny(s.traces.point);
-      s._stale = !(p instanceof Point) || this._pathFingerprint(p) !== s.traces.fp;
-    }
+    for (const s of traced) s._stale = this._pathIsStale(s);
   }
 
   /** "Trace path" for the point under the cursor (right-click menu). */

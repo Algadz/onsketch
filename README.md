@@ -169,9 +169,12 @@ cached modules after a deploy. `npm test` fails if the stamp is out of date.
   coupler curve. Works for points with one degree of freedom; a fixed point
   or a point free in two directions gets a note saying why there is no
   path. The path is ink (restyle, erase, group, copy, export as PNG/SVG)
-  that remembers its point: when the shapes it depends on change it fades
-  with "↻ out of date" until **Recompute** (Properties, or its right-click
-  menu). Open paths stop where the mechanism locks, or at twice the
+  that remembers its point. It fades with "↻ out of date" until
+  **Recompute** (Properties, or its right-click menu) when the mechanism
+  itself changes (a length, angle or relation, a fixed point) or the
+  point is no longer on the drawn path (the linkage flipped to its other
+  assembly, or the stroke was moved); moving the mechanism along its
+  motion keeps it up to date. Open paths stop where the mechanism locks, or at twice the
   sketch's size for endless ones. Only the shapes tied to the point take
   part, so tracing stays quick (core/locus.js, app/locus.js).
 - **Resize and turn ink**: select strokes, arrows, texts or a group (no

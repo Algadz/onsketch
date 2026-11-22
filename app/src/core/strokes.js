@@ -101,6 +101,7 @@ export function strokeToJSON(s) {
    was traced from. */
 function tracesToJSON(t) {
   const o = { point: t.point, fp: t.fp };
+  if (t.tol > 0) o.tol = t.tol;
   if (t.closed) o.closed = true;
   if (Array.isArray(t.ends) && t.ends.length) o.ends = t.ends.slice(0, 2);
   return o;
@@ -108,6 +109,8 @@ function tracesToJSON(t) {
 function reviveTraces(t) {
   if (!t || typeof t !== 'object' || typeof t.point !== 'string') return null;
   const o = { point: t.point, fp: typeof t.fp === 'string' ? t.fp : '', closed: !!t.closed };
+  const tol = Number(t.tol);
+  if (Number.isFinite(tol) && tol > 0) o.tol = tol;
   if (Array.isArray(t.ends)) o.ends = t.ends.filter(e => typeof e === 'string').slice(0, 2);
   return o;
 }
