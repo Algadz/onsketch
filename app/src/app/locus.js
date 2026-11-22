@@ -10,9 +10,12 @@ import { simplifyPoints } from '../core/strokes.js';
    size, dashed. It is ink like any other: select, restyle, group, erase,
    copy; never solved, dimensioned or snapped to.
 
-   The stroke remembers its point (`traces`), so it can be recomputed on
-   demand (Properties, its right-click menu). Until then it shows as out
-   of date (faded, with a ↻ mark) when it may no longer be right.
+   The stroke remembers its point (`traces`) and follows the sketch: when
+   a change may make it wrong, it is traced again, as part of the same
+   change (one undo step). If it can't be (its point deleted, fixed, or
+   free in two directions), it keeps its drawing and shows as out of date
+   (faded, with a ↻ mark), with why in Properties. Recompute is still
+   offered (Properties, its right-click menu) to force a fresh trace.
 
      stroke.traces = { point: id, fp: fingerprint, tol, closed, ends }
 
@@ -24,7 +27,8 @@ import { simplifyPoints } from '../core/strokes.js';
    trace stays quick in a big sketch. The geometry is always put back.
    ============================================================ */
 
-const TIME_LIMIT = 4000;        // ms for one trace
+const TIME_LIMIT = 4000;        // ms for one trace asked for
+const AUTO_TIME_LIMIT = 1500;   // ms for one automatic update
 
 export class LocusMixin {
   /** Shapes linked to `point` through constraints (the mechanism that
@@ -114,14 +118,14 @@ export class LocusMixin {
   }
 
   /** Traces the path of `point`. @returns {{ok, message, result?}} */
-  _tracePath(point) {
+  _tracePath(point, timeLimit = TIME_LIMIT) {
     const s = this._pathSystem(point);
     if (!s || !s.rows.length) return { ok: false, message: 'This point is fixed: it has no path to trace.' };
     const { size, bounds } = this._pathScale(point);
     const before = s.sys.get();
     let result;
     try {
-      result = traceLocus(s.sys, { step: size / 160, maxStep: size / 40, bounds, timeLimit: TIME_LIMIT });
+      result = traceLocus(s.sys, { step: size / 160, maxStep: size / 40, bounds, timeLimit });
     } finally {
       s.sys.set(before);
       this._restoreSketchParams(s.rows);
@@ -155,7 +159,7 @@ export class LocusMixin {
     this.commit();
     this.refreshUI();
     this.requestRender();
-    if (hint) hint.textContent = this._pathSummary(stroke.traces) + ' Drawn as ink: restyle or erase it like a stroke; Recompute it from Properties after changing the sketch.';
+    if (hint) hint.textContent = this._pathSummary(stroke.traces) + ' Drawn as ink: restyle or erase it like a stroke; it follows the sketch as it changes.';
     return stroke;
   }
 
@@ -236,16 +240,38 @@ export class LocusMixin {
     return this._distanceToPath(stroke, p) > tol;
   }
 
-  /** Marks traced paths that are out of date (`_stale`, not saved).
-   *  Checked once per committed state, not on every frame. */
+  /** Re-traces, in place, every path that may no longer be right (no
+   *  undo step of its own: commit() calls it before taking the snapshot,
+   *  so the change and its updated paths are one step). A path that can't
+   *  be traced any more (its point deleted, fixed, or free in two
+   *  directions) keeps its drawing and shows as out of date, with why. */
+  _autoUpdatePaths() {
+    const sketch = this.activeSketch(); if (!sketch) return false;
+    const traced = sketch.strokes.filter(s => s.traces);
+    let changed = false;
+    for (const s of traced) {
+      if (!this._pathIsStale(s)) { s._stale = false; s._pathError = null; continue; }
+      const point = this._lookupAny(s.traces.point);
+      const t = point instanceof Point ? this._tracePath(point, AUTO_TIME_LIMIT) : { ok: false, message: 'Its point was deleted.' };
+      if (!t.ok) { s._stale = true; s._pathError = t.message; continue; }
+      s.points = t.points;
+      s.traces = { ...s.traces, fp: t.fp, tol: t.tol, closed: t.result.closed, ends: t.result.ends };
+      delete s.link;
+      s._stale = false; s._pathError = null;
+      changed = true;
+    }
+    return changed;
+  }
+
+  /** Keeps traced paths up to date for states that weren't committed
+   *  here (a file opened, undo, redo): once per state, before drawing. */
   _markStalePaths() {
     const sketch = this.activeSketch(); if (!sketch) return;
-    const traced = sketch.strokes.filter(s => s.traces);
-    if (!traced.length) return;
+    if (!sketch.strokes.some(s => s.traces)) return;
     const key = `${this.undoStack.length}:${this.redoStack.length}:${this.undoStack[this.undoStack.length - 1]?.length || 0}`;
     if (key === this._pathStaleKey) return;
     this._pathStaleKey = key;
-    for (const s of traced) s._stale = this._pathIsStale(s);
+    this._autoUpdatePaths();
   }
 
   /** "Trace path" for the point under the cursor (right-click menu). */

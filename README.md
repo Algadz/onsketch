@@ -42,7 +42,7 @@ npm run test:ctxmenu # no browser context menu in the editor (only the app's), e
 npm run test:sizes   # line weight (screen px, sketch-wide, same at every zoom), pen / arrow / text sizes in drawing units
 npm run test:groups  # groups (click, click again inside, Esc), clicking through overlapping items, right-click list
 npm run test:driven  # driving / driven dimensions (Properties, rows, right-click), refused when over-defining; size fields drag like Blender
-npm run test:locus   # trace path of a point: crank circle, slider segment, out of date, Recompute, fixed / free points
+npm run test:locus   # trace path of a point: crank circle, slider segment, follows changes, undo, fixed / free points
 npm run test:shapes  # Shapes tool: rectangles, ellipses, stars… (Shift, Ctrl, fill, line, Properties, eraser, saved)
 node tests/style.e2e.mjs  # restyling arrows / texts after drawing, touch tap-through guard
 node tests/analytics.e2e.mjs  # Umami events: what is counted, once per visit, nothing sent from tests
@@ -169,12 +169,14 @@ cached modules after a deploy. `npm test` fails if the stamp is out of date.
   coupler curve. Works for points with one degree of freedom; a fixed point
   or a point free in two directions gets a note saying why there is no
   path. The path is ink (restyle, erase, group, copy, export as PNG/SVG)
-  that remembers its point. It fades with "↻ out of date" until
-  **Recompute** (Properties, or its right-click menu) when the mechanism
-  itself changes (a length, angle or relation, a fixed point) or the
-  point is no longer on the drawn path (the linkage flipped to its other
-  assembly, or the stroke was moved); moving the mechanism along its
-  motion keeps it up to date. Open paths stop where the mechanism locks, or at twice the
+  that remembers its point and **follows the sketch**: when a change may
+  make it wrong (a length, angle or relation, a fixed point, or the
+  linkage flipped to its other assembly), it is traced again as part of
+  that change (one undo step); moving the mechanism along its motion
+  doesn't need it. If it can't be traced any more (its point deleted,
+  fixed, or free in two directions), the last drawing stays, faded with
+  "↻ out of date", and Properties says why. **Recompute** (Properties, or
+  its right-click menu) forces a fresh trace. Open paths stop where the mechanism locks, or at twice the
   sketch's size for endless ones. Only the shapes tied to the point take
   part, so tracing stays quick (core/locus.js, app/locus.js).
 - **Resize and turn ink**: select strokes, arrows, texts or a group (no

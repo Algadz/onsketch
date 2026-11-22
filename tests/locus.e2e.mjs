@@ -117,25 +117,29 @@ k = await paths();
 check(k.find(x => x.point === 'a').stale === false, 'A flipped below the axis is still on its circle: up to date');
 await page.evaluate(() => { const a = window._app, p = a._lookupAny('a'), q = a._lookupAny('a2'); p.y = Math.abs(p.y); q.y = p.y; p.x = 0; p.y = 20; q.x = 0; q.y = 20; a.commit({ diagnostics: 'sync' }); a._render(); });
 
-// ---- Change the crank: both paths out of date; Recompute ----
+// ---- Change the crank: both paths follow by themselves ----
 await page.evaluate(() => { const a = window._app; a.setDimensionFromText(a.activeSketch().constraints.find(c => c.name === 'D1'), '25'); a._render(); });
 k = await paths();
-check(k.every(x => x.stale), 'changing the crank length marks both paths out of date');
+const a2 = k.find(x => x.point === 'a'), b2 = k.find(x => x.point === 'b');
+check(a2 && !a2.stale && Math.max(...a2.r.map(r => Math.abs(r - 25))) < 0.05, 'crank set to 25: A\'s path is now the radius-25 circle, by itself');
+check(b2 && !b2.stale && Math.min(...b2.xs) < 35.05 && Math.max(...b2.xs) > 84.95, `and B now slides from 35 to 85 (${b2 && Math.min(...b2.xs).toFixed(2)}..${b2 && Math.max(...b2.xs).toFixed(2)})`);
+const undone = await page.evaluate(() => { const a = window._app; a.undo(); a._render(); const s = a.activeSketch().strokes.find(x => x.traces?.point === 'a'); return Math.max(...s.points.map(p => Math.abs(Math.hypot(p.x, p.y) - 20))); });
+check(undone < 0.05, 'one undo brings back the crank and its path together');
+await page.evaluate(() => { const a = window._app; a.redo(); a._render(); });
 await page.evaluate(() => { const a = window._app, s = a.activeSketch().strokes.find(x => x.traces?.point === 'a'); a.clearSelection(); a.selectInk(s, true); a.refreshUI(); a._render(); });
-check(/out of date/.test(await page.innerText('#sel-body')), 'Properties says out of date');
+check(/follows the sketch/.test(await page.innerText('#sel-body')), 'Properties: up to date, follows the sketch');
+// Recompute is still there
+await page.evaluate(() => { const a = window._app, s = a.activeSketch().strokes.find(x => x.traces?.point === 'b'); a._inkMenuTarget = s; a.clearSelection(); a.selectInk(s, true); window.__acts = a.inkContextActions().map(x => x.id); });
+check((await page.evaluate(() => window.__acts)).includes('recompute-path'), 'a traced path\'s right-click menu still offers Recompute path');
+// a path that can't be traced any more keeps its drawing, out of date, with why
+await page.evaluate(() => { const a = window._app; a.activeSketch().constraints.push(new (a.activeSketch().constraints.find(c => c.kind === 'fix').constructor)('a', a._lookupAny('a').x, a._lookupAny('a').y)); a.commit({ diagnostics: 'sync' }); a._render(); });
+k = await paths();
+check(k.find(x => x.point === 'a').stale && k.find(x => x.point === 'a').n > 10, 'A fixed: its path can\'t be traced, the old drawing stays, out of date');
+await page.evaluate(() => { const a = window._app, s = a.activeSketch().strokes.find(x => x.traces?.point === 'a'); a.clearSelection(); a.selectInk(s, true); a.refreshUI(); });
+check(/can't move/.test(await page.innerText('#sel-body')), 'Properties says why');
 if (SHOT) await page.screenshot({ path: SHOT + '-stale.png' });
-await page.click('#sel-body [data-ink-act="recompute-path"]');
-k = await paths();
-const a2 = k.find(x => x.point === 'a');
-check(a2 && !a2.stale && Math.max(...a2.r.map(r => Math.abs(r - 25))) < 0.05, 'Recompute: radius 25 now, up to date');
-check(k.find(x => x.point === 'b').stale, 'the other path stays out of date until recomputed');
-// recompute from the right-click menu of the path
-await page.evaluate(() => { const a = window._app, s = a.activeSketch().strokes.find(x => x.traces?.point === 'b'); a.clearSelection(); a.selectInk(s, true); a.refreshUI(); });
-await page.evaluate(() => { const a = window._app, s = a.activeSketch().strokes.find(x => x.traces?.point === 'b'); a._inkMenuTarget = s; window.__acts = a.inkContextActions().map(x => x.id); a.inkContextActions().find(x => x.id === 'recompute-path').run(); });
-check((await page.evaluate(() => window.__acts)).includes('recompute-path'), 'a traced path\'s right-click menu offers Recompute path');
-k = await paths();
-const b2 = k.find(x => x.point === 'b');
-check(b2 && !b2.stale && Math.min(...b2.xs) < 35.05 && Math.max(...b2.xs) > 84.95, `B now slides from 35 to 85 (${Math.min(...b2.xs).toFixed(2)}..${Math.max(...b2.xs).toFixed(2)})`);
+await page.evaluate(() => { const a = window._app; a.undo(); a._render(); });
+check(!(await paths()).find(x => x.point === 'a').stale, 'undo: the path is up to date again');
 
 // ---- Ink like any other: restyle, undo, saved ----
 const json = await page.evaluate(() => JSON.stringify(window._app.project.toJSON()));
@@ -194,7 +198,8 @@ await page.evaluate(() => {
   B.x -= 2 * dd * nx; B.y -= 2 * dd * ny; B2.x = B.x; B2.y = B.y;
   a.commit({ diagnostics: 'sync' }); a._render();
 });
-check((await paths())[0].stale, 'the mirrored assembly (rocker below): out of date, Recompute needed');
+k = await paths();
+check(!k[0].stale && k[0].ys.some(y => y < 0), `the mirrored assembly (rocker below): its path is traced again, below now (min y ${Math.min(...k[0].ys).toFixed(1)})`);
 
 check(!errors.length, 'no page errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
 await browser.close();

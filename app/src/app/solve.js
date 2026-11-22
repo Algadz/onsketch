@@ -34,6 +34,8 @@ export class SolveMixin {
     this._reconcileStoredFills();
     // Linked ink follows the settled geometry before the snapshot.
     this.syncInkLinks();
+    // Traced paths follow the change too (app/locus.js), in the same step.
+    this._autoUpdatePaths?.();
     // The undo step holds the settled, recoloured state.
     this.undoStack.push(JSON.stringify(this.project.toJSON({ images: false })));
     if (this.undoStack.length > 100) this.undoStack.shift();

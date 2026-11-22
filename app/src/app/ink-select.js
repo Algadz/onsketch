@@ -272,10 +272,10 @@ export class InkSelectMixin {
     }
     if (items.length === 1 && first.traces) {
       const p = this._lookupAny(first.traces.point);
-      const state = !p ? 'point deleted' : first._stale ? '<b>out of date</b>' : 'up to date';
+      const state = !p ? 'point deleted' : first._stale ? '<b>out of date</b>' : 'up to date (follows the sketch)';
       html += `<div class="prop-row"><label>path of</label><span class="prop-val">${p ? esc(this._entityLabel(p)) : 'a deleted point'}</span></div>
         <div class="prop-row"><label>status</label><span class="prop-val">${state} <button class="mini-btn" data-ink-act="recompute-path" title="Trace the point again with the sketch as it is now"${p ? '' : ' disabled'}>↻ Recompute</button></span></div>
-        <div class="hint">${esc(this._pathSummary(first.traces))}</div>`;
+        <div class="hint">${first._stale && first._pathError ? esc(first._pathError) + ' The last path drawn is kept.' : esc(this._pathSummary(first.traces))}</div>`;
     }
     html += this._inkGroupLinkHTML(items);
     html += `<div class="hint">Drag to move${texts.length ? ', double-click a text to edit it' : ''}${frames.length ? '; the box handles resize and turn' : ''}. Delete removes. Ink is not solved or dimensioned.</div>`;
