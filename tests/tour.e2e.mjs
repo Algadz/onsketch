@@ -157,6 +157,15 @@ for (const phone of [false, true]) {
   await ctx.close();
 }
 
+/* -------- A library link (?view=), or Insert (?insert=): no tour, no first-run steps -------- */
+for (const q of ['?view=p1-abc', '?insert=p1-abc']) {
+  const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 } });
+  const page = await open(ctx, base + q);
+  await page.waitForTimeout(800);
+  check(!(await page.$('.tour')) && !(await page.isVisible('.guide')), `a new visitor opening a library link (${q}) gets no tour and no first-run steps`);
+  await ctx.close();
+}
+
 /* -------- The linkage example: opens without the tour, one thing left free -------- */
 {
   const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 } });

@@ -436,6 +436,10 @@ if (process.env.SHOT_DIR) { await page.screenshot({ path: process.env.SHOT_DIR +
 await page.locator('.lib-card .card-title a').first().click();
 await page.waitForSelector('#lib-detail h3');
 check(/[?]u=ALBAN\.M&s=/.test(page.url()), 'detail view keeps the profile in the URL');
+await page.evaluate(() => { window.__copied = null; navigator.clipboard.writeText = async (t) => { window.__copied = t; }; });
+await page.click('#lib-detail [data-a="copy"]');
+const copied = await page.evaluate(() => window.__copied);
+check(/\/app\/\?view=[^&]+$/.test(copied || '') && /opens this sketch directly in the editor/.test(await page.textContent('#lib-detail .account-msg')), `Copy link copies the editor link (${(copied || '').replace(/^https?:\/\/[^/]+/, '')})`);
 await page.keyboard.press('Escape');
 await page.goto(base.replace('/app/', '/library/?u=nobody-here'));
 await page.waitForSelector('.lp-empty');

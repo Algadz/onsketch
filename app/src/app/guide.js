@@ -80,7 +80,9 @@ export class GuideMixin {
   /** Starts the guide on an empty first visit. */
   _setupGuide(restored) {
     const params = new URLSearchParams(location.search);
-    const busy = ['example', 'view', 'project', 'insert', 'signin', 'new'].some(k => params.has(k));
+    // Only a blank visit gets the tour and the steps: not one that came to
+    // open something (the address bar may already be tidied: _arrivedFor).
+    const busy = !!this._arrivedFor || ['example', 'view', 'project', 'insert', 'signin', 'new'].some(k => params.has(k));
     const s = this.activeSketch();
     const empty = !!s && !s.entities.length && !s.strokes.length && !s.fills.length;
     this._actBaseline = this._guideState();

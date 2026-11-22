@@ -7,9 +7,10 @@ import { track, trackOnce, trackErrors } from '../ui/analytics.js';
 /* =============== PUBLIC LIBRARY (/library/) =====================
    Every public sketch that has a description, newest first, with
    search and "Show more". A card opens a detail view (big preview,
-   title, description, dates) whose URL /library/?s=<id> can be shared.
-   "Open a copy in the editor" goes to /app/?view=<id>: the sketch opens
-   as a browser-only copy the visitor can change and save as their own.
+   title, description, dates), at /library/?s=<id>. "Open a copy in the
+   editor", and the link "Copy link" copies, go to /app/?view=<id>: the
+   sketch opens straight in the editor as a browser-only copy the visitor
+   can change and save as their own.
    Works signed out (public rows and their thumbnails are readable by
    anyone; see supabase/migrations/0002_*).
    ============================================================ */
@@ -227,7 +228,8 @@ class Library {
     }
     document.title = `${row.name} - OnSketch library`;
     const thumb = this.thumbs.get(row.id);
-    const link = `${location.origin}/library/?s=${encodeURIComponent(row.id)}`;
+    // The copied link opens the sketch straight in the editor (as a copy).
+    const link = `${location.origin}/app/?view=${encodeURIComponent(row.id)}`;
     back.querySelector('.modal').innerHTML = `
       <div class="lib-detail-thumb">${thumb ? `<img src="${esc(thumb)}" alt="Preview of ${esc(row.name)}">` : `<span class="thumb-empty">${PLACEHOLDER}<span>No preview yet</span></span>`}</div>
       <div class="body">
@@ -239,7 +241,7 @@ class Library {
       </div>
       <div class="footer">
         <button type="button" class="link lib-report" data-a="report">Report</button>
-        <button type="button" class="btn" data-a="copy">Copy link</button>
+        <button type="button" class="btn" data-a="copy" title="A link that opens this sketch directly in the editor">Copy link</button>
         <a class="btn" data-a="insert" href="/app/?insert=${encodeURIComponent(row.id)}" title="Place it inside the sketch you are drawing, at real size, as a part">Insert into my sketch</a>
         <a class="btn primary" href="/app/?view=${encodeURIComponent(row.id)}">Open a copy in the editor</a>
       </div>`;
@@ -248,7 +250,7 @@ class Library {
     back.querySelector('[data-a="insert"]').addEventListener('click', () => track('library-insert', { id: row.id }));
     back.querySelector('[data-a="copy"]').addEventListener('click', async () => {
       track('library-copy-link');
-      try { await navigator.clipboard.writeText(link); msg.textContent = 'Link copied.'; }
+      try { await navigator.clipboard.writeText(link); msg.textContent = 'Link copied: it opens this sketch directly in the editor.'; }
       catch { msg.textContent = link; }
     });
     back.querySelector('[data-a="report"]').addEventListener('click', () => this.report(row, msg));

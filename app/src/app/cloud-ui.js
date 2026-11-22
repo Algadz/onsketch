@@ -65,6 +65,10 @@ export class CloudMixin {
     this._urlRequest = PAGE_PARAMS.find(k => params.has(k)) ? { what: PAGE_PARAMS.find(k => params.has(k)), id: params.get('project') || params.get('view') || params.get('insert') } : null;
     const back = params.get('back');
     if (back && /^\/(?!\/)[\w\-./?=&%]*$/.test(back)) { try { sessionStorage.setItem(BACK_KEY, back); } catch { /* storage unavailable */ } }
+    // Remembered past the address-bar tidy-up below: a visit that came
+    // to open something (a library link, a project, Insert) gets no
+    // first-run tour or steps (guide.js).
+    this._arrivedFor = this._urlRequest?.what || null;
     if (this._urlRequest) {
       PAGE_PARAMS.forEach(k => params.delete(k));
       history.replaceState(null, '', location.pathname + (params.toString() ? '?' + params : '') + location.hash);
