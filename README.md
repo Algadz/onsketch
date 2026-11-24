@@ -32,7 +32,8 @@ npm run test:scissors # scissors: trim (click, drag), split, relations kept / mo
 npm run test:collapse # no line collapses to a point, no circle / arc to its centre (snaps, relations)
 npm run test:relmenu # right-click / long press on a selection: its relations, remove, add
 npm run test:curve   # Bézier curves: drawing, handles, tangent / smooth / on curve, fill, scissors, mirror, export
-npm run test:export  # Export (PNG, SVG, copy, DXF, print to scale) and the first-run steps, desktop and phone
+npm run test:export  # Export (PNG, SVG, copy, DXF for Pro, print to scale) and the first-run steps, desktop and phone
+npm run test:dxf     # DXF import (Pro): prompt for free, picked or dropped file as a part, joined, units, undo
 npm run test:tour    # root → editor redirect, /about/, the welcome tour (slides, skip, ? button, swipe)
 npm run test:formula # click a dimension to put it in an equation; variables driving tangents
 npm run test:units   # document unit (km: Earth to Moon), typed units, print scale, formulas in text
@@ -147,6 +148,15 @@ cached modules after a deploy. `npm test` fails if the stamp is out of date.
   handles to re-aim it (snapping and attaching the same way); dragging an
   end off its shape, or the whole arrow away, detaches it. Properties
   shows the style and what the arrow is attached to (Detach).
+- **Import DXF (OnSketch Pro)**: *Import* in the menu bar (⋯ on a
+  phone), or drop a .dxf on the canvas. Lines, circles, arcs, points and
+  polylines (bulged segments as arcs) come in as a part at real size:
+  ends that meet are joined, each DXF layer becomes a layer named after
+  the file, the part is selected and can be moved or dimensioned; one
+  undo step. Units from $INSUNITS are converted to the document's (none:
+  millimetres). Text, dimensions, hatches, splines, ellipses and blocks
+  aren't read, and the note says how many were left out. Free accounts
+  see a Pro badge and a prompt to the pricing page (DXF export too).
 - **Shapes (U)**, in the Sketch window: rectangle, rounded rectangle,
   ellipse, triangle, diamond, pentagon, hexagon, star, heart, speech
   bubble, check mark and cross. Pick one (the grid in the window or the
@@ -312,8 +322,8 @@ All formats are free, on every plan.
   messages. Shapes are drawn in ink (no state colours, no end-point
   dots, no grid, relations or selection), with fills, ink, text, arrows
   and pictures, on the canvas colour or white.
-- **DXF** and **Print / PDF** to scale, for making things. DXF holds the shapes
-  (lines, circles, arcs, points) in millimetres at real size, on layers
+- **DXF** (OnSketch Pro) and **Print / PDF** to scale, for making things. DXF holds the shapes
+  (lines, circles, arcs, points) in the document unit at real size, on layers
   named after the drawing's, construction geometry on its own layer when
   included. Print / PDF lays the drawing on one A4, A3 or Letter sheet at
   a true scale (Auto picks the largest of 1:1, 1:2, 1:5, 1:10… that fits)

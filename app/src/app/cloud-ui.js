@@ -155,7 +155,7 @@ export class CloudMixin {
   /** Plan, profile (asks for a username the first time), sync, then what
    *  the user was doing when asked to sign in (Save / Open). */
   async _afterSignIn() {
-    this.cloud.plan().then(p => { this.cloudPlan = p; }).catch(() => {});
+    this.cloud.plan().then(p => { this.cloudPlan = p; this._refreshProBadges?.(); }).catch(() => {});
     this._cloudSync();
     this.cloudProfile = await this.cloud.profile().catch(() => null);
     this._renderAccountButton();
@@ -384,6 +384,7 @@ export class CloudMixin {
     btn.setAttribute('aria-label', btn.title);
     this._renderSaveState();
     this._fitMenubar?.();                         // its width changed: refold the bar
+    this._refreshProBadges?.();                   // Pro-only buttons follow the account
   }
   /** The status next to Save: Saved / Saving… / Not synced / Conflict for
    *  a sketch in the account; "Not saved" for a drawing only in this browser. */

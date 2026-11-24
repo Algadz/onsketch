@@ -7,7 +7,8 @@ import { track } from '../ui/analytics.js';
 /* =============== EXPORT ========================================
    Export… (menu bar, ⋯ menu): the drawing out of the editor.
 
-   Every format is free, on every plan.
+   Every format is free on every plan, except DXF: OnSketch Pro (its
+   button shows a Pro tag and leads to the pricing page otherwise).
    Images, for slides, documents and messages:
      Copy image   PNG to the clipboard, ready to paste
      PNG          2× for sharp slides, white or transparent background
@@ -73,7 +74,7 @@ export class ExportMixin {
           </div>
           <h4>To scale <span class="muted">real size, for making things</span></h4>
           <div class="export-row">
-            <button type="button" class="btn" data-format="dxf">DXF</button>
+            <button type="button" class="btn" data-format="dxf" data-pro title="DXF at real size, for CAD, CAM and laser cutters (OnSketch Pro)">DXF${this.hasProNow() ? '' : ' <span class="pro-tag">Pro</span>'}</button>
             <button type="button" class="btn" data-format="print">Print / PDF</button>
           </div>
           <div class="export-row">
@@ -144,11 +145,12 @@ export class ExportMixin {
     const name = this._exportName();
     const info = { format, dimensions: !!opts.dimensions, construction: !!opts.construction };
     if (format === 'dxf') {
+      if (!(await this.hasPro())) { await this.proPrompt('dxf-export'); return ''; }   // OnSketch Pro (app/dxf-import.js)
       const { text, count } = toDXF(this.project, opts);
       if (!count) return 'No shapes to export: a DXF holds lines, circles and arcs.';
       this._download(new Blob([text], { type: 'application/dxf' }), name + '.dxf');
       track('export', info);
-      return `DXF downloaded: ${count} shape${count === 1 ? '' : 's'}, in millimetres.`;
+      return `DXF downloaded: ${count} shape${count === 1 ? '' : 's'}, in ${UNIT_NAMES[this.project.units] || this.project.units}.`;
     }
     if (format === 'svg') {
       const svg = exportSVG(src, opts);

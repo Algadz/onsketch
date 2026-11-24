@@ -103,7 +103,7 @@ const SLIDES = [
   { id: 'colour', title: 'Colour it, label it', illu: ILLU_COLOUR,
     text: () => '<b>Fill</b> closed shapes, pin <b>arrows</b> and <b>text</b> to them. Change a size and everything follows.' },
   { id: 'export', title: 'Take it anywhere', illu: ILLU_EXPORT,
-    text: () => 'Paste it into your slides, export a <b>DXF</b> for CAD, or print at true scale. Every export is free.' },
+    text: () => 'Paste it into your slides, print at true scale, or take it to CAD as a <b>DXF</b> with OnSketch Pro.' },
 ];
 
 export class TourMixin {

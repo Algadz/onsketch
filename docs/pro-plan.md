@@ -5,7 +5,8 @@
 | | Free | Pro ($29/year) |
 |---|---|---|
 | Drawing tools | all | all |
-| Export (PNG, SVG, copy, DXF, print / PDF to scale) | yes | yes |
+| Export (PNG, SVG, copy, print / PDF to scale) | yes | yes |
+| DXF import and export (real size, for CAD / CAM / laser) | no (Pro prompt) | yes |
 | Sketches in the account | 3 | unlimited |
 | Visibility | public (private sketches made under migration 0007 stay private) | private or public, per sketch |
 
@@ -19,8 +20,14 @@ public, and keeps Private when its details are edited. On Pro, new
 sketches start private (then the last choice on that device); a username
 is asked for only when a sketch is made public.
 
-Every export is free on every plan (DXF and to-scale printing were Pro
-for a few hours on 2026-11-14, then opened to all).
+Every image export and to-scale printing are free on every plan. DXF
+(export, and import since 2026-11-24) is Pro: the app shows a Pro tag on
+the DXF export button and a Pro badge on Import, and a free account (or
+a visitor) gets a "part of OnSketch Pro" prompt leading to /pricing/
+(`hasPro()` / `proPrompt()` in app/src/app/dxf-import.js). Where accounts
+aren't configured (self-hosted), Pro features are open. DXF and to-scale
+printing were Pro for a few hours on 2026-11-14, then opened to all, until
+DXF became Pro again.
 `plan_of()` decides; the plan is stored in `account_plans`, which only the
 service role writes. The database name of Pro is `premium`.
 

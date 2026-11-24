@@ -7,7 +7,8 @@ import { trackOnce } from '../ui/analytics.js';
    Puts a picture (PNG, JPEG, WebP or GIF, up to 3 MB) on the active
    layer, as ink (core/images.js):
      - Image… in the Sketch window, or I: pick a file;
-     - drop a file on the canvas: placed where it is dropped;
+     - drop a file on the canvas: placed where it is dropped (a .dxf
+       dropped there is imported as shapes instead: app/dxf-import.js);
      - paste (Ctrl+V) an image from the clipboard (app/clipboard.js).
    Each file must be under 3 MB, and a sketch's pictures together under
    about 3.2 MB (a saved sketch stays under the 5 MB cloud limit).
@@ -29,6 +30,8 @@ export class ImageImportMixin {
     c.addEventListener('drop', (ev) => {
       if (!hasFile(ev)) return;
       ev.preventDefault();
+      const dxf = [...ev.dataTransfer.files].find(f => /\.dxf$/i.test(f.name));
+      if (dxf) { this.importDXFFile(dxf, 'drop'); return; }        // a DXF: a part at real size (Pro)
       const file = [...ev.dataTransfer.files].find(f => f.type.startsWith('image/')) || ev.dataTransfer.files[0];
       if (!file) return;
       const r = c.getBoundingClientRect();

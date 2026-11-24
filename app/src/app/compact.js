@@ -129,7 +129,7 @@ export class CompactMixin {
     const icon = (k) => ACTION_ICONS[k] || (k === 'theme' ? uiIcon(this.themeName === 'dark' ? 'sun' : 'moon') : MORE_ICONS[k] || '');
     const u = this.cloudUser;
     const groups = [
-      [['new', 'New sketch'], ...(this.cloudEnabled ? [['open', 'Open…']] : []), ['save', 'Save'], ['export', 'Export…']],
+      [['new', 'New sketch'], ...(this.cloudEnabled ? [['open', 'Open…']] : []), ['save', 'Save'], ['export', 'Export…'], ['import-dxf', this.hasProNow() ? 'Import DXF…' : 'Import DXF… (Pro)']],
       [['grid', 'Grid', this.gridOn], ['snap', 'Snap', this.snapOn], ['dimensions', 'Dimensions', this.showDimensions],
         ['relations', 'Relations', this.showRelations], ['zoom-fit', 'Zoom to fit']],
       [['units', `Units: ${this.project.units}`], ['theme', this.themeName === 'dark' ? 'Light theme' : 'Dark theme'],

@@ -42,6 +42,7 @@ import { InsertMixin } from './insert.js';
 import { ContextRelationsMixin } from './context-relations.js';
 import { LocusMixin } from './locus.js';
 import { SlidersMixin } from './sliders.js';
+import { DxfImportMixin } from './dxf-import.js';
 import { onImageLoad } from '../core/images.js';
 import { setTextResolver, textLines } from '../core/strokes.js';
 import { projectLookup, resolveFields } from '../core/text-fields.js';
@@ -930,7 +931,7 @@ export class App {
 }
 
 /* Methods are grouped into mixins by concern; see src/app/*.js. */
-for (const Mixin of [ChromeMixin, EquationsMixin, LayersPanelMixin, FillsMixin, DimensionLabelsMixin, SelectionMixin, DragMixin, SolveMixin, OperationsMixin, ConstraintActionsMixin, RenderEventsMixin, PanelsMixin, PersistenceMixin, SketchWindowMixin, ReportMixin, DimLinksMixin, InkSelectMixin, InkLinksMixin, TextEditMixin, InkTransformMixin, TouchMixin, TouchUIMixin, CompactMixin, CloudMixin, ImageImportMixin, ClipboardMixin, PatternsMixin, ExportMixin, GuideMixin, TourMixin, InsertMixin, ContextRelationsMixin, LocusMixin, SlidersMixin]) {
+for (const Mixin of [ChromeMixin, EquationsMixin, LayersPanelMixin, FillsMixin, DimensionLabelsMixin, SelectionMixin, DragMixin, SolveMixin, OperationsMixin, ConstraintActionsMixin, RenderEventsMixin, PanelsMixin, PersistenceMixin, SketchWindowMixin, ReportMixin, DimLinksMixin, InkSelectMixin, InkLinksMixin, TextEditMixin, InkTransformMixin, TouchMixin, TouchUIMixin, CompactMixin, CloudMixin, ImageImportMixin, ClipboardMixin, PatternsMixin, ExportMixin, GuideMixin, TourMixin, InsertMixin, ContextRelationsMixin, LocusMixin, SlidersMixin, DxfImportMixin]) {
   for (const key of Object.getOwnPropertyNames(Mixin.prototype)) {
     if (key === 'constructor') continue;
     Object.defineProperty(App.prototype, key, Object.getOwnPropertyDescriptor(Mixin.prototype, key));

@@ -15,7 +15,7 @@ import { track } from '../ui/analytics.js';
    ============================================================ */
 export class InsertMixin {
   /** @returns {boolean} whether anything was inserted */
-  insertSketchData(data, name, from = 'account') {
+  insertSketchData(data, name, from = 'account', message = null) {
     const sketch = this.activeSketch(); if (!sketch) return false;
     this.finishTextEdit?.();
     const at = this.view.screenToWorld({ x: this.view.cssW / 2, y: this.view.cssH / 2 });
@@ -36,7 +36,7 @@ export class InsertMixin {
     const a = this.view.worldToScreen({ x: res.bounds.minX, y: res.bounds.maxY }), b = this.view.worldToScreen({ x: res.bounds.maxX, y: res.bounds.minY });
     if (a.x < 0 || a.y < 0 || b.x > this.view.cssW || b.y > this.view.cssH) this.zoomFit();
     this.requestRender();
-    notice(`"${res.name}" inserted at real size, on its own layer. Drag it into place, or dimension it against your drawing.`, { ms: 6000 });
+    notice(message || `"${res.name}" inserted at real size, on its own layer. Drag it into place, or dimension it against your drawing.`, { ms: message ? 9000 : 6000 });
     track('sketch-insert', { from });
     return true;
   }

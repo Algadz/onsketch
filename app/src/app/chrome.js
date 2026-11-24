@@ -83,13 +83,13 @@ export class ChromeMixin {
 
   /** Folds menu-bar labels until everything fits on one row: the view
    *  toggles' labels first, then New / Save / Export, then Library, then
-   *  the project name narrows, the unit picker goes (it is also in
-   *  Properties → Sketch), the spacing tightens, the wordmark goes. Icons and tooltips
+   *  the project name narrows, the spacing tightens, the unit picker
+   *  goes (it is also in Properties → Sketch), the wordmark goes. Icons and tooltips
    *  always stay. */
   _fitMenubar() {
     const m = document.getElementById('menubar');
     if (!m) return;
-    const levels = ['fit-view', 'fit-file', 'fit-lib', 'fit-name', 'fit-units', 'fit-tight', 'fit-name2', 'fit-brand'];
+    const levels = ['fit-view', 'fit-file', 'fit-lib', 'fit-name', 'fit-tight', 'fit-name2', 'fit-units', 'fit-brand'];
     m.classList.remove(...levels);
     if (this.compact) return;
     for (const c of levels) {
@@ -101,13 +101,14 @@ export class ChromeMixin {
   _setupChrome() {
     this._setupUnits();
     // Menu bar icons + labels.
-    const labels = { new: 'New', open: 'Open', save: 'Save', export: 'Export', grid: 'Grid', snap: 'Snap', dimensions: 'Dimensions', relations: 'Relations', library: 'Library' };
+    const labels = { new: 'New', open: 'Open', save: 'Save', export: 'Export', grid: 'Grid', snap: 'Snap', dimensions: 'Dimensions', relations: 'Relations', library: 'Library', 'import-dxf': 'Import' };
     document.querySelectorAll('#menubar [data-action]').forEach(b => {
       const a = b.dataset.action;
       b.innerHTML = (ACTION_ICONS[a] || '') + (labels[a] ? `<span class="btn-label">${labels[a]}</span>` : '');
       b.setAttribute('aria-label', b.title);
       b.addEventListener('click', () => this._runAction(a, b));
     });
+    this._refreshProBadges?.();                   // Pro-only buttons (DXF import)
     // The bar folds its text labels, least needed first, until it fits:
     // nothing ends up off-screen (the account button included).
     window.addEventListener('resize', () => this._fitMenubar());
@@ -144,6 +145,7 @@ export class ChromeMixin {
       case 'save':         this.save(); break;
       case 'open':         this.openSketch?.(); break;
       case 'export':       this.openExport(); break;
+      case 'import-dxf':   this.openDXFPicker(); break;
       case 'undo':         this.undo(); break;
       case 'redo':         this.redo(); break;
       case 'solve':        this.solveAndRender(); break;

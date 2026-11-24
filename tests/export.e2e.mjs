@@ -1,4 +1,4 @@
-// End-to-end test of Export (every format free on every plan),
+// End-to-end test of Export (every format free on every plan but DXF: Pro),
 // and of the first-run steps with their activation events, on desktop and
 // on a phone.
 //
@@ -91,12 +91,25 @@ const events = (page, name) => page.evaluate((n) => window.__ev.filter(e => e.ev
 
   check((await events(page, 'export')).length === 4, 'events: export (png, svg ×2, copy)');
 
-  // DXF and printing: free, no plan needed.
-  check(await page.evaluate(() => window._app.cloudPlan?.plan !== 'premium') && !(await page.$('#export-modal .pro-tag')), 'DXF and Print / PDF are offered without Pro');
+  // DXF: OnSketch Pro. Free plan: a Pro tag and the "part of Pro" prompt, no file.
+  check(await page.evaluate(() => window._app.cloudPlan?.plan !== 'premium') && /Pro/.test(await page.textContent('#export-modal [data-format="dxf"]'))
+    && !/Pro/.test(await page.textContent('#export-modal [data-format="print"]')), 'free plan: DXF shows a Pro tag; Print / PDF does not');
+  let dxfDownloads = 0; const countDl = () => dxfDownloads++; page.on('download', countDl);
+  await page.click('#export-modal [data-format="dxf"]');
+  await page.waitForSelector('.app-dialog');
+  check(/DXF export is part of OnSketch Pro/.test(await page.textContent('.app-dialog')), 'free plan: DXF opens the "part of OnSketch Pro" prompt');
+  await page.click('.app-dialog button:has-text("Not now")');
+  await page.waitForTimeout(300);
+  check(dxfDownloads === 0 && !(await page.$('.app-dialog')), 'Not now: no file, back to Export');
+  page.off('download', countDl);
+  // Pro: the DXF downloads straight away.
+  await page.evaluate(() => { window._app.cloudPlan = { plan: 'premium' }; });
   const [dxfDl] = await Promise.all([page.waitForEvent('download'), page.click('#export-modal [data-format="dxf"]')]);
   const dxf = (await readFile(await dxfDl.path())).toString();
-  check(/\.dxf$/.test(dxfDl.suggestedFilename()) && dxf.includes('ENTITIES') && dxf.includes('LINE') && dxf.includes('CIRCLE') && dxf.trim().endsWith('EOF') && !(await page.$('.app-dialog')), 'free plan: DXF downloads straight away (lines, circle, EOF)');
+  check(/\.dxf$/.test(dxfDl.suggestedFilename()) && dxf.includes('ENTITIES') && dxf.includes('LINE') && dxf.includes('CIRCLE') && dxf.trim().endsWith('EOF') && !(await page.$('.app-dialog')), 'Pro: DXF downloads straight away (lines, circle, EOF)');
   check(/\r\n700\r\n/.test(dxf) && /\r\n-700\r\n/.test(dxf), 'the DXF is at real size (the 1400 mm desk spans -700 to 700)');
+  await page.evaluate(() => { window._app.cloudPlan = null; });
+  // Printing stays free.
   await page.evaluate(() => { window.__printed = null; window._app._printHook = (html, res) => { window.__printed = { html, pw: res.pw, ph: res.ph, scale: res.scale, fits: res.fits }; }; });
   check(/Auto \(1:10\)/.test(await page.textContent('#export-modal [data-opt="scale"]')), 'printing: Auto picks 1:10 for a 1.4 m desk on A4');
   await page.click('#export-modal [data-format="print"]');
