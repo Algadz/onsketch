@@ -157,6 +157,24 @@ for (const phone of [false, true]) {
   await ctx.close();
 }
 
+/* -------- Library: its own menu-bar button, signed out too; the bar always fits -------- */
+for (const w of [1100, 1280, 1920]) {
+  const ctx = await browser.newContext({ viewport: { width: w, height: 900 } });
+  const page = await open(ctx, base, { tour: false });
+  await page.waitForTimeout(250);
+  const r = await page.evaluate(() => { const m = document.getElementById('menubar'), b = document.querySelector('#menubar [data-action="library"]'), a = document.getElementById('account-btn');
+    const on = (e) => e && !e.hidden && e.getBoundingClientRect().right <= innerWidth;
+    return { fits: m.scrollWidth <= m.clientWidth + 1, lib: on(b), label: getComputedStyle(b.querySelector('.btn-label')).display !== 'none', signIn: !a || a.hidden || (on(a) && getComputedStyle(a.querySelector('.btn-label') || a).display !== 'none') };
+  });
+  check(r.fits && r.lib && r.signIn && (w < 1600 || r.label), `${w} px, signed out: the menu bar fits, Library is on it${r.label ? ' with its label' : ' (icon)'}, Sign in visible`);
+  if (w === 1920) {
+    await page.click('#menubar [data-action="library"]');
+    await page.waitForURL(/\/library\/$/);
+    check(true, 'the Library button opens the library');
+  }
+  await ctx.close();
+}
+
 /* -------- A library link (?view=), or Insert (?insert=): no tour, no first-run steps -------- */
 for (const q of ['?view=p1-abc', '?insert=p1-abc']) {
   const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 } });

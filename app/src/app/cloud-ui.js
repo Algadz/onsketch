@@ -383,6 +383,7 @@ export class CloudMixin {
     }
     btn.setAttribute('aria-label', btn.title);
     this._renderSaveState();
+    this._fitMenubar?.();                         // its width changed: refold the bar
   }
   /** The status next to Save: Saved / Saving… / Not synced / Conflict for
    *  a sketch in the account; "Not saved" for a drawing only in this browser. */

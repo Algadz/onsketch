@@ -81,16 +81,38 @@ export class ChromeMixin {
     return true;
   }
 
+  /** Folds menu-bar labels until everything fits on one row: the view
+   *  toggles' labels first, then New / Save / Export, then Library, then
+   *  the project name narrows, the unit picker goes (it is also in
+   *  Properties → Sketch), the spacing tightens, the wordmark goes. Icons and tooltips
+   *  always stay. */
+  _fitMenubar() {
+    const m = document.getElementById('menubar');
+    if (!m) return;
+    const levels = ['fit-view', 'fit-file', 'fit-lib', 'fit-name', 'fit-units', 'fit-tight', 'fit-name2', 'fit-brand'];
+    m.classList.remove(...levels);
+    if (this.compact) return;
+    for (const c of levels) {
+      if (m.scrollWidth <= m.clientWidth + 1) break;
+      m.classList.add(c);
+    }
+  }
+
   _setupChrome() {
     this._setupUnits();
     // Menu bar icons + labels.
-    const labels = { new: 'New', open: 'Open', save: 'Save', export: 'Export', grid: 'Grid', snap: 'Snap', dimensions: 'Dimensions', relations: 'Relations' };
+    const labels = { new: 'New', open: 'Open', save: 'Save', export: 'Export', grid: 'Grid', snap: 'Snap', dimensions: 'Dimensions', relations: 'Relations', library: 'Library' };
     document.querySelectorAll('#menubar [data-action]').forEach(b => {
       const a = b.dataset.action;
       b.innerHTML = (ACTION_ICONS[a] || '') + (labels[a] ? `<span class="btn-label">${labels[a]}</span>` : '');
       b.setAttribute('aria-label', b.title);
       b.addEventListener('click', () => this._runAction(a, b));
     });
+    // The bar folds its text labels, least needed first, until it fits:
+    // nothing ends up off-screen (the account button included).
+    window.addEventListener('resize', () => this._fitMenubar());
+    requestAnimationFrame(() => this._fitMenubar());
+    document.fonts?.ready?.then(() => this._fitMenubar());
     document.querySelectorAll('#menubar [data-window]').forEach(b => {
       b.innerHTML = WINDOW_ICONS[b.dataset.window];
       b.setAttribute('aria-label', b.title);

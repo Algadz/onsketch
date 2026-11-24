@@ -1765,6 +1765,7 @@
   .compact #menubar .group:not([aria-label="Edit"]),
   .compact #menubar [data-action="solve"],
   .compact #menubar [data-action="tour"],
+  .compact #menubar [data-action="library"],
   .compact #menubar .units { display: none; }
   .compact #menubar .brand { font-size: 14px; padding: 0 4px 0 0; }
   .compact #menubar .tbtn { width: 40px; height: 40px; justify-content: center; }
@@ -1925,3 +1926,24 @@
 .eq-slider { width: 22px; height: 22px; border: 1px solid transparent; border-radius: 5px; background: none; color: var(--text-muted); cursor: pointer; font-size: 14px; padding: 0; }
 .eq-slider:hover { background: var(--hover); color: var(--text); }
 .eq-slider.on { color: var(--accent); border-color: var(--accent-border); background: var(--accent-softer); }
+
+/* Menu bar: Library, its own button (everyone, signed in or not) */
+#menubar .lib-btn { gap: 6px; padding: 0 10px; margin-right: 4px; flex: 0 0 auto; }
+#menubar .lib-btn .btn-label { display: inline; font-size: 12.5px; }
+#menubar > .tbtn { flex-shrink: 0; }
+
+/* Menu bar folding to fit (chrome.js _fitMenubar), in this order */
+#menubar.fit-view .group[aria-label="View"] .btn-label { display: none; }
+#menubar.fit-file .file-btn .btn-label { display: none !important; }
+#menubar.fit-file .file-btn { padding: 0 9px; }
+#menubar.fit-lib .lib-btn .btn-label { display: none; }
+#menubar.fit-lib .lib-btn { padding: 0 9px; }
+#menubar.fit-name #project-name { width: 100px; flex-basis: 100px; }
+#menubar.fit-units .units { display: none; }
+#menubar.fit-tight .group { gap: 2px; padding-right: 6px; }
+#menubar.fit-tight .tbtn { padding: 0 6px; }
+#menubar.fit-tight .lib-btn, #menubar.fit-tight .file-btn { padding: 0 6px; }
+#menubar.fit-name2 #project-name { width: 72px; flex-basis: 72px; }
+#menubar.fit-brand .brand { display: none; }
+/* The account button is text only when signed out ("Sign in"): its label never folds */
+#menubar #account-btn .btn-label { display: inline !important; }
