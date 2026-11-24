@@ -1,5 +1,6 @@
 import { openCloud, isConfigured } from '../cloud/cloud.js';
 import { mountAccount } from '../site/account.js';
+import { mountThemeToggle } from '../site/theme.js';
 import { countryFlag, countryName } from '../ui/countries.js';
 import { promptDialog } from '../ui/dialogs.js';
 import { track, trackOnce, trackErrors } from '../ui/analytics.js';
@@ -37,6 +38,7 @@ class Library {
   }
 
   async start() {
+    mountThemeToggle($('lib-account')?.parentNode, $('lib-account'));   // ☾ / ☀, even offline
     if (!isConfigured()) return this.message('The library is not available on this site.');
     try { this.cloud = await openCloud({ createClient: window.__onsketchCreateClient || null }); }
     catch { return this.message("Couldn't reach the server. Check your connection and reload."); }

@@ -927,6 +927,11 @@ the stored session first.
   keeps them private. On Pro a new sketch starts private and a username is
   asked for only when publishing. Enforced in the database; the plan is in
   `account_plans`, written only by the service role.
+- **Light / dark on every page**: the library, My sketches, pricing, the
+  about page and the privacy page use the theme chosen in the editor
+  (saved in this browser, else the system's), and each has a ☾ / ☀
+  button in its header that saves the choice for the editor and the other
+  pages (open tabs follow). `app/src/site/theme.js`.
 - **Library** (`/library/`): every public sketch with a description,
   newest first, with search (title / description), sort, *Show more*, a
   detail view with a shareable link (`/library/?s=<id>`), *Copy link*,

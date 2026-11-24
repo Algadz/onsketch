@@ -175,6 +175,23 @@ for (const w of [1100, 1280, 1920]) {
   await ctx.close();
 }
 
+/* -------- Light / dark: every site page follows the editor's choice and has a toggle -------- */
+{
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const page = await open(ctx, base, { tour: false });
+  await page.evaluate(() => { const p = JSON.parse(localStorage.getItem('onsketch:prefs') || '{}'); p.theme = 'dark'; localStorage.setItem('onsketch:prefs', JSON.stringify(p)); });
+  for (const path of ['/library/', '/app/projects/', '/pricing/', '/about/', '/privacy/']) {
+    await page.goto(base.replace('/app/', path));
+    await page.waitForSelector('.site-theme', { timeout: 8000 }).catch(() => {});
+    const dark = await page.evaluate(() => ({ theme: document.documentElement.dataset.theme, btn: !!document.querySelector('.site-theme'), bg: getComputedStyle(document.body).backgroundColor }));
+    let light = null;
+    if (dark.btn) { await page.click('.site-theme'); light = await page.evaluate(() => ({ theme: document.documentElement.dataset.theme, saved: JSON.parse(localStorage.getItem('onsketch:prefs')).theme, bg: getComputedStyle(document.body).backgroundColor })); await page.click('.site-theme'); }
+    check(dark.theme === 'dark' && dark.btn && light?.theme === 'light' && light.saved === 'light' && light.bg !== dark.bg,
+      `${path}: opens dark like the editor, its ☀ toggle switches to light and saves it (${dark.bg} → ${light?.bg})`);
+  }
+  await ctx.close();
+}
+
 /* -------- A library link (?view=), or Insert (?insert=): no tour, no first-run steps -------- */
 for (const q of ['?view=p1-abc', '?insert=p1-abc']) {
   const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 } });

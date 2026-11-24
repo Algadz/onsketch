@@ -1958,3 +1958,8 @@
 #menubar .file-btn[data-pro].pro-locked::after { position: static; margin-left: 1px; line-height: 13px; }
 #menubar.fit-file .file-btn[data-pro].pro-locked::after { position: absolute; top: 1px; right: -2px; margin: 0; }
 @media (max-width: 900px) { #menubar .file-btn[data-pro].pro-locked::after { position: absolute; top: 1px; right: -2px; margin: 0; } }
+
+/* Site pages: the ☾ / ☀ theme button in the header (site/theme.js) */
+.page-bar .site-theme { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; flex: 0 0 auto; padding: 0;
+  border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--text); cursor: pointer; }
+.page-bar .site-theme:hover { background: var(--hover); }

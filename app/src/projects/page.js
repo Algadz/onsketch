@@ -2,6 +2,7 @@ import { openCloud, isConfigured, LimitError } from '../cloud/cloud.js';
 import { openDetailsDialog, openProfileDialog } from '../cloud/details-dialog.js';
 import { confirmDialog, notice } from '../ui/dialogs.js';
 import { track, trackErrors } from '../ui/analytics.js';
+import { mountThemeToggle } from '../site/theme.js';
 
 /* =============== MY SKETCHES (/app/projects/) ==================
    The signed-in user's cloud projects as cards: preview, title,
@@ -9,6 +10,8 @@ import { track, trackErrors } from '../ui/analytics.js';
    (/app/?project=<id>); New to /app/?new. Free plan: a usage meter and,
    at the limit, an upgrade card instead of New.
    ============================================================ */
+mountThemeToggle(document.querySelector('.page-bar'), document.getElementById('page-account'));   // ☾ / ☀
+
 const LINK_KEY = 'onsketch:cloud';
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);

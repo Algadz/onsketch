@@ -641,8 +641,8 @@ await page.emulateMedia({ colorScheme: 'dark' });
 await app(() => localStorage.setItem('onsketch:prefs', JSON.stringify({ theme: 'dark' })));
 await page.reload();
 await page.waitForSelector('.pr-card');
-check(await app(() => document.documentElement.dataset.theme === 'light' && getComputedStyle(document.querySelector('.pr-card')).backgroundColor === 'rgb(255, 255, 255)'),
-  'pricing stays light with a dark system and a dark editor theme');
+check(await app(() => document.documentElement.dataset.theme === 'dark' && getComputedStyle(document.querySelector('.pr-card')).backgroundColor !== 'rgb(255, 255, 255)'),
+  'pricing follows the editor\'s dark theme, like every page');
 await page.emulateMedia({ colorScheme: 'light' });
 await app(() => localStorage.setItem('onsketch:prefs', JSON.stringify({ theme: 'light' })));
 if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + '/pricing.png', fullPage: true });

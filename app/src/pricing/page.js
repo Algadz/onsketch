@@ -1,5 +1,6 @@
 import { openCloud, isConfigured } from '../cloud/cloud.js';
 import { mountAccount } from '../site/account.js';
+import { mountThemeToggle } from '../site/theme.js';
 import { notice } from '../ui/dialogs.js';
 import { track, trackErrors } from '../ui/analytics.js';
 
@@ -37,6 +38,7 @@ class Pricing {
   async start() {
     this.applyRules(false);
     mountAccount($('#site-account'));
+    mountThemeToggle($('#site-account')?.parentNode, $('#site-account'));
     this.render();
     if (!isConfigured()) return;
     try {

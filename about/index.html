@@ -120,8 +120,7 @@
     --shadow-win: 0 10px 30px rgba(15, 20, 30, 0.14), 0 1px 3px rgba(15, 20, 30, 0.1);
     color-scheme: light;
   }
-  @media (prefers-color-scheme: dark) {
-    :root {
+      :root[data-theme="dark"] {
       --bg: #15191f;
       --panel: #1b2027;
       --panel-2: #20262e;
@@ -143,7 +142,7 @@
       --shadow-win: 0 10px 30px rgba(0, 0, 0, 0.45), 0 1px 3px rgba(0, 0, 0, 0.4);
       color-scheme: dark;
     }
-  }
+  
 
   * { box-sizing: border-box; }
   html { scroll-behavior: smooth; background: var(--bg); }
@@ -183,7 +182,7 @@
   .btn:hover { border-color: var(--text-muted); }
   .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
   .btn.primary:hover { background: var(--accent-strong); border-color: var(--accent-strong); }
-  @media (prefers-color-scheme: dark) { .btn.primary { color: #0d1824; } }
+   :root[data-theme="dark"] .btn.primary { color: #0d1824; } 
   .btn svg { width: 17px; height: 17px; }
 
   /* ---- Hero on the editor's canvas grid ---- */
@@ -299,7 +298,7 @@
   .carousel-tabs a:first-child { border-left: 0; }
   .carousel-tabs a:hover { color: var(--text); background: var(--accent-soft); }
   .carousel-tabs a[aria-current="true"] { background: var(--accent); color: #fff; }
-  @media (prefers-color-scheme: dark) { .carousel-tabs a[aria-current="true"] { color: #0d1824; } }
+   :root[data-theme="dark"] .carousel-tabs a[aria-current="true"] { color: #0d1824; } 
   .track {
     position: relative; display: flex; margin: 0; padding: 0; list-style: none;
     overflow-x: auto; scroll-snap-type: x mandatory; scroll-behavior: smooth; scrollbar-width: none;
@@ -393,7 +392,7 @@
   .eqs-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 14px 6px; }
   .pill { font-size: 11px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--border); }
   .pill.ok { border-color: #cbe1cc; background: #ecf6ed; color: #2c6b34; }
-  @media (prefers-color-scheme: dark) { .pill.ok { border-color: #2c5a35; background: #18291c; color: #8fd49a; } }
+   :root[data-theme="dark"] .pill.ok { border-color: #2c5a35; background: #18291c; color: #8fd49a; } 
   .eqs table { width: 100%; border-collapse: collapse; font-size: 13px; }
   .eqs td { padding: 5px 14px; border-top: 1px solid var(--border-soft); white-space: nowrap; }
   .eqs .nm { font: 600 12px var(--mono); color: var(--accent); width: 1%; }
@@ -451,7 +450,16 @@
     .actions .btn { flex: 1 1 auto; justify-content: center; }
     footer .wrap { height: auto; padding: 18px 0; flex-direction: column; align-items: flex-start; }
   }
+  .site-theme { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; flex: 0 0 auto; padding: 0;
+    border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--text); cursor: pointer; }
+  .site-theme:hover { background: rgba(127, 127, 127, 0.12); }
 </style>
+<script>
+  try {
+    const t = JSON.parse(localStorage.getItem('onsketch:prefs') || '{}').theme;
+    document.documentElement.dataset.theme = t || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  } catch { /* storage unavailable */ }
+</script>
 <script defer src="https://cloud.umami.is/script.js" data-website-id="50dad292-9502-4749-a86e-68f2ed8b2e7a"></script>
 </head>
 <body>
@@ -994,10 +1002,10 @@
     "../app/src/core/trim.js": "../app/src/core/trim.js?v=a5baa9bd5d",
     "../app/src/editor/relations.js": "../app/src/editor/relations.js?v=5b1ea34ba5",
     "../app/src/editor/snap.js": "../app/src/editor/snap.js?v=ea3066a241",
-    "../app/src/library/page.js": "../app/src/library/page.js?v=ac5d6b9bd0",
+    "../app/src/library/page.js": "../app/src/library/page.js?v=ea6db5b619",
     "../app/src/main.js": "../app/src/main.js?v=81dd2e155a",
-    "../app/src/pricing/page.js": "../app/src/pricing/page.js?v=9ec31f439b",
-    "../app/src/projects/page.js": "../app/src/projects/page.js?v=b41a74e57e",
+    "../app/src/pricing/page.js": "../app/src/pricing/page.js?v=46ac2f0f0c",
+    "../app/src/projects/page.js": "../app/src/projects/page.js?v=88842dec54",
     "../app/src/render/export.js": "../app/src/render/export.js?v=eca668941c",
     "../app/src/render/renderer.js": "../app/src/render/renderer.js?v=628c87eadb",
     "../app/src/render/svg-context.js": "../app/src/render/svg-context.js?v=308a7411e2",
@@ -1005,6 +1013,7 @@
     "../app/src/render/thumbnail.js": "../app/src/render/thumbnail.js?v=c42bfe613e",
     "../app/src/render/view.js": "../app/src/render/view.js?v=39b79d4e9c",
     "../app/src/site/account.js": "../app/src/site/account.js?v=a592ba6979",
+    "../app/src/site/theme.js": "../app/src/site/theme.js?v=90fbf8e1e4",
     "../app/src/tools/arrow.js": "../app/src/tools/arrow.js?v=7d0e7a616f",
     "../app/src/tools/bezier.js": "../app/src/tools/bezier.js?v=b07e26eafb",
     "../app/src/tools/draw.js": "../app/src/tools/draw.js?v=3f8ec90bc3",
@@ -1030,7 +1039,9 @@
 <!-- stamp:end -->
 <script type="module">
   import { mountAccount } from '../app/src/site/account.js';
+  import { mountThemeToggle } from '../app/src/site/theme.js';
   mountAccount(document.getElementById('site-account'));
+  mountThemeToggle(document.getElementById('site-account').parentNode, document.getElementById('site-account'));
 </script>
 </body>
 </html>
