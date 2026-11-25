@@ -31,6 +31,7 @@ export const PAGES = [
   { file: '../about/index.html', base: '../app/' },
   { file: '../pricing/index.html', base: '../app/' },
   { file: '../privacy/index.html', base: '../app/' },
+  { file: '../faq/index.html', base: '../app/' },
 ];
 
 export function stampedHtml(html, base = '') {

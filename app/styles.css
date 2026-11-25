@@ -1963,3 +1963,6 @@
 .page-bar .site-theme { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; flex: 0 0 auto; padding: 0;
   border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--text); cursor: pointer; }
 .page-bar .site-theme:hover { background: var(--hover); }
+/* Help dialog (the ? button): a link to the FAQ, top left, facing Close */
+.tour-faq { position: absolute; top: 14px; left: 18px; z-index: 2; font-size: 13px; color: var(--accent); text-decoration: none; }
+.tour-faq:hover { text-decoration: underline; }

@@ -180,7 +180,7 @@ for (const w of [1100, 1280, 1920]) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
   const page = await open(ctx, base, { tour: false });
   await page.evaluate(() => { const p = JSON.parse(localStorage.getItem('onsketch:prefs') || '{}'); p.theme = 'dark'; localStorage.setItem('onsketch:prefs', JSON.stringify(p)); });
-  for (const path of ['/library/', '/app/projects/', '/pricing/', '/about/', '/privacy/']) {
+  for (const path of ['/library/', '/app/projects/', '/pricing/', '/about/', '/privacy/', '/faq/']) {
     await page.goto(base.replace('/app/', path));
     await page.waitForSelector('.site-theme', { timeout: 8000 }).catch(() => {});
     const dark = await page.evaluate(() => ({ theme: document.documentElement.dataset.theme, btn: !!document.querySelector('.site-theme'), bg: getComputedStyle(document.body).backgroundColor }));

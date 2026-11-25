@@ -138,7 +138,7 @@ export class CompactMixin {
         ? [['my-sketches', 'My sketches'], ['library', 'Library'], ['profile', 'Public profile'],
           this.cloudPlan?.plan === 'premium' ? ['billing', 'Manage subscription'] : ['pricing', 'Upgrade to Pro'], ['signout', 'Sign out']]
         : [['account', 'Sign in'], ['library', 'Library']],
-      [['tour', 'How OnSketch works'], ['report', 'Report a problem']],
+      [['tour', 'How OnSketch works'], ['faq', 'FAQ and tool guide'], ['report', 'Report a problem']],
     ].filter(g => g.length);
     return groups.map(g => g.map(x =>
       `<button type="button" class="more-item" data-more="${x[0]}">${icon(x[0])}<span>${x[1]}</span>${x.length > 2 ? check(x[2]) : ''}</button>`).join(''))

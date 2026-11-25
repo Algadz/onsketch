@@ -124,6 +124,7 @@ export class TourMixin {
     back.innerHTML = `
       <div class="modal tour" role="dialog" aria-modal="true" aria-labelledby="tour-t0">
         <button type="button" class="tour-skip" data-a="skip">${source === 'help' ? 'Close' : 'Skip'}</button>
+        ${source === 'help' ? '<a class="tour-faq" href="/faq/" target="_blank" rel="noopener" data-umami-event="faq-open" data-umami-event-from="help">FAQ and tool guide ↗</a>' : ''}
         <div class="tour-view"><div class="tour-track">
           ${SLIDES.map((s, i) => `
             <section class="tour-slide" aria-hidden="${i !== 0}">
