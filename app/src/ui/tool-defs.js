@@ -66,6 +66,7 @@ export const WINDOW_ICONS = {
   layers: svg('<path d="M12 4l9 5-9 5-9-5z"/><path d="M3 14l9 5 9-5"/>'),
   props: svg('<path d="M4 6h16M4 12h16M4 18h10"/>'),
   equations: svg('<path d="M17 5H7l6 7-6 7h10"/>'),
+  history: svg('<path d="M3.5 12a8.5 8.5 0 1 0 2.5-6"/><path d="M3 4v4h4"/><path d="M12 8v4.5l3 2"/>'),
   sketch: svg('<path d="M4 20l1-4L16 5l3 3L8 19z"/><path d="M14 7l3 3"/><path d="M13 20c2-1.5 4-1.5 7 0"/>'),
 };
 

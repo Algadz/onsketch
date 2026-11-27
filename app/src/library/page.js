@@ -8,10 +8,11 @@ import { track, trackOnce, trackErrors } from '../ui/analytics.js';
 /* =============== PUBLIC LIBRARY (/library/) =====================
    Every public sketch that has a description, newest first, with
    search and "Show more". A card opens a detail view (big preview,
-   title, description, dates), at /library/?s=<id>. "Open a copy in the
-   editor", and the link "Copy link" copies, go to /app/?view=<id>: the
-   sketch opens straight in the editor as a browser-only copy the visitor
-   can change and save as their own.
+   title, description, dates), at /library/?s=<id>. "Remix", and the
+   link "Copy link" copies, go to /app/?view=<id>: the sketch opens
+   straight in the editor as a browser-only copy the visitor (signed in
+   or not) can change and save as their own, credited to the original
+   (a remix: "Remix of …" here, and a remix count on the original).
    Works signed out (public rows and their thumbnails are readable by
    anyone; see supabase/migrations/0002_*).
    ============================================================ */
@@ -20,6 +21,7 @@ const REPORT_ENDPOINT = 'https://formspree.io/f/mrppvjjp';
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const day = (iso) => new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+const REMIX_ICON = '<svg class="remix-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="5" r="2"/><circle cx="18" cy="5" r="2"/><circle cx="12" cy="19" r="2"/><path d="M6 7v2a3 3 0 0 0 3 3h6a3 3 0 0 0 3-3V7M12 12v5"/></svg>';
 const PLACEHOLDER = `<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M7 23 C 11 9, 15 9, 16 16 S 21 24, 25 9" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><circle cx="7" cy="23" r="2.2" fill="currentColor"/><circle cx="25" cy="9" r="2.2" fill="currentColor"/></svg>`;
 
 class Library {
@@ -157,7 +159,7 @@ class Library {
       <div class="card-body">
         <h2 class="card-title"><a href="${esc(this.urlFor(r.id))}">${esc(r.name)}</a></h2>
         <p class="card-desc">${esc(r.description)}</p>
-        <div class="card-meta">${this.author(r)}${this.likeButton(r)}</div>
+        <div class="card-meta">${this.author(r)}${this.remixBadge(r)}${this.likeButton(r)}</div>
       </div>
     </li>`;
   }
@@ -171,6 +173,21 @@ class Library {
       ? `<a class="author-name" href="/library/?u=${encodeURIComponent(r.author_name)}" title="@${esc(r.author_name)}: profile and sketches">${esc(r.author_name)}</a>`
       : `<span class="author-name">${esc(r.author_name || 'OnSketch user')}</span>`;
     return `<span class="author${big ? ' big' : ''}">${pic}${name}${big ? '' : ` · ${esc(day(r.created_at || r.updated_at))}`}</span>`;
+  }
+
+  /** How many sketches were remixed from this one (shown when any). */
+  remixBadge(r) {
+    const n = r.remixes || 0;
+    if (!n) return '';
+    const t = `Remixed ${n} time${n === 1 ? '' : 's'}`;
+    return `<span class="remix-count" title="${t}" aria-label="${t}">${REMIX_ICON}<span>${n}</span></span>`;
+  }
+  /** "Remix of <title> by @author", linking to the original. */
+  remixCredit(r) {
+    if (!r.remixed_from || !r.remixed_from_name) return '';
+    const by = r.remixed_from_author && r.remixed_from_author !== 'OnSketch user'
+      ? ` by <a href="/library/?u=${encodeURIComponent(r.remixed_from_author)}">@${esc(r.remixed_from_author)}</a>` : '';
+    return `<p class="lib-remix-of">${REMIX_ICON}<span>Remix of <a href="${esc(this.urlFor(r.remixed_from))}" data-open="${esc(r.remixed_from)}">${esc(r.remixed_from_name)}</a>${by}</span></p>`;
   }
 
   likeButton(r) {
@@ -237,18 +254,24 @@ class Library {
       <div class="body">
         <h3 id="lib-detail-title">${esc(row.name)}</h3>
         <div class="lib-detail-by">${this.author(row, true)}${this.likeButton(row)}</div>
+        ${this.remixCredit(row)}
         <p class="lib-detail-desc">${esc(row.description)}</p>
-        <p class="muted">Shared ${esc(day(row.created_at || row.updated_at))}${row.updated_at && row.created_at && day(row.updated_at) !== day(row.created_at) ? ` · updated ${esc(day(row.updated_at))}` : ''}</p>
+        <p class="muted">Shared ${esc(day(row.created_at || row.updated_at))}${row.updated_at && row.created_at && day(row.updated_at) !== day(row.created_at) ? ` · updated ${esc(day(row.updated_at))}` : ''}${row.remixes ? ` · remixed ${row.remixes} time${row.remixes === 1 ? '' : 's'}` : ''}</p>
         <p class="account-msg" role="status"></p>
       </div>
       <div class="footer">
         <button type="button" class="link lib-report" data-a="report">Report</button>
         <button type="button" class="btn" data-a="copy" title="A link that opens this sketch directly in the editor">Copy link</button>
         <a class="btn" data-a="insert" href="/app/?insert=${encodeURIComponent(row.id)}" title="Place it inside the sketch you are drawing, at real size, as a part">Insert into my sketch</a>
-        <a class="btn primary" href="/app/?view=${encodeURIComponent(row.id)}">Open a copy in the editor</a>
+        <a class="btn primary" href="/app/?view=${encodeURIComponent(row.id)}" title="Your own copy in the editor: change it and save it; it stays credited to this sketch">${REMIX_ICON}Remix</a>
       </div>`;
     const msg = back.querySelector('.account-msg');
-    back.querySelector('a.btn.primary').addEventListener('click', () => track('library-open-copy', { id: row.id }));
+    back.querySelector('a.btn.primary').addEventListener('click', () => track('library-remix', { id: row.id }));
+    back.querySelector('[data-open]')?.addEventListener('click', (e) => {
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
+      e.preventDefault();
+      this.show(e.currentTarget.dataset.open, true);
+    });
     back.querySelector('[data-a="insert"]').addEventListener('click', () => track('library-insert', { id: row.id }));
     back.querySelector('[data-a="copy"]').addEventListener('click', async () => {
       track('library-copy-link');

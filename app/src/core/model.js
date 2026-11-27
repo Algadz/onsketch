@@ -157,6 +157,13 @@ export class Sketch {
    current setup and writes it into the project. */
 export const DISPLAY_DEFAULTS = { grid: true, snap: true, dimensions: true, relations: true, dimNames: false };
 
+/** { id, name, author } of the sketch a project was remixed from, or null. */
+export function cleanRemix(r) {
+  if (!r || typeof r !== 'object' || typeof r.id !== 'string' || !/^[\w-]{1,64}$/.test(r.id)) return null;
+  const text = (v, n) => (typeof v === 'string' ? v.trim().slice(0, n) : '');
+  return { id: r.id, name: text(r.name, 80), author: text(r.author, 40) };
+}
+
 export function cleanDisplay(d) {
   if (!d || typeof d !== 'object') return null;
   const out = {};
@@ -170,6 +177,7 @@ export class Project {
     this.background = null;       // canvas fill colour set by the fill tool, or null
     this.display = null;          // grid / snap / dimensions / relations shown (cleanDisplay), or null when never set
     this.variables = [];          // global variables: { name, expr } (value/error are computed)
+    this.remixedFrom = null;      // { id, name, author }: the library sketch this one was remixed from
     this.drawStyle = null;        // style given to new entities (set by the editor; not saved)
     this.units = 'mm';
     // Line weight, pen, marker, arrow and text sizes, in drawing units
@@ -289,6 +297,7 @@ export class Project {
       layers:this.layers.map(l => l.toJSON()),
       sketches:this.sketches.map(s => s.toJSON()),
       ...(Object.keys(pics).length ? { images: pics } : {}),
+      ...(this.remixedFrom ? { remixedFrom: { ...this.remixedFrom } } : {}),
     };
   }
   static fromJSON(o) {
@@ -298,6 +307,7 @@ export class Project {
     p.units = DOC_UNITS.includes(o.units) ? o.units : 'mm';
     p.background = /^#[0-9a-f]{6}$/i.test(o.background || '') ? o.background : null;
     p.display = cleanDisplay(o.display);
+    p.remixedFrom = cleanRemix(o.remixedFrom);
     p.variables = Array.isArray(o.variables)
       ? o.variables.filter(v => v && typeof v.name === 'string' && typeof v.expr === 'string').map(v => {
         const out = { name: v.name, expr: v.expr };

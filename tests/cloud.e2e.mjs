@@ -11,6 +11,7 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
+import { installFake } from './fake-supabase.mjs';
 const live = process.argv.includes('--live');
 const root = resolve(new URL('..', import.meta.url).pathname);
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml' };
@@ -25,146 +26,6 @@ const base = `http://localhost:${server.address().port}/app/`;
 
 let failed = 0;
 const check = (cond, msg) => { console.log((cond ? 'ok   ' : 'FAIL ') + msg); if (!cond) failed++; };
-
-/** In-page fake of supabase-js. Rows live in localStorage so a second tab
- *  (or a reload) sees the same "server". */
-function installFake() {
-  const DB = 'fake-sb:rows', SES = 'fake-sb:session';
-  const listeners = new Set();
-  const session = () => JSON.parse(localStorage.getItem(SES) || 'null');
-  const SB_KEY = 'sb-rwmzpzaqijgdfsjmpqbd-auth-token';   // where the real supabase-js keeps the session
-  const setSession = (s) => { if (s) { localStorage.setItem(SES, JSON.stringify(s)); localStorage.setItem(SB_KEY, JSON.stringify(s)); } else { localStorage.removeItem(SES); localStorage.removeItem(SB_KEY); } listeners.forEach(cb => cb(s ? 'SIGNED_IN' : 'SIGNED_OUT', s)); };
-  window.__fakeSent = [];
-  window.__onsketchCreateClient = () => ({
-    auth: {
-      getSession: async () => ({ data: { session: session() }, error: null }),
-      onAuthStateChange: (cb) => { listeners.add(cb); return { data: { subscription: { unsubscribe: () => listeners.delete(cb) } } }; },
-      signInWithOtp: async ({ email }) => { window.__fakeSent.push(email); return { error: null }; },
-      verifyOtp: async ({ email, token }) => {
-        if (token !== '123456') return { data: {}, error: new Error('Token has expired or is invalid') };
-        const s = { user: { id: email === 'me@example.com' ? 'u1' : 'u-' + email.split('@')[0], email } }; setSession(s); return { data: { user: s.user, session: s }, error: null };
-      },
-      signInWithOAuth: async () => ({ error: null }),
-      signOut: async () => { setSession(null); return { error: null }; },
-    },
-    functions: { invoke: async (name, { body }) => {
-      window.__billingCalls = [...(window.__billingCalls || []), { name, body }];
-      if (name !== 'billing' || !session()) return { data: null, error: new Error('Unauthorized') };
-      if (body.action === 'checkout') return { data: { url: `https://checkout.stripe.test/c/${body.interval}?user=${session().user.id}` }, error: null };
-      if (body.action === 'portal') return { data: { url: 'https://billing.stripe.test/p' }, error: null };
-      return { data: null, error: new Error('Unknown action') };
-    } },
-    rpc: async (fn, args) => {
-      if (fn === 'public_profile') {
-        const L = (k) => JSON.parse(localStorage.getItem(k) || '[]');
-        const p = L('fake-sb:t:public_profiles').find(x => x.username && x.username.toLowerCase() === args.name.toLowerCase());
-        if (!p) return { data: [], error: null };
-        const mine = L('fake-sb:rows').filter(r => r.owner_id === p.user_id && r.visibility === 'public' && r.description != null);
-        const likes = L('fake-sb:t:project_likes').filter(l => mine.some(r => r.id === l.project_id)).length;
-        return { data: [{ user_id: p.user_id, username: p.username, avatar_url: p.avatar_url || null, bio: p.bio || null, country: p.country || null,
-          website: p.website || null, joined_at: '2026-11-01T00:00:00Z', sketches: mine.length, likes }], error: null };
-      }
-      // The database after migration 0007 (free sketches may be private): opt-in per test.
-      if (fn === 'plan_rules' && localStorage.getItem('fake-sb:free-private') === '1') return { data: { free_private: true, free_limit: 3 }, error: null };
-      if (fn !== 'username_available') return { data: null, error: new Error('no such function') };
-      const me = session()?.user?.id;
-      const taken = JSON.parse(localStorage.getItem('fake-sb:t:public_profiles') || '[]')
-        .some(p => p.username && p.username.toLowerCase() === args.name.toLowerCase() && p.user_id !== me);
-      return { data: !taken, error: null };
-    },
-    storage: { from: () => ({
-      upload: async (path, blob) => {
-        const url = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(blob); });
-        const files = JSON.parse(localStorage.getItem('fake-sb:files') || '{}'); files[path] = url;
-        localStorage.setItem('fake-sb:files', JSON.stringify(files)); window.__fakeUploads = (window.__fakeUploads || 0) + 1;
-        return { data: { path }, error: null };
-      },
-      remove: async (paths) => { const files = JSON.parse(localStorage.getItem('fake-sb:files') || '{}'); paths.forEach(p => delete files[p]); localStorage.setItem('fake-sb:files', JSON.stringify(files)); return { error: null }; },
-      copy: async (a, b) => { const files = JSON.parse(localStorage.getItem('fake-sb:files') || '{}'); if (files[a]) files[b] = files[a]; localStorage.setItem('fake-sb:files', JSON.stringify(files)); return { error: null }; },
-      createSignedUrls: async (paths) => { const files = JSON.parse(localStorage.getItem('fake-sb:files') || '{}'); return { data: paths.map(p => files[p] ? { path: p, signedUrl: files[p] } : { path: p, error: 'not found', signedUrl: null }), error: null }; },
-    }) },
-    from: (table) => {
-      const q = { f: [], op: 'select', p: null, single: false, table };
-      const KEY = table === 'projects' ? DB : 'fake-sb:t:' + table;
-      const load = (k) => JSON.parse(localStorage.getItem(k) || '[]');
-      const save = (k, v) => localStorage.setItem(k, JSON.stringify(v));
-      const me = () => session()?.user?.id || null;
-      const m = r => q.f.every(([k, v]) => r[k] === v) && (q.ins || []).every(([k, vs]) => vs.includes(r[k]))
-        && (q.notNull || []).every(k => r[k] != null)
-        && (!q.text || [r.name, r.description].some(t => (t || '').toLowerCase().includes(q.text)));
-      const fail = (message, code) => ({ data: null, error: Object.assign(new Error(message), { code }) });
-      const finish = (out) => {
-        out = JSON.parse(JSON.stringify(out));
-        if (q.maybe) return { data: out[0] || null, error: null };
-        if (q.single) return out.length === 1 ? { data: out[0], error: null } : fail('not found', 'PGRST116');
-        return { data: out, error: null };
-      };
-      const run = () => {
-        if (table === 'account_plans') return finish(load('fake-sb:t:account_plans').filter(m));
-        if (table === 'library_sketches') {
-          const profiles = load('fake-sb:t:public_profiles'), likes = load('fake-sb:t:project_likes');
-          let out = load(DB).filter(r => r.visibility === 'public' && r.description != null).map(r => {
-            const a = profiles.find(x => x.user_id === r.owner_id);
-            return { id: r.id, owner_id: r.owner_id, name: r.name, description: r.description, created_at: r.created_at || r.updated_at, updated_at: r.updated_at,
-              author_name: a && a.username ? a.username : 'OnSketch user', author_avatar: a && a.username ? a.avatar_url : null, likes: likes.filter(l => l.project_id === r.id).length };
-          }).filter(m);
-          const [k, asc] = q.order || ['created_at', false];
-          out.sort((a, b) => (asc ? 1 : -1) * (typeof a[k] === 'number' ? a[k] - b[k] : String(a[k]).localeCompare(String(b[k]))));
-          if (q.range) out = out.slice(q.range[0], q.range[1] + 1);
-          return finish(out);
-        }
-        const all = load(KEY);
-        let out;
-        if (q.op === 'insert' || q.op === 'upsert') {
-          if (table === 'projects') {
-            const pro = load('fake-sb:t:account_plans').some(r => r.user_id === me() && r.plan === 'premium');
-            if (!pro && all.filter(r => r.owner_id === me()).length >= (window.__fakeLimit ?? 3)) return fail('OnSketch: free plan limit (3 projects).');
-            const now = new Date().toISOString();
-            const r = { id: 'p' + (all.length + 1) + '-' + Date.now(), owner_id: me(), visibility: 'private', revision: 1, created_at: now, updated_at: now, ...q.p };
-            all.push(r); out = [r];
-          } else if (table === 'project_likes') {
-            const p = load(DB).find(x => x.id === q.p.project_id);
-            if (!p || p.visibility !== 'public' || p.owner_id === me()) return fail('new row violates row-level security policy', '42501');
-            if (all.some(l => l.project_id === q.p.project_id && l.user_id === me())) return fail('duplicate key', '23505');
-            out = [{ project_id: q.p.project_id, user_id: me() }]; all.push(out[0]);
-          } else if (table === 'public_profiles') {
-            const r = { user_id: me(), ...q.p };
-            if (r.username && all.some(x => x.user_id !== r.user_id && (x.username || '').toLowerCase() === r.username.toLowerCase())) return fail('duplicate key', '23505');
-            const i = all.findIndex(x => x.user_id === r.user_id);
-            if (i >= 0 && q.op === 'insert') return fail('duplicate key', '23505');
-            if (i >= 0) all[i] = { ...all[i], ...r }; else all.push(r);
-            out = [all.find(x => x.user_id === r.user_id)];
-          }
-        } else if (q.op === 'update') {
-          out = all.filter(m);
-          out.forEach(r => Object.assign(r, q.p, table === 'projects' ? { revision: r.revision + ('data' in q.p ? 1 : 0), updated_at: new Date().toISOString() } : {}));
-        } else if (q.op === 'delete') {
-          out = all.filter(m); save(KEY, all.filter(r => !m(r))); return { data: out, error: null };
-        } else {
-          out = all.filter(m);
-          if (table === 'project_likes' || table === 'public_profiles') out = table === 'project_likes' ? out.filter(l => l.user_id === me()) : out;
-          if (table === 'projects') out.sort((a, b) => b.updated_at.localeCompare(a.updated_at));
-          if (q.range) out = out.slice(q.range[0], q.range[1] + 1);
-        }
-        if (q.op !== 'select') save(KEY, all);
-        return finish(out);
-      };
-      const b = {
-        select() { return b; }, single() { q.single = true; return b; }, maybeSingle() { q.maybe = true; return b; },
-        order(k, o) { if (!q.order) q.order = [k, !!(o && o.ascending)]; return b; },
-        insert(p) { q.op = 'insert'; q.p = p; return b; }, upsert(p) { q.op = 'upsert'; q.p = p; return b; },
-        update(p) { q.op = 'update'; q.p = p; return b; },
-        delete() { q.op = 'delete'; return b; }, eq(k, v) { q.f.push([k, v]); return b; },
-        in(k, vs) { (q.ins = q.ins || []).push([k, vs]); return b; },
-        not(k) { (q.notNull = q.notNull || []).push(k); return b; },
-        or(expr) { q.text = /ilike\.%([^%]*)%/.exec(expr)[1].toLowerCase(); return b; },
-        range(a, z) { q.range = [a, z]; return b; },
-        then(res, rej) { return Promise.resolve(run()).then(res, rej); },
-      };
-      return b;
-    },
-  });
-}
 
 const browser = await chromium.launch();
 const ctx = await browser.newContext({ viewport: { width: 1400, height: 900 } });
@@ -510,8 +371,10 @@ check(true, 'Back closes the detail view');
 await page.goForward();
 await page.waitForSelector('#lib-detail a.btn.primary');
 await page.click('#lib-detail a.btn.primary');
-await page.waitForFunction(() => window._app?.project?.name === 'Shelf v2');
-check(await app(() => window._app.cloudLink === null && window._app.project.toJSON().sketches[0].entities.some(e => e.type === 'circle')), 'Open a copy: the sketch opens in the editor, not linked to anyone\'s account');
+await page.waitForFunction(() => window._app?.project?.name === 'Shelf v2 (remix)');
+check(await app(() => window._app.cloudLink === null && window._app.project.toJSON().sketches[0].entities.some(e => e.type === 'circle')), 'Remix: the sketch opens in the editor, not linked to anyone\'s account');
+check(await app(() => { const r = window._app.project.remixedFrom; return !!r && r.name === 'Shelf v2' && /^p/.test(r.id) && /Remix of "Shelf v2"/.test(document.getElementById('status-hint').textContent); }),
+  'Remix signed out: credited to the original (remixedFrom) and the status bar says so');
 check(!/view=/.test(page.url()), 'view parameter cleaned');
 // Library ▸ Insert into my sketch: a public sketch as a part in the open drawing.
 const nBefore = await app(() => window._app.activeSketch().entities.length);
@@ -521,7 +384,7 @@ await page.locator('.lib-card .card-title a', { hasText: /^Shelf v2$/ }).click()
 await page.waitForSelector('#lib-detail [data-a="insert"]');
 await page.click('#lib-detail [data-a="insert"]');
 await page.waitForFunction((n) => window._app?.activeSketch().entities.length === 2 * n, nBefore);
-check(!/insert=/.test(page.url()) && await app(() => window._app.project.layers.length >= 2 && window._app.project.name === 'Shelf v2'),
+check(!/insert=/.test(page.url()) && await app(() => window._app.project.layers.length >= 2 && window._app.project.name === 'Shelf v2 (remix)'),
   'library ▸ Insert into my sketch: added to the open drawing, at real size, URL cleaned');
 
 // Thumbs-up: signed out it asks to sign in; another user can like, once, and undo.

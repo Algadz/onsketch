@@ -129,6 +129,7 @@ export class ChromeMixin {
       layers: (cw, ch, w) => ({ x: cw - w - 12, y: 12 }),
       props:  (cw, ch, w) => ({ x: cw - w - 12, y: 212 }),
       equations: (cw, ch, w) => ({ x: Math.max(160, (cw - w) / 2), y: 60 }),   // below the lock banner
+      history: (cw, ch, w) => ({ x: cw - w - 12, y: 60 }),
       sketch: () => {                                   // to the right of the Tools window
         const t = document.querySelector('.fwin[data-win="tools"]');
         return { x: t && !t.hidden ? t.offsetLeft + t.offsetWidth + 8 : 12, y: 12 };

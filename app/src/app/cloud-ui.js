@@ -236,7 +236,7 @@ export class CloudMixin {
       <a role="menuitem" class="am-item" href="/library/">Library</a>
       <button type="button" role="menuitem" class="am-item" data-a="profile">${p?.username ? 'Edit public profile…' : 'Choose a username…'}</button>
       ${p?.username ? `<a role="menuitem" class="am-item" href="/library/?u=${encodeURIComponent(p.username)}">View my public profile</a>` : ''}
-      ${this.cloudLink ? '<button type="button" role="menuitem" class="am-item" data-a="details">Sketch details…</button>' : ''}
+      ${this.cloudLink ? '<button type="button" role="menuitem" class="am-item" data-a="details">Sketch details…</button><button type="button" role="menuitem" class="am-item" data-a="history">Version history</button>' : ''}
       ${plan?.plan === 'premium'
         ? (plan.hasSubscription ? '<button type="button" role="menuitem" class="am-item" data-a="billing">Manage subscription</button>' : '')
         : '<a role="menuitem" class="am-item am-pro" href="/pricing/">Upgrade to Pro</a>'}
@@ -244,6 +244,7 @@ export class CloudMixin {
       <button type="button" role="menuitem" class="am-item" data-a="signout">Sign out</button>`;
     menu.querySelector('[data-a="profile"]').addEventListener('click', () => this.editProfile());
     menu.querySelector('[data-a="signout"]').addEventListener('click', () => { this.toggleAccountMenu(false); this.cloudSignOut(); });
+    menu.querySelector('[data-a="history"]')?.addEventListener('click', () => { this.toggleAccountMenu(false); this.openHistory?.(); });
     menu.querySelector('[data-a="billing"]')?.addEventListener('click', () => { this.toggleAccountMenu(false); this.manageSubscription(); });
     menu.querySelector('[data-a="details"]')?.addEventListener('click', async () => {
       this.toggleAccountMenu(false);
@@ -279,6 +280,7 @@ export class CloudMixin {
     this.cloudLink = { id: row.id, revision: row.revision, dirty: false };
     this._storeLink();
     this._setCloudStatus('saved');
+    this._historyChanged?.();
   }
   /** The drawing becomes a browser-only one (new, import, example, sign out). */
   _cloudUnlink() {
@@ -287,6 +289,7 @@ export class CloudMixin {
     this.cloudLink = null;
     this._storeLink();
     this._setCloudStatus('');
+    this._historyChanged?.();
   }
 
   /** Called on every change (from scheduleAutosave). */
@@ -316,6 +319,7 @@ export class CloudMixin {
         this._storeLink();
         this._setCloudStatus(link.dirty ? 'saving' : 'saved');
         this._cloudThumbSoon();
+        this._historyChanged?.({ saved: true });
       }
     } catch (e) {
       if (e instanceof ConflictError) { this._setCloudStatus('conflict'); this._showConflict(e.latest); }
@@ -624,12 +628,14 @@ export class CloudMixin {
       heading: 'Save to my account', submitLabel: 'Save', plan: plan.plan, canPrivate: plan.canPrivate,
       visibility: plan.canPrivate ? this._defaultVisibility() : 'public',
       name: name.length >= TITLE_MIN && name !== 'Untitled' ? name : '',
+      description: this.project.remixedFrom
+        ? `Remix of "${this.project.remixedFrom.name}"${this.project.remixedFrom.author ? ` by @${this.project.remixedFrom.author}` : ''}.` : '',
       preview: renderThumbnail(this.project, this.fillDisplay(), { width: 320, height: 200, scale: 2 }),
       onSubmit: async (details) => { await this._beforePublish(details); return this.cloud.create(this.project.toJSON(), details); },
     });
     if (!row) return;
     if (plan.canPrivate) try { localStorage.setItem(VISIBILITY_KEY, row.visibility === 'public' ? 'public' : 'private'); } catch { /* storage unavailable */ }
-    track('sketch-saved-account', { first: true, plan: plan.plan, visibility: row.visibility });
+    track('sketch-saved-account', { first: true, plan: plan.plan, visibility: row.visibility, remix: !!this.project.remixedFrom });
     this._setProjectName(row.name);
     this._cloudLinkTo(row);
     this._writeLocal();
@@ -671,16 +677,20 @@ export class CloudMixin {
     } catch (e) { notice("Couldn't open the sketch: " + (e.message || e), { kind: 'error' }); }
   }
 
-  /** /app/?view=<id> from the library: a public sketch opens as a copy in
-   *  this browser (not linked). The previous drawing stays one Undo away,
-   *  as with the examples. */
+  /** /app/?view=<id> from the library: a remix. The public sketch opens
+   *  as a copy in this browser (not linked), signed in or not; saved to an
+   *  account, it is credited to the original ("Remixed from …", counted
+   *  in the library). The previous drawing stays one Undo away, as with
+   *  the examples. */
   async openPublicCopy(id) {
-    let row;
-    try { row = await this.cloud.load(id); }
+    let row, item = null;
+    try { [row, item] = await Promise.all([this.cloud.load(id), this.cloud.libraryItem(id).catch(() => null)]); }
     catch { this._hint("This sketch isn't public any more, or the link is wrong."); return; }
     try {
       const p = Project.fromJSON(row.data);
-      p.name = row.name || p.name;
+      const mine = !!(item && this.cloudUser && item.owner_id === this.cloudUser.id);
+      p.remixedFrom = mine ? p.remixedFrom : { id: row.id, name: row.name || '', author: item && item.author_name !== 'OnSketch user' ? item.author_name : '' };
+      p.name = mine ? (row.name || p.name) : `${row.name || p.name} (remix)`.slice(0, 80);
       this._cloudUnlink();
       this._guideOpened();
       this.project = p;
@@ -690,7 +700,9 @@ export class CloudMixin {
       this.refreshUI();
       this.zoomFit();
       track('sketch-open', { from: 'library' });
-      this._hint(`"${row.name}" from the library, as a copy in this browser. Save to my account to keep it; Ctrl+Z goes back to your previous drawing.`);
+      const by = p.remixedFrom?.author ? ` by @${p.remixedFrom.author}` : '';
+      this._hint(mine ? `"${row.name}" from the library, as a copy in this browser. Ctrl+Z goes back to your previous drawing.`
+        : `Remix of "${row.name}"${by}: make it yours, then Save; it stays credited to the original. Ctrl+Z goes back to your previous drawing.`);
     } catch (e) { console.warn('library copy failed', e); this._hint("Couldn't open this sketch."); }
   }
 

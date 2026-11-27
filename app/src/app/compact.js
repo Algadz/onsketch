@@ -24,7 +24,7 @@ const MORE_ICONS = {
 // Also used by the inline start-up script in app/index.html: keep both in step.
 const COMPACT_QUERY = '(pointer: coarse) and (max-width: 699px), (pointer: coarse) and (max-height: 499px)';
 const PAINT_TOOLS = ['fill', 'pen', 'marker', 'arrow', 'shape', 'text', 'eraser'];
-const PANELS = [['layers', 'Layers'], ['colors', 'Colours'], ['props', 'Properties'], ['equations', 'Equations']];
+const PANELS = [['layers', 'Layers'], ['colors', 'Colours'], ['props', 'Properties'], ['equations', 'Equations'], ['history', 'History']];
 
 export class CompactMixin {
   _setupCompact() {
@@ -95,7 +95,7 @@ export class CompactMixin {
       items = PAINT_TOOLS.map(id => ({ id, icon: TOOL_ICONS[id], label: toolDef(id).label, on: this.toolName === id }));
       items.push({ id: 'panel:colors', icon: WINDOW_ICONS.colors, label: 'Colours', on: this.windows.isOpen('colors') });
     }
-    if (kind === 'panels') items = PANELS.map(([id, label]) => ({ id: 'panel:' + id, icon: WINDOW_ICONS[id], label, on: this.windows.isOpen(id) }));
+    if (kind === 'panels') items = PANELS.filter(([id]) => id !== 'history' || this.cloudEnabled).map(([id, label]) => ({ id: 'panel:' + id, icon: WINDOW_ICONS[id], label, on: this.windows.isOpen(id) }));
     fly.dataset.kind = kind;
     fly.innerHTML = items.map(i => `${i.sep ? '<div class="fly-sep"></div>' : ''}<button type="button" class="fly-item${i.on ? ' on' : ''}" data-id="${i.id}">${i.icon}<span>${i.label}</span></button>`).join('');
     fly.hidden = false;

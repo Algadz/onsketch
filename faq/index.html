@@ -47,7 +47,7 @@
     "name": "Is OnSketch free?",
     "acceptedAnswer": {
      "@type": "Answer",
-     "text": "<p>Yes. Every drawing tool is free, with no time limit and no watermark, and so are the image exports (PNG, SVG, copy to the clipboard) and printing or PDF to scale. A free account keeps 3 sketches, shown in the public <a href=\"/library/\">library</a>. <a href=\"/pricing/\">OnSketch Pro</a> ($29 a year, tax included) adds unlimited and private sketches, and DXF import and export.</p>"
+     "text": "<p>Yes. Every drawing tool is free, with no time limit and no watermark, and so are the image exports (PNG, SVG, copy to the clipboard) and printing or PDF to scale. A free account keeps 3 sketches, shown in the public <a href=\"/library/\">library</a>. <a href=\"/pricing/\">OnSketch Pro</a> ($29 a year, tax included) adds unlimited and private sketches, the whole version history with named versions, and DXF import and export.</p>"
     }
    },
    {
@@ -231,7 +231,23 @@
     "name": "What is the library?",
     "acceptedAnswer": {
      "@type": "Answer",
-     "text": "<p>The <a href=\"/library/\">library</a> lists every public sketch. Open one as a copy in the editor (it becomes yours to change and save), insert it into your drawing, give it a thumbs-up, or copy a link that opens it straight in the editor. Free sketches are public; Pro sketches can be private.</p>"
+     "text": "<p>The <a href=\"/library/\">library</a> lists every public sketch. <b>Remix</b> one (it opens in the editor as your own copy), insert it into your drawing, give it a thumbs-up, or copy a link that opens it straight in the editor. Free sketches are public; Pro sketches can be private.</p>"
+    }
+   },
+   {
+    "@type": "Question",
+    "name": "What is a remix?",
+    "acceptedAnswer": {
+     "@type": "Answer",
+     "text": "<p>Your own version of someone's public sketch. <b>Remix</b> in the library opens it in the editor, signed in or not; change it, and when you save it to your account it stays credited to the original: the library shows \"Remix of … by @…\" on yours, and how many times the original was remixed. Remixing your own sketch is a plain copy.</p>"
+    }
+   },
+   {
+    "@type": "Question",
+    "name": "Can I go back to an earlier version of a sketch?",
+    "acceptedAnswer": {
+     "@type": "Answer",
+     "text": "<p>Yes, for sketches saved in your account. The <b>History</b> window (clock button in the menu bar, or click <b>Saved</b>) lists earlier versions: one is kept when you change the drawing after a pause, and every 10 minutes while you work. Click a version to <b>compare</b>: what it had is drawn dashed in red, what is new or changed since in green, and changed dimensions are listed (D3: 120 → 140 mm). <b>Restore</b> brings it back (the current drawing is kept as a version, and Ctrl+Z also undoes it); <b>Copy as new sketch</b> leaves the original alone. The free plan keeps the last 3 versions; <a href=\"/pricing/\">OnSketch Pro</a> keeps the whole history and adds <b>Save version…</b>: a named version with a note, kept for good.</p>"
     }
    },
    {
@@ -263,7 +279,7 @@
     "name": "What does OnSketch Pro add?",
     "acceptedAnswer": {
      "@type": "Answer",
-     "text": "<p>Unlimited sketches in your account (free: 3), private sketches (free sketches are public in the library), and DXF import and export. It costs $29 a year, sales tax and VAT included. Every drawing tool, image export and printing to scale stay free. <a href=\"/pricing/\">See the plans</a>.</p>"
+     "text": "<p>Unlimited sketches in your account (free: 3), private sketches (free sketches are public in the library), the whole version history with named versions (free: the last 3 versions), and DXF import and export. It costs $29 a year, sales tax and VAT included. Every drawing tool, image export and printing to scale stay free. <a href=\"/pricing/\">See the plans</a>.</p>"
     }
    },
    {
@@ -374,21 +390,22 @@
 <script type="importmap">
 {
   "imports": {
-    "../app/src/app/App.js": "../app/src/app/App.js?v=f6751e3f22",
-    "../app/src/app/chrome.js": "../app/src/app/chrome.js?v=0298a9e973",
+    "../app/src/app/App.js": "../app/src/app/App.js?v=9737c57c2b",
+    "../app/src/app/chrome.js": "../app/src/app/chrome.js?v=a29c09d831",
     "../app/src/app/clipboard.js": "../app/src/app/clipboard.js?v=8586298f11",
-    "../app/src/app/cloud-ui.js": "../app/src/app/cloud-ui.js?v=dc9803e0e8",
-    "../app/src/app/compact.js": "../app/src/app/compact.js?v=46beeeec90",
+    "../app/src/app/cloud-ui.js": "../app/src/app/cloud-ui.js?v=3de1c2aff4",
+    "../app/src/app/compact.js": "../app/src/app/compact.js?v=8723647ff5",
     "../app/src/app/constraint-actions.js": "../app/src/app/constraint-actions.js?v=f84fac8ba5",
     "../app/src/app/context-relations.js": "../app/src/app/context-relations.js?v=fcc995f25e",
     "../app/src/app/dim-links.js": "../app/src/app/dim-links.js?v=99d1f4b5fb",
     "../app/src/app/dimensions.js": "../app/src/app/dimensions.js?v=d02f549fb9",
     "../app/src/app/drag.js": "../app/src/app/drag.js?v=61d0e82e11",
-    "../app/src/app/dxf-import.js": "../app/src/app/dxf-import.js?v=239a12d9e4",
+    "../app/src/app/dxf-import.js": "../app/src/app/dxf-import.js?v=a95fa93637",
     "../app/src/app/equations-ui.js": "../app/src/app/equations-ui.js?v=246460d1b0",
     "../app/src/app/export.js": "../app/src/app/export.js?v=33664a2f8e",
     "../app/src/app/fills.js": "../app/src/app/fills.js?v=3d6e850aa0",
     "../app/src/app/guide.js": "../app/src/app/guide.js?v=906ba85ee3",
+    "../app/src/app/history.js": "../app/src/app/history.js?v=ad91744513",
     "../app/src/app/image-import.js": "../app/src/app/image-import.js?v=777f87e7e6",
     "../app/src/app/ink-links.js": "../app/src/app/ink-links.js?v=3fe20ddaa2",
     "../app/src/app/ink-select.js": "../app/src/app/ink-select.js?v=28d1486c06",
@@ -400,7 +417,7 @@
     "../app/src/app/panels.js": "../app/src/app/panels.js?v=7e40ce54aa",
     "../app/src/app/patterns.js": "../app/src/app/patterns.js?v=dd9ed5fe29",
     "../app/src/app/persistence.js": "../app/src/app/persistence.js?v=c15dad1df4",
-    "../app/src/app/render-events.js": "../app/src/app/render-events.js?v=c01e5f3a78",
+    "../app/src/app/render-events.js": "../app/src/app/render-events.js?v=ed4df0618e",
     "../app/src/app/report.js": "../app/src/app/report.js?v=ff38fcdec7",
     "../app/src/app/selection.js": "../app/src/app/selection.js?v=3955689496",
     "../app/src/app/sketch-window.js": "../app/src/app/sketch-window.js?v=ba5a0cb9b8",
@@ -410,11 +427,12 @@
     "../app/src/app/touch-ui.js": "../app/src/app/touch-ui.js?v=8c4385eb5b",
     "../app/src/app/touch.js": "../app/src/app/touch.js?v=977b1811a3",
     "../app/src/app/tour.js": "../app/src/app/tour.js?v=7c4927c44c",
-    "../app/src/cloud/cloud.js": "../app/src/cloud/cloud.js?v=e75f9d2bef",
+    "../app/src/cloud/cloud.js": "../app/src/cloud/cloud.js?v=426815f8a6",
     "../app/src/cloud/config.js": "../app/src/cloud/config.js?v=76ceeb7132",
     "../app/src/cloud/details-dialog.js": "../app/src/cloud/details-dialog.js?v=b94268c5e2",
     "../app/src/core/arrows.js": "../app/src/core/arrows.js?v=0a9ff13d80",
     "../app/src/core/bezier.js": "../app/src/core/bezier.js?v=4770a3ddae",
+    "../app/src/core/compare.js": "../app/src/core/compare.js?v=55f1739260",
     "../app/src/core/constraints.js": "../app/src/core/constraints.js?v=223f381116",
     "../app/src/core/dxf-import.js": "../app/src/core/dxf-import.js?v=9080ecf085",
     "../app/src/core/dxf.js": "../app/src/core/dxf.js?v=890919f696",
@@ -429,7 +447,7 @@
     "../app/src/core/jacobian.js": "../app/src/core/jacobian.js?v=7499b537c1",
     "../app/src/core/locus.js": "../app/src/core/locus.js?v=1b96f95ed8",
     "../app/src/core/math.js": "../app/src/core/math.js?v=b3db958e20",
-    "../app/src/core/model.js": "../app/src/core/model.js?v=779bfd30d0",
+    "../app/src/core/model.js": "../app/src/core/model.js?v=047ef660b0",
     "../app/src/core/patterns.js": "../app/src/core/patterns.js?v=2f66daca7c",
     "../app/src/core/regions.js": "../app/src/core/regions.js?v=0ece9e4872",
     "../app/src/core/shapes.js": "../app/src/core/shapes.js?v=91a8877df4",
@@ -441,7 +459,7 @@
     "../app/src/core/trim.js": "../app/src/core/trim.js?v=a5baa9bd5d",
     "../app/src/editor/relations.js": "../app/src/editor/relations.js?v=5b1ea34ba5",
     "../app/src/editor/snap.js": "../app/src/editor/snap.js?v=ea3066a241",
-    "../app/src/library/page.js": "../app/src/library/page.js?v=ea6db5b619",
+    "../app/src/library/page.js": "../app/src/library/page.js?v=0608d51096",
     "../app/src/main.js": "../app/src/main.js?v=81dd2e155a",
     "../app/src/pricing/page.js": "../app/src/pricing/page.js?v=46ac2f0f0c",
     "../app/src/projects/page.js": "../app/src/projects/page.js?v=88842dec54",
@@ -470,8 +488,8 @@
     "../app/src/ui/dialogs.js": "../app/src/ui/dialogs.js?v=adcc3370ba",
     "../app/src/ui/icons.js": "../app/src/ui/icons.js?v=060fb55608",
     "../app/src/ui/tap-guard.js": "../app/src/ui/tap-guard.js?v=95b4f25589",
-    "../app/src/ui/tool-defs.js": "../app/src/ui/tool-defs.js?v=e35a0ea603",
-    "../app/src/ui/windows.js": "../app/src/ui/windows.js?v=d5d559d167"
+    "../app/src/ui/tool-defs.js": "../app/src/ui/tool-defs.js?v=90a9278453",
+    "../app/src/ui/windows.js": "../app/src/ui/windows.js?v=672358c5d9"
   }
 }
 </script>
@@ -501,7 +519,7 @@
         </div>
         <div class="qa" id="is-onsketch-free">
           <h3><a class="anchor" href="#is-onsketch-free" aria-hidden="true" tabindex="-1">#</a>Is OnSketch free?</h3>
-          <p>Yes. Every drawing tool is free, with no time limit and no watermark, and so are the image exports (PNG, SVG, copy to the clipboard) and printing or PDF to scale. A free account keeps 3 sketches, shown in the public <a href="/library/">library</a>. <a href="/pricing/">OnSketch Pro</a> ($29 a year, tax included) adds unlimited and private sketches, and DXF import and export.</p>
+          <p>Yes. Every drawing tool is free, with no time limit and no watermark, and so are the image exports (PNG, SVG, copy to the clipboard) and printing or PDF to scale. A free account keeps 3 sketches, shown in the public <a href="/library/">library</a>. <a href="/pricing/">OnSketch Pro</a> ($29 a year, tax included) adds unlimited and private sketches, the whole version history with named versions, and DXF import and export.</p>
         </div>
         <div class="qa" id="do-i-need-an-account">
           <h3><a class="anchor" href="#do-i-need-an-account" aria-hidden="true" tabindex="-1">#</a>Do I need an account?</h3>
@@ -650,7 +668,15 @@
         </div>
         <div class="qa" id="what-is-the-library">
           <h3><a class="anchor" href="#what-is-the-library" aria-hidden="true" tabindex="-1">#</a>What is the library?</h3>
-          <p>The <a href="/library/">library</a> lists every public sketch. Open one as a copy in the editor (it becomes yours to change and save), insert it into your drawing, give it a thumbs-up, or copy a link that opens it straight in the editor. Free sketches are public; Pro sketches can be private.</p>
+          <p>The <a href="/library/">library</a> lists every public sketch. <b>Remix</b> one (it opens in the editor as your own copy), insert it into your drawing, give it a thumbs-up, or copy a link that opens it straight in the editor. Free sketches are public; Pro sketches can be private.</p>
+        </div>
+        <div class="qa" id="what-is-a-remix">
+          <h3><a class="anchor" href="#what-is-a-remix" aria-hidden="true" tabindex="-1">#</a>What is a remix?</h3>
+          <p>Your own version of someone's public sketch. <b>Remix</b> in the library opens it in the editor, signed in or not; change it, and when you save it to your account it stays credited to the original: the library shows "Remix of … by @…" on yours, and how many times the original was remixed. Remixing your own sketch is a plain copy.</p>
+        </div>
+        <div class="qa" id="can-i-go-back-to-an-earlier-version-of-a-sketch">
+          <h3><a class="anchor" href="#can-i-go-back-to-an-earlier-version-of-a-sketch" aria-hidden="true" tabindex="-1">#</a>Can I go back to an earlier version of a sketch?</h3>
+          <p>Yes, for sketches saved in your account. The <b>History</b> window (clock button in the menu bar, or click <b>Saved</b>) lists earlier versions: one is kept when you change the drawing after a pause, and every 10 minutes while you work. Click a version to <b>compare</b>: what it had is drawn dashed in red, what is new or changed since in green, and changed dimensions are listed (D3: 120 → 140 mm). <b>Restore</b> brings it back (the current drawing is kept as a version, and Ctrl+Z also undoes it); <b>Copy as new sketch</b> leaves the original alone. The free plan keeps the last 3 versions; <a href="/pricing/">OnSketch Pro</a> keeps the whole history and adds <b>Save version…</b>: a named version with a note, kept for good.</p>
         </div>
       </section>
 
@@ -676,7 +702,7 @@
         
         <div class="qa" id="what-does-onsketch-pro-add">
           <h3><a class="anchor" href="#what-does-onsketch-pro-add" aria-hidden="true" tabindex="-1">#</a>What does OnSketch Pro add?</h3>
-          <p>Unlimited sketches in your account (free: 3), private sketches (free sketches are public in the library), and DXF import and export. It costs $29 a year, sales tax and VAT included. Every drawing tool, image export and printing to scale stay free. <a href="/pricing/">See the plans</a>.</p>
+          <p>Unlimited sketches in your account (free: 3), private sketches (free sketches are public in the library), the whole version history with named versions (free: the last 3 versions), and DXF import and export. It costs $29 a year, sales tax and VAT included. Every drawing tool, image export and printing to scale stay free. <a href="/pricing/">See the plans</a>.</p>
         </div>
         <div class="qa" id="how-do-i-pay-or-cancel">
           <h3><a class="anchor" href="#how-do-i-pay-or-cancel" aria-hidden="true" tabindex="-1">#</a>How do I pay or cancel?</h3>

@@ -53,6 +53,7 @@ npm run test:cloud   # account and cloud projects against a fake Supabase
 npm run lint
 npm run stamp        # after changing anything in app/: refresh cache-busting hashes
 npm run faq          # after editing scripts/faq-content.mjs: rebuild faq/index.html (npm test checks it)
+node tests/history.e2e.mjs   # version history (compare, restore, named versions) and library remixes
 node scripts/landing-shots.mjs # regenerate landing page images (hero + examples carousel)
 node scripts/build-examples.mjs # regenerate app/examples/*.json (opened with /app/?example=<slug>)
                                 # linkage: the four-bar offered by the tour and the first-run steps; desk: the /about/ demo
@@ -928,6 +929,25 @@ the stored session first.
   keeps them private. On Pro a new sketch starts private and a username is
   asked for only when publishing. Enforced in the database; the plan is in
   `account_plans`, written only by the service role.
+- **Version history** (History window: clock button among the windows,
+  a click on *Saved*, the account menu, or Panels on a phone): earlier
+  versions of a sketch in the account. The server keeps one when a save
+  changes the drawing and the newest version is over 10 minutes old (the
+  drawing as it was before), so a session after a pause starts with one.
+  Free: the last 3; Pro: all of the last 24 h, one a day for 30 days,
+  one a month after that, plus **named versions** (*Save version…*, a
+  name and a note, kept for good; *Name…* on any version). A click
+  **compares** with the drawing: on the canvas, the version's shapes and
+  ink that changed or went are dashed red and what is new or changed is
+  green; the window lists changed dimensions (D3: 120 → 140 mm),
+  formulas and variables (`core/compare.js`, matched by id). **Restore**
+  (the current drawing is kept as a version first, Ctrl+Z also undoes it)
+  and **Copy as new sketch**. Table `project_versions`, trigger
+  `projects_keep_version`, functions `save_version`, `name_version`,
+  `restore_version`, `prune_versions` (migration
+  `0009_history_remix.sql`, which also adds remixes). Without that
+  migration the window says history isn't available and the library
+  works without remix counts. `app/src/app/history.js`.
 - **Light / dark on every page**: the library, My sketches, pricing, the
   about, FAQ and privacy pages use the theme chosen in the editor
   (saved in this browser, else the system's), and each has a ☾ / ☀
@@ -943,8 +963,13 @@ the stored session first.
 - **Library** (`/library/`): every public sketch with a description,
   newest first, with search (title / description), sort, *Show more*, a
   detail view with a shareable link (`/library/?s=<id>`), *Copy link*,
-  *Report* (Formspree) and *Open a copy in the editor* (`/app/?view=<id>`:
-  a browser-only copy, the previous drawing one Undo away). Works signed out.
+  *Report* (Formspree) and **Remix** (`/app/?view=<id>`: a browser-only
+  copy, the previous drawing one Undo away, signed in or not). A remix
+  carries `remixedFrom` ({ id, title, author }) in the project file and
+  starts as "<title> (remix)" with "Remix of … by @…" as its description;
+  saved to an account it records `projects.remixed_from`, so the library
+  shows "Remix of <original> by @author" on it and a remix count on the
+  original (remixing your own sketch is a plain copy). Works signed out.
   Each sketch shows its **author**: the public **username** the user chose
   (3–24 letters, digits, _ . -, unique ignoring case, checked as they
   type; a few names reserved), or "OnSketch user" until they choose one;

@@ -101,9 +101,10 @@ export class WindowManager {
     if (!el) return;
     if (open && !this.isOpen(id)) this.onOpen?.(id);
     if (this.compact) {
-      if (open) for (const [other, w] of this.wins) if (other !== id) w.hidden = true;
+      if (open) for (const [other, w] of this.wins) if (other !== id && !w.hidden) { w.hidden = true; this.onToggle?.(other, false); }
       el.hidden = !open;
       this.onChange();
+      this.onToggle?.(id, open);
       return;
     }
     el.hidden = !open;
@@ -111,6 +112,7 @@ export class WindowManager {
     if (open) { el.style.zIndex = ++this.z; this.layout(); }
     this._save();
     this.onChange();
+    this.onToggle?.(id, open);
   }
 
   /** Enter / leave the phone layout. Leaving restores the saved layout. */

@@ -30,6 +30,7 @@ export class RenderEventsMixin {
     this._markStalePaths();                   // traced paths whose shapes changed
     this.renderer.drawGrid(this.gridOn, this.project.background);
     this.renderer.drawEntities(this.project, this.fillDisplay());
+    this._drawCompare?.();                    // History: compare with an earlier version
     this._drawInkLinks();
     if (this._groupFocus) {                   // inside a group: show the whole group
       const members = this.activeSketch()?.strokes.filter(x => x.group === this._groupFocus) || [];

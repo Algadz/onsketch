@@ -1138,6 +1138,12 @@
   .like-btn:disabled { cursor: default; opacity: 0.7; }
   .lib-detail-by { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 2px 0 4px; }
   .lib-card .card-meta { gap: 8px; }
+  .remix-count { display: inline-flex; align-items: center; gap: 3px; margin-left: auto; font-size: 12px; font-weight: 600; color: var(--text-soft); flex: 0 0 auto; }
+  .remix-count + .like-btn { margin-left: 0; }
+  .lib-remix-of { display: flex; align-items: center; gap: 5px; margin: 4px 0 0; font-size: 12.5px; color: var(--text-soft); }
+  .lib-remix-of a { color: var(--accent); }
+  .lib-remix-of .remix-icon, .remix-count .remix-icon { flex: 0 0 auto; }
+  .lib-detail .btn.primary .remix-icon { margin-right: 5px; vertical-align: -2px; }
   .usage-name { margin-left: auto; font-size: 13px; }
   .usage-name a { color: var(--accent); }
   .card-tags { display: inline-flex; align-items: center; gap: 6px; }
@@ -1966,3 +1972,45 @@
 /* Help dialog (the ? button): a link to the FAQ, top left, facing Close */
 .tour-faq { position: absolute; top: 14px; left: 18px; z-index: 2; font-size: 13px; color: var(--accent); text-decoration: none; }
 .tour-faq:hover { text-decoration: underline; }
+
+/* History window (app/history.js): earlier versions, compare, restore */
+.fwin[data-win="history"] { width: 320px; max-height: 75%; }
+.save-state { cursor: pointer; }
+.hist-empty p { margin: 0 0 8px; font-size: 12.5px; line-height: 1.45; }
+.hist-top { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.hist-top .btn { font-size: 12px; }
+.hist-top .link { font-size: 12px; }
+.fwin .btn[data-pro].pro-locked::after { content: 'Pro'; margin-left: 6px; padding: 0 5px; border-radius: 999px; font-size: 9px; font-weight: 700;
+  line-height: 13px; background: var(--accent); color: #fff; vertical-align: 1px; }
+.hist-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.hist-item { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 4px 8px; align-items: center; padding: 5px 6px; border-radius: 6px;
+  cursor: pointer; border: 1px solid transparent; }
+.hist-item:hover { background: var(--accent-softer); }
+.hist-item.sel { border-color: var(--accent-border); background: var(--accent-softer); }
+.hist-now { grid-template-columns: 64px minmax(0, 1fr); }
+.hist-dot { width: 64px; height: 40px; display: grid; place-items: center; }
+.hist-dot::before { content: ''; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
+.hist-thumb { width: 64px; height: 40px; border-radius: 4px; background: #fff; border: 1px solid var(--border); opacity: .4; }
+.hist-thumb.ready { opacity: 1; }
+.hist-text { display: flex; flex-direction: column; min-width: 0; font-size: 12.5px; }
+.hist-text b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hist-text .muted { font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.hist-item.named .hist-text b { color: var(--accent); }
+.hist-msg { padding: 8px 6px; font-size: 12px; line-height: 1.4; }
+.hist-detail { grid-column: 1 / -1; cursor: default; padding-top: 4px; }
+.hist-diff { font-size: 12px; line-height: 1.45; }
+.hist-legend { margin: 0 0 4px; font-size: 11px; color: var(--text-muted); display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+.hist-key { display: inline-block; width: 16px; height: 0; border-top: 2px solid; margin-left: 4px; }
+.hist-key.red { border-color: #d4372c; border-top-style: dashed; }
+.hist-key.green { border-color: #1f9d55; margin-left: 10px; }
+.hist-changes { margin: 0 0 6px; padding-left: 16px; }
+.hist-changes code { font-size: 11px; }
+.hist-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.hist-actions .btn { font-size: 12px; padding: 4px 10px; }
+.hist-form { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 8px; }
+.hist-form input, .hist-form textarea { width: 100%; box-sizing: border-box; padding: 5px 7px; border: 1px solid var(--border); border-radius: 5px;
+  background: var(--field); color: inherit; font: inherit; font-size: 12.5px; resize: vertical; }
+.hist-form-msg { margin: 0; font-size: 11.5px; min-height: 0; }
+.hist-form-msg:empty { display: none; }
+.hist-form-btns { display: flex; justify-content: flex-end; gap: 6px; }
+.hist-foot { margin: 10px 0 0; font-size: 11.5px; line-height: 1.4; }

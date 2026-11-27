@@ -19,6 +19,11 @@ export const TITLE_MIN = 3, TITLE_MAX = 80, DESC_MIN = 10, DESC_MAX = 500;
 const PROFILE_COLUMNS = 'user_id,username,avatar_url,bio,country,website';
 export const BIO_MAX = 280, WEBSITE_MAX = 200;
 const LIBRARY_COLUMNS = 'id,owner_id,name,description,created_at,updated_at,author_name,author_avatar,likes';
+// Remix credit and counts (migration 0009); left out where it isn't run yet.
+const REMIX_COLUMNS = ',remixes,remixed_from,remixed_from_name,remixed_from_author';
+const VERSION_COLUMNS = 'id,project_id,saved_at,created_at,kind,name,note';
+/** Automatic versions kept on the free plan; mirrors prune_versions() in SQL. */
+export const FREE_VERSIONS = 3;
 /** Projects allowed per plan (null = no limit); mirrors plan_project_limit() in SQL. */
 export const PLAN_LIMITS = { free: 3, premium: null };
 
@@ -31,6 +36,14 @@ export function isConfigured(url = SUPABASE_URL, key = SUPABASE_KEY) {
 export class ConflictError extends Error {
   constructor(latest) { super('This project was changed somewhere else.'); this.name = 'ConflictError'; this.latest = latest; }
 }
+/** The server has no version history yet (migration 0009 not run). */
+export class NotAvailableError extends Error {
+  constructor() { super("Version history isn't available on this server yet."); this.name = 'NotAvailableError'; }
+}
+/** A table, view, column or function the app expects isn't there. */
+const missing = (e) => !!e && (['42P01', '42703', '42883', 'PGRST202', 'PGRST204', 'PGRST205'].includes(e.code)
+  || /does not exist|could not find|schema cache/i.test(e.message || ''));
+
 /** The plan doesn't allow another project. */
 export class LimitError extends Error {
   constructor(limit) { super(`The free plan holds ${limit} sketches. OnSketch Pro has no limit.`); this.name = 'LimitError'; this.limit = limit; }
@@ -163,7 +176,13 @@ export class Cloud {
     const name = cleanText(details.name);
     const row = { ...rowFor({ ...json, name }), name, description: cleanText(details.description),
       visibility: details.visibility === 'private' ? 'private' : 'public' };
-    const { data, error } = await this.client.from('projects').insert(row).select(LIST_COLUMNS).single();
+    const from = remixSource(json);
+    if (from) row.remixed_from = from;
+    let { data, error } = await this.client.from('projects').insert(row).select(LIST_COLUMNS).single();
+    if (error && from && missing(error)) {         // no remix column yet: save without the credit
+      delete row.remixed_from;
+      ({ data, error } = await this.client.from('projects').insert(row).select(LIST_COLUMNS).single());
+    }
     if (error) throw fromDb(error);
     return data;
   }
@@ -222,23 +241,66 @@ export class Cloud {
     }
   }
 
+  /* ---- Version history (table project_versions, migration 0009) ---- */
+  /** Earlier versions of project `id`, newest first (no drawing data).
+   *  Throws NotAvailableError where the server has no history yet. */
+  async versions(id) {
+    const { data, error } = await this.client.from('project_versions')
+      .select(VERSION_COLUMNS).eq('project_id', id).order('saved_at', { ascending: false });
+    if (error) throw missing(error) ? new NotAvailableError() : error;
+    return data;
+  }
+  /** One version's drawing (the project JSON). */
+  async versionData(versionId) {
+    const { data, error } = await this.client.from('project_versions').select('data').eq('id', versionId).single();
+    if (error) throw missing(error) ? new NotAvailableError() : error;
+    return data.data;
+  }
+  /** "Save version…" (Pro): the drawing as saved now, named. */
+  async saveVersion(id, name, note = '') {
+    const { data, error } = await this.client.rpc('save_version', { pid: id, vname: cleanText(name), vnote: String(note || '').trim() || null });
+    if (error) throw missing(error) ? new NotAvailableError() : fromDb(error);
+    return Array.isArray(data) ? data[0] : data;
+  }
+  /** Names a version (Pro); an empty name makes it automatic again. */
+  async nameVersion(versionId, name, note = '') {
+    const { data, error } = await this.client.rpc('name_version', { vid: versionId, vname: cleanText(name), vnote: String(note || '').trim() || null });
+    if (error) throw missing(error) ? new NotAvailableError() : fromDb(error);
+    return Array.isArray(data) ? data[0] : data;
+  }
+  /** Puts a version back as the sketch's drawing (the current one is kept
+   *  as a version). Returns the sketch's new revision. */
+  async restoreVersion(versionId) {
+    const { data, error } = await this.client.rpc('restore_version', { vid: versionId });
+    if (error) throw missing(error) ? new NotAvailableError() : fromDb(error);
+    return data;
+  }
+
   /* ---- Public library (view library_sketches, migration 0003) ---- */
   /** Public sketches with author and likes. sort: 'new' | 'updated' |
    *  'popular'. `search` matches title or description. Returns { rows, more }. */
   async library({ search = '', offset = 0, limit = 24, sort = 'new', owner = null } = {}) {
-    let q = this.client.from('library_sketches').select(LIBRARY_COLUMNS);
+    const run = (cols) => this._libraryQuery(cols, { search, offset, limit, sort, owner });
+    let { data, error } = await run(this._libColumns());
+    if (error && missing(error) && this._remixCols !== false) { this._remixCols = false; ({ data, error } = await run(this._libColumns())); }
+    if (error) throw error;
+    return { rows: data.slice(0, limit), more: data.length > limit };
+  }
+  _libColumns() { return LIBRARY_COLUMNS + (this._remixCols === false ? '' : REMIX_COLUMNS); }
+  _libraryQuery(cols, { search, offset, limit, sort, owner }) {
+    let q = this.client.from('library_sketches').select(cols);
     if (owner) q = q.eq('owner_id', owner);
     const words = librarySearch(search);
     if (words) q = q.or(`name.ilike.%${words}%,description.ilike.%${words}%`);
     if (sort === 'popular') q = q.order('likes', { ascending: false }).order('created_at', { ascending: false });
     else q = q.order(sort === 'updated' ? 'updated_at' : 'created_at', { ascending: false });
-    const { data, error } = await q.range(offset, offset + limit);
-    if (error) throw error;
-    return { rows: data.slice(0, limit), more: data.length > limit };
+    return q.range(offset, offset + limit);
   }
   /** One public sketch (no drawing data), or null. */
   async libraryItem(id) {
-    const { data, error } = await this.client.from('library_sketches').select(LIBRARY_COLUMNS).eq('id', id).maybeSingle();
+    const run = () => this.client.from('library_sketches').select(this._libColumns()).eq('id', id).maybeSingle();
+    let { data, error } = await run();
+    if (error && missing(error) && this._remixCols !== false) { this._remixCols = false; ({ data, error } = await run()); }
     if (error) throw error;
     return data;
   }
@@ -341,6 +403,12 @@ export class Cloud {
     data.forEach((d, i) => { if (d && d.signedUrl && !d.error) out.set(rows[i].id, d.signedUrl); });
     return out;
   }
+}
+
+/** The public sketch a project file was remixed from (its id), or null. */
+export function remixSource(json) {
+  const id = json && json.remixedFrom && json.remixedFrom.id;
+  return typeof id === 'string' && /^[\w-]{1,64}$/.test(id) ? id : null;
 }
 
 /** Columns written for a project file (Project.toJSON() output). */

@@ -15,7 +15,7 @@ import { track } from '../ui/analytics.js';
    features are open to everyone.
    ============================================================ */
 const MAX_BYTES = 15 * 1024 * 1024;
-const LABELS = { 'dxf-import': 'DXF import', 'dxf-export': 'DXF export' };
+const LABELS = { 'dxf-import': 'DXF import', 'dxf-export': 'DXF export', history: 'Named versions' };
 
 export class DxfImportMixin {
   /** Pro features, as far as known now (no network): open without
@@ -36,7 +36,9 @@ export class DxfImportMixin {
     track('pro-prompt', { feature });
     const go = await choose({
       title: `${LABELS[feature] || 'This'} is part of OnSketch Pro`,
-      message: 'Pro adds DXF import and export at real size, for CAD, CAM and laser cutters, with unlimited and private sketches. Images (PNG, SVG, copy) and printing or PDF to scale stay free.',
+      message: feature === 'history'
+        ? 'Pro keeps the whole history of your sketches and lets you save named versions, kept for good, with a note. It also adds unlimited and private sketches, and DXF import and export. The free plan keeps the last 3 versions.'
+        : 'Pro adds DXF import and export at real size, for CAD, CAM and laser cutters, with unlimited and private sketches and full version history. Images (PNG, SVG, copy) and printing or PDF to scale stay free.',
       cancelValue: false,
       choices: [{ label: 'Not now', value: false }, { label: 'See OnSketch Pro', value: true, kind: 'primary' }],
     });
