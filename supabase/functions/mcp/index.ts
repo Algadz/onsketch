@@ -69,9 +69,14 @@ async function caller(req: Request) {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
   // Verifies the signature (JWKS) and expiry; falls back to the Auth server.
-  const { data, error } = await client.auth.getClaims(token);
-  const claims = data?.claims;
-  if (error || !claims?.sub || claims.role !== 'authenticated') return null;
+  // A malformed token makes getClaims throw rather than return an error.
+  let claims;
+  try {
+    const { data, error } = await client.auth.getClaims(token);
+    if (error) return null;
+    claims = data?.claims;
+  } catch { return null; }
+  if (!claims?.sub || claims.role !== 'authenticated') return null;
   return new ServerCloud(client, { id: claims.sub });
 }
 
