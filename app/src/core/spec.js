@@ -1133,7 +1133,7 @@ export function projectToSpec(project) {
   }
   if (project.display) {
     const keys = { grid: 'grid', snap: 'snap', dimensions: 'dimensions', relations: 'relations', dimNames: 'names' };
-    const d = Object.fromEntries(Object.entries(keys).filter(([k]) => project.display[k] === false || (k === 'dimNames' && project.display[k])).map(([k, n]) => [n, !!project.display[k]]));
+    const d = Object.fromEntries(Object.entries(keys).filter(([k]) => (k === 'dimNames' ? project.display[k] === true : project.display[k] === false)).map(([k, n]) => [n, !!project.display[k]]));   // only what differs from the defaults
     if (Object.keys(d).length) spec.display = d;
   }
 
