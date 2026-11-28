@@ -467,6 +467,8 @@ export function applyChanges(spec, changes) {
  * store: { plan(), list(), load(id), create(json, details), save(id, json, revision) }
  *   (the methods of app/src/cloud/cloud.js's Cloud).
  * renderPng(svg, width) → PNG bytes (index.ts: resvg); null: no pictures.
+ * @param {any} store
+ * @param {{ appUrl?: string, fetchImage?: Function, renderPng?: ((svg: string, width: number) => Promise<Uint8Array>) | null }} [options]
  */
 export function createTools(store, { appUrl = 'https://onsketch.io', fetchImage = globalThis.fetch, renderPng = null } = {}) {
   const link = (id) => `${appUrl}/app/?project=${encodeURIComponent(id)}`;

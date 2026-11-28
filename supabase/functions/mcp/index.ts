@@ -45,9 +45,9 @@ class ServerCloud extends Cloud {
   userId: string;
   _user: { id: string };
   constructor(client: unknown, user: { id: string }) { super(client); this._user = user; this.userId = user.id; }
-  async user() { return this._user; }
+  override async user() { return this._user; }
   /** With owner_id, so a public sketch of someone else can be told apart. */
-  async load(id: string) {
+  override async load(id: string) {
     const { data, error } = await this.client.from('projects')
       .select('id,owner_id,name,description,visibility,revision,updated_at,created_at,data').eq('id', id).single();
     if (error) throw error;
