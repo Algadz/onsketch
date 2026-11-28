@@ -42,7 +42,8 @@
     "test:sliders": "node tests/sliders.e2e.mjs",
     "test:dxf": "node tests/dxf.e2e.mjs",
     "test:mcp": "node scripts/build-mcp.mjs && node tests/mcp.e2e.mjs",
-    "test:consent": "node tests/consent.e2e.mjs"
+    "test:consent": "node tests/consent.e2e.mjs",
+    "test:name": "node tests/name-restore.e2e.mjs"
   },
   "devDependencies": {
     "eslint": "^9.39.0",

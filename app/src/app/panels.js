@@ -15,10 +15,16 @@ export class PanelsMixin {
 
   /* ---- Sidebar ---- */
   _setupSidebar() {
-    document.getElementById('project-name').addEventListener('input', (e) => {
+    const nameField = document.getElementById('project-name');
+    nameField.addEventListener('input', (e) => {
       this.project.name = e.target.value;
       this.scheduleAutosave();
     });
+    // Browsers put a field's old text back when a page is shown again (Back,
+    // a restored tab), after this script set it: the name of the sketch that
+    // was open then. Typing would then rename the sketch open now. The
+    // field always shows the open sketch's name.
+    window.addEventListener('pageshow', () => { nameField.value = this.project.name; });
   }
 
   refreshUI() {
