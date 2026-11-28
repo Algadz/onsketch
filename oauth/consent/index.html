@@ -134,7 +134,7 @@
     "../../app/src/render/thumbnail.js": "../../app/src/render/thumbnail.js?v=c42bfe613e",
     "../../app/src/render/view.js": "../../app/src/render/view.js?v=39b79d4e9c",
     "../../app/src/site/account.js": "../../app/src/site/account.js?v=a592ba6979",
-    "../../app/src/site/consent.js": "../../app/src/site/consent.js?v=8104427f4d",
+    "../../app/src/site/consent.js": "../../app/src/site/consent.js?v=2d1c7ae689",
     "../../app/src/site/theme.js": "../../app/src/site/theme.js?v=90fbf8e1e4",
     "../../app/src/tools/arrow.js": "../../app/src/tools/arrow.js?v=7d0e7a616f",
     "../../app/src/tools/bezier.js": "../../app/src/tools/bezier.js?v=b07e26eafb",
@@ -175,8 +175,14 @@
   import { startConsent } from '../../app/src/site/consent.js';
   mountThemeToggle(document.querySelector('body > header'));
   const root = document.getElementById('consent');
+  // The OAuth server calls (auth.oauth.*) need supabase-js 2.78 or later;
+  // the rest of the site still loads the version in cloud.js.
+  const SUPABASE_OAUTH_ESM = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.115.0/+esm';
   let cloud = null;
-  try { cloud = await openCloud({ createClient: window.__onsketchCreateClient || null }); } catch { /* shown as not available */ }
+  try {
+    const createClient = window.__onsketchCreateClient || (await import(SUPABASE_OAUTH_ESM)).createClient;
+    cloud = await openCloud({ createClient });
+  } catch { /* shown as not available */ }
   startConsent(root, { cloud });
 </script>
 </body>

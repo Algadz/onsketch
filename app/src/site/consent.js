@@ -48,11 +48,17 @@ export function consentView(state) {
 }
 
 /** Runs the page. `cloud` is openCloud()'s result (null: not configured). */
-export async function startConsent(root, { cloud, location: loc = window.location, go = (u) => { window.location.href = u; } } = {}) {
+export async function startConsent(root, options = {}) {
   const show = (state) => {
     const v = consentView(state);
     root.innerHTML = `<h1>${v.title}</h1>${v.body}`;
   };
+  // Anything unexpected is shown, never left on "Connecting…".
+  try { await runConsent(root, show, options); }
+  catch (e) { show({ kind: 'error', message: e?.message || String(e) }); }
+}
+
+async function runConsent(root, show, { cloud, location: loc = window.location, go = (u) => { window.location.href = u; } }) {
   const id = new URLSearchParams(loc.search).get('authorization_id');
   if (!id || !/^[\w-]{1,128}$/.test(id)) return show({ kind: 'missing' });
   if (!cloud) return show({ kind: 'error', message: 'Accounts are not available on this copy of OnSketch.' });
@@ -64,6 +70,7 @@ export async function startConsent(root, { cloud, location: loc = window.locatio
     return show({ kind: 'signin', signInUrl: `/app/?signin&back=${encodeURIComponent(back)}` });
   }
   const oauth = cloud.client.auth.oauth;
+  if (!oauth?.getAuthorizationDetails) throw new Error('This page needs a newer sign-in library. Reload it; if it keeps happening, report a problem from the editor.');
   const { data, error } = await oauth.getAuthorizationDetails(id);
   if (error || !data) return show({ kind: 'error', message: error?.message || 'This request has expired or was already answered.' });
   if (data.redirect_url) return go(data.redirect_url);           // allowed before: straight back
@@ -72,10 +79,12 @@ export async function startConsent(root, { cloud, location: loc = window.locatio
     const act = e.target.closest?.('[data-act]')?.dataset.act;
     if (!act) return;
     root.querySelectorAll('button').forEach(b => { b.disabled = true; });
-    const r = act === 'allow'
-      ? await oauth.approveAuthorization(id, { skipBrowserRedirect: true })
-      : await oauth.denyAuthorization(id, { skipBrowserRedirect: true });
-    if (r.error || !r.data?.redirect_url) return show({ kind: 'error', message: r.error?.message || 'The answer could not be sent.' });
-    go(r.data.redirect_url);
+    try {
+      const r = act === 'allow'
+        ? await oauth.approveAuthorization(id, { skipBrowserRedirect: true })
+        : await oauth.denyAuthorization(id, { skipBrowserRedirect: true });
+      if (r.error || !r.data?.redirect_url) return show({ kind: 'error', message: r.error?.message || 'The answer could not be sent.' });
+      go(r.data.redirect_url);
+    } catch (err) { show({ kind: 'error', message: err?.message || String(err) }); }
   });
 }
