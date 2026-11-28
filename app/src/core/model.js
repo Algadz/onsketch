@@ -67,7 +67,7 @@ export function fillToJSON(f) {
   const o = { id: f.id, layerId: f.layerId, color: f.color, opacity: f.opacity ?? 1, seed: { x: f.seed.x, y: f.seed.y } };
   return o;
 }
-import { AngleConstraint, ArcEndpointArcEndpointCoincidentConstraint, ArcEndpointCoincidentConstraint, ArcEndpointFixConstraint, ArcEndpointMidpointConstraint, ArcEndpointOnCircleConstraint, ArcEndpointOnLineConstraint, CoincidentConstraint, CollinearConstraint, ConcentricConstraint, CurveDistanceConstraint, CurveTangentConstraint, DirectedAngleConstraint, DistanceConstraint, EqualLengthConstraint, EqualRadiusConstraint, SmoothConstraint, FixConstraint, HorizontalConstraint, MidpointConstraint, OffsetConstraint, OffsetDistanceConstraint, ParallelConstraint, PerpendicularConstraint, PointLineDistanceConstraint, PointOnCircleConstraint, PointOnCurveConstraint, PointOnLineConstraint, PointRefHorizontalConstraint, PointRefVerticalConstraint, RadiusConstraint, SymmetricConstraint, TangentCircleCircleConstraint, TangentLineCircleConstraint, VerticalConstraint } from './constraints.js';
+import { AngleConstraint, ArcEndpointArcEndpointCoincidentConstraint, ArcEndpointCoincidentConstraint, ArcEndpointFixConstraint, ArcEndpointMidpointConstraint, ArcEndpointOnCircleConstraint, ArcEndpointOnLineConstraint, CoincidentConstraint, CollinearConstraint, ConcentricConstraint, CurveDistanceConstraint, CurveTangentConstraint, DirectedAngleConstraint, DistanceConstraint, EqualLengthConstraint, EqualRadiusConstraint, SmoothConstraint, FixConstraint, HorizontalConstraint, MidpointConstraint, ParamFixConstraint, OffsetConstraint, OffsetDistanceConstraint, ParallelConstraint, PerpendicularConstraint, PointLineDistanceConstraint, PointOnCircleConstraint, PointOnCurveConstraint, PointOnLineConstraint, PointRefHorizontalConstraint, PointRefVerticalConstraint, RadiusConstraint, SymmetricConstraint, TangentCircleCircleConstraint, TangentLineCircleConstraint, VerticalConstraint } from './constraints.js';
 
 /* =============== 5. SKETCH / PROJECT MODEL ==================== */
 export class Sketch {
@@ -378,6 +378,7 @@ export class Project {
         let c = null;
         switch (cj.kind) {
           case 'fix':           c = new FixConstraint(cj.pointId, cj.x, cj.y); break;
+          case 'paramFix':      c = new ParamFixConstraint(cj.entityId, cj.key, cj.value); break;
           case 'coincident':    c = new CoincidentConstraint(cj.p1, cj.p2); break;
           case 'horizontal':    c = new HorizontalConstraint(cj.lineId, cj.p1, cj.p2); break;
           case 'vertical':      c = new VerticalConstraint(cj.lineId, cj.p1, cj.p2); break;

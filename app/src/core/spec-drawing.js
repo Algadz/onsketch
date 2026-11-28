@@ -13,15 +13,18 @@
 //          follows that area (core/regions.js)
 // Items are placed after the CAD geometry is solved, so a point name
 // means where that point ends up.
-import { Arc, Circle, Line, Point, newId } from './entities.js';
+import { Arc, Bezier, Circle, Line, Point, newId } from './entities.js';
 import { Layer, LINE_STYLES } from './style.js';
 import { ARROW_HEADS, ARROW_TIPS, attachPoint } from './arrows.js';
 import { SHAPE_FILLS, SHAPE_IDS } from './shapes.js';
 import { BOX_PAD, PAPER, TEXT_MAX, placeTextCenter, textBox, textCenter } from './strokes.js';
 import { anchorFrame, anchorLookup, linkItems } from './ink-links.js';
 import { findFaceAt } from './regions.js';
+import { IMAGES_TOTAL_MAX, imagePixelSize, imageSource, registerImage } from './images.js';
+import { tracePointPath } from './trace.js';
 
-export const DRAWING_TYPES = ['text', 'arrow', 'pen', 'marker', 'shape'];
+export const DRAWING_TYPES = ['text', 'arrow', 'pen', 'marker', 'shape', 'image', 'trace'];
+const IMAGE_DATA = /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/=\s]+$/i;
 export const LINE_STYLE_IDS = Object.keys(LINE_STYLES);
 export const DRAWING_LIMITS = { items: 2000, strokePoints: 5000, fills: 500, layers: 32 };
 
@@ -196,6 +199,33 @@ function readItem(b, it, where) {
       if (xy.some(p => !p)) return null;
       return { ...base, points: xy, width: positive(b, it.width, where, 'width'), dash: !!it.dash };
     }
+    case 'image': {
+      const at = place(b, it.center, `${where}.center`);
+      if (!at) return null;
+      let image = null, src = null;
+      if (typeof it.src === 'string' && it.src.startsWith('image:')) {
+        image = it.src.slice(6);
+        src = b.images?.[image] ?? imageSource(image);
+        if (!src) { b.bad(`${where}: "${it.src}" isn't a picture of this sketch (pictures already in a sketch are "image:<id>" as get_sketch shows them).`); return null; }
+      } else if (typeof it.src === 'string' && IMAGE_DATA.test(it.src)) src = it.src.replace(/\s+/g, '');
+      else if (typeof it.src === 'string' && /^https?:/i.test(it.src)) { b.bad(`${where}: a picture from a link must be downloaded first (the OnSketch server does it for https links).`); return null; }
+      else { b.bad(`${where}: "src" is an https link to a PNG, JPEG, WebP or GIF picture, a data URL of one, or "image:<id>" for a picture already in the sketch.`); return null; }
+      b.imageBytes = (b.imageBytes || 0) + src.length;
+      if (b.imageBytes > IMAGES_TOTAL_MAX) { b.bad(`${where}: pictures are too large together (${Math.round(IMAGES_TOTAL_MAX / 1e6)} MB at most in one sketch).`); return null; }
+      const w = positive(b, it.width, where, 'width');
+      if (!w) { b.bad(`${where}: "width" (drawing units); "height" follows the picture's proportions unless given.`); return null; }
+      let h = positive(b, it.height, where, 'height');
+      if (!h) { const px = imagePixelSize(src); h = px && px.w > 0 ? w * px.h / px.w : w; }
+      if (it.angle != null && !Number.isFinite(it.angle)) { b.bad(`${where}: "angle" in degrees.`); return null; }
+      return { ...base, src, image, at, w, h, angle: (it.angle || 0) * DEG };
+    }
+    case 'trace': {
+      if (typeof it.point !== 'string') { b.bad(`${where}: "point" names the point whose path is drawn (it moves as the rest of the sketch allows).`); return null; }
+      const p = place(b, it.point, `${where}.point`);
+      if (!p) return null;
+      if (base.link) { b.bad(`${where}: a traced path follows its point by itself; no "link".`); return null; }
+      return { ...base, at: p, width: positive(b, it.width, where, 'width'), dash: it.dash !== false };
+    }
     case 'shape': {
       if (!SHAPE_IDS.includes(it.shape)) { b.bad(`${where}: "shape" is one of ${SHAPE_IDS.join(', ')}.`); return null; }
       const at = place(b, it.center, `${where}.center`);
@@ -246,7 +276,7 @@ export function applyDrawing(b, project) {
 
   for (const f of b.fills || []) {
     const layerId = b.layerId(f.layer);
-    const shapes = sketch.entities.filter(e => !e.construction && e.layerId === layerId && (e instanceof Line || e instanceof Arc || e instanceof Circle));
+    const shapes = sketch.entities.filter(e => !e.construction && e.layerId === layerId && (e instanceof Line || e instanceof Arc || e instanceof Circle || e instanceof Bezier));
     const seed = { x: f.at[0], y: f.at[1] };
     if (!findFaceAt(shapes, seed)) { b.bad(`${f.where}: [${f.at}] isn't inside a closed outline of CAD shapes${f.layer ? ` on layer "${f.layer}"` : ''} (after solving). Put "at" inside the area, and close the outline (shapes whose ends meet).`); continue; }
     sketch.fills.push({ id: newId('f'), layerId, color: f.color, opacity: f.opacity, seed });
@@ -284,6 +314,16 @@ export function applyDrawing(b, project) {
     } else if (it.type === 'pen' || it.type === 'marker') {
       item = { ...base, kind: it.type, width: it.width || DEF[it.type], points: it.points.map(([x, y]) => ({ x, y })) };
       if (it.dash) item.dash = true;
+    } else if (it.type === 'image') {
+      const id = registerImage(it.src, it.image);
+      const c = xy(it.at), u = { x: Math.cos(it.angle), y: Math.sin(it.angle) }, v = { x: -u.y, y: u.x };
+      const at = (sx, sy) => ({ x: c.x + u.x * sx * it.w / 2 + v.x * sy * it.h / 2, y: c.y + u.y * sx * it.w / 2 + v.y * sy * it.h / 2 });
+      item = { id: base.id, layerId: base.layerId, opacity: base.opacity, ...(base.group ? { group: base.group } : {}), kind: 'image', image: id, points: [at(-1, 1), at(1, 1), at(-1, -1)] };
+    } else if (it.type === 'trace') {
+      const t = tracePointPath(project, sketch, ptOf(it.at.node));
+      if (!t.ok) { b.bad(`${it.where}: ${t.message}`); continue; }
+      item = { ...base, kind: 'pen', width: it.width || DEF.pen, points: t.points, traces: t.traces };
+      if (it.dash) item.dash = true;
     } else if (it.type === 'shape') {
       const c = xy(it.at), u = { x: Math.cos(it.angle), y: Math.sin(it.angle) }, v = { x: -u.y, y: u.x };
       const at = (sx, sy) => ({ x: c.x + u.x * sx * it.w / 2 + v.x * sy * it.h / 2, y: c.y + u.y * sx * it.w / 2 + v.y * sy * it.h / 2 });
@@ -294,7 +334,7 @@ export function applyDrawing(b, project) {
     if (it.link) {
       const anchor = it.link.shape ? it.link.shape.entity : ptOf(it.link.node);
       linkItems([item], anchor);
-      if (it.link.t != null) item.link = { to: anchor.id, t: it.link.t, f: anchorFrame(anchor, it.link.t, item.kind === 'shape') };
+      if (it.link.t != null) item.link = { to: anchor.id, t: it.link.t, f: anchorFrame(anchor, it.link.t, item.kind === 'shape' || item.kind === 'image') };
     }
     sketch.strokes.push(item);
   }
@@ -319,7 +359,7 @@ function drawingSize(sketch) {
  * The drawing side of projectToSpec: fills `spec` and notes what can't be
  * carried in `unsupported`. `P(id)` names a point; shape ids are entity ids.
  */
-export function presentationToSpec(project, sketch, spec, unsupported, P) {
+export function presentationToSpec(project, sketch, spec, unsupported, P, copies = new Set()) {
   const layerName = new Map(project.layers.map(l => [l.id, l.name]));
   const first = project.layers[0]?.id;
   if (project.layers.length > 1 || (project.layers[0] && (project.layers[0].visible === false || project.layers[0].opacity !== 1))) {
@@ -345,6 +385,7 @@ export function presentationToSpec(project, sketch, spec, unsupported, P) {
 
   const linkOut = (link) => {
     if (!link) return {};
+    if (copies.has(link.to)) { unsupported.add('relations or links on pattern copies'); return {}; }
     const e = byId.get(link.to);
     const to = e && !(e instanceof Point) ? e.id : P(link.to);
     if (!to) return {};
@@ -366,6 +407,7 @@ export function presentationToSpec(project, sketch, spec, unsupported, P) {
     } else if (it.kind === 'arrow') {
       const end = (k) => {
         const a = it.at?.[k];
+        if (a && copies.has(a.to)) unsupported.add('relations or links on pattern copies');
         const e = a && (byId.get(a.to) || null);
         if (a && e instanceof Line) return { on: e.id, t: r6(a.t ?? 0.5) };
         if (a && (e instanceof Circle || e instanceof Arc)) return { on: e.id, angle: r6((a.a ?? 0) / DEG) };
@@ -373,8 +415,11 @@ export function presentationToSpec(project, sketch, spec, unsupported, P) {
         return pt(it.points[k]);
       };
       items.push({ type: 'arrow', from: end(0), to: end(1), width: r6(it.width), ...(it.head ? { head: it.head } : {}), ...(it.tips ? { tips: it.tips } : {}), ...(it.dash ? { dash: true } : {}), ...common(it) });
+    } else if (it.kind === 'pen' && it.traces) {
+      const p = P(it.traces.point);
+      if (!p) { unsupported.add('a traced path whose point is gone'); continue; }
+      items.push({ type: 'trace', point: p, width: r6(it.width), ...(it.dash ? {} : { dash: false }), ...common(it) });
     } else if (it.kind === 'pen' || it.kind === 'marker') {
-      if (it.traces) unsupported.add('traced paths');
       items.push({ type: it.kind, points: it.points.map(pt), width: r6(it.width), ...(it.dash ? { dash: true } : {}), ...common(it) });
     } else if (it.kind === 'shape') {
       const [a, b2, c] = it.points;
@@ -384,7 +429,14 @@ export function presentationToSpec(project, sketch, spec, unsupported, P) {
       items.push({ type: 'shape', shape: it.shape, center: [r6((b2.x + c.x) / 2), r6((b2.y + c.y) / 2)], width: r6(w), height: r6(h),
         ...(Math.abs(Math.atan2(uy, ux)) > 1e-9 ? { angle: r6(Math.atan2(uy, ux) / DEG) } : {}),
         outline: r6(it.width), ...(it.fill ? { fill: it.fill } : {}), ...(it.dash ? { dash: true } : {}), ...common(it) });
-    } else unsupported.add(it.kind === 'image' ? 'pictures' : `${it.kind} items`);
+    } else if (it.kind === 'image') {
+      const [a, b2, c] = it.points;
+      const ux = b2.x - a.x, uy = b2.y - a.y, vx = a.x - c.x, vy = a.y - c.y;
+      const w = Math.hypot(ux, uy), h = Math.hypot(vx, vy);
+      if (Math.abs(ux * vx + uy * vy) > 1e-6 * w * h || ux * vy - uy * vx < 0) unsupported.add('stretched or flipped pictures');
+      items.push({ type: 'image', src: `image:${it.image}`, center: [r6((b2.x + c.x) / 2), r6((b2.y + c.y) / 2)], width: r6(w), height: r6(h),
+        ...(Math.abs(Math.atan2(uy, ux)) > 1e-9 ? { angle: r6(Math.atan2(uy, ux) / DEG) } : {}), ...common({ ...it, color: undefined }) });
+    } else unsupported.add(`${it.kind} items`);
   }
   if (items.length) spec.drawing = items;
 }

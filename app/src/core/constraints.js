@@ -346,8 +346,11 @@ export class CurveDistanceConstraint extends Constraint {
   residuals(L) {
     if (this.driven) return [];
     if (this.mode === 'gap') {
-      const dx = L(this.c2,'x') - L(this.c1,'x');
-      const dy = L(this.c2,'y') - L(this.c1,'y');
+      // Between the circles' centres (read through the lookup, so the
+      // solver sees that moving a centre changes this distance).
+      const a = L(this.c1, 'center')?.id, b = L(this.c2, 'center')?.id;
+      const dx = L(b,'x') - L(a,'x');
+      const dy = L(b,'y') - L(a,'y');
       return [Math.hypot(dx, dy) - L(this.c1,'r') - L(this.c2,'r') - this.value];
     }
     return [L(this.c1,'r') - L(this.c2,'r') - this.value];

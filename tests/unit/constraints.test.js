@@ -203,6 +203,18 @@ test('a radius never goes negative: concentric circles 17.5 apart, outer set to 
   assert.ok(ok.ok && near(outer.r, 30, 1e-5) && near(inner.r, 12.5, 1e-5));
 });
 
+test('gap between two circles: the centres move to meet it', () => {
+  const s = sketch();
+  const a = circle(s, 0, 0, 5), b = circle(s, 20, 0, 3);
+  s.constraints.push(new C.FixConstraint(a.center.id, 0, 0));
+  s.constraints.push(new C.RadiusConstraint(a.id, 5), new C.RadiusConstraint(b.id, 3));
+  s.constraints.push(new C.CurveDistanceConstraint(a.id, b.id, 'gap', 12));
+  const r = solve(s);
+  assert.ok(r.ok && Number.isFinite(r.residual) && r.residual < 1e-6, `solved (residual ${r.residual})`);
+  assert.equal(r.redundant, 0);
+  assert.ok(near(Math.hypot(b.center.x, b.center.y), 20, 1e-6), 'centres 5 + 12 + 3 apart');
+});
+
 test('a line never collapses to a point, nor a circle to its centre', () => {
   const s = sketch();
   const l = line(s, 0, 0, 10, 0);

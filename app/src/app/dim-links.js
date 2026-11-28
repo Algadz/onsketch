@@ -1,6 +1,6 @@
 import { Arc, Bezier, Circle, Line, Point } from '../core/entities.js';
-import { AngleConstraint, DistanceConstraint, MidpointConstraint, RadiusConstraint, constraintLabel } from '../core/constraints.js';
-import { allDimensions, ensureDimensionNames } from '../core/equations.js';
+import { DistanceConstraint, MidpointConstraint, RadiusConstraint, constraintLabel } from '../core/constraints.js';
+import { allDimensions, ensureDimensionNames, measureDrivenDimensions } from '../core/equations.js';
 
 const DRIVABLE = new Set(['distance', 'radius', 'pointLineDistance', 'angle', 'curveDistance', 'offsetDistance']);
 
@@ -23,48 +23,7 @@ export class DimLinksMixin {
    *  @returns {boolean} whether any value changed */
   refreshDrivenDimensions() {
     const sketch = this.activeSketch(); if (!sketch) return false;
-    const driven = sketch.constraints.filter(c => c.driven && c.value != null);
-    if (!driven.length) return false;
-    const byId = new Map();
-    for (const e of sketch.entities) { byId.set(e.id, e); for (const ch of e.children()) byId.set(ch.id, ch); }
-    let changed = false;
-    for (const c of driven) {
-      let v = null;
-      if (c.kind === 'distance') {
-        const a = byId.get(c.p1), b = byId.get(c.p2);
-        if (a && b) v = c.axis === 'x' ? Math.abs(b.x - a.x) : c.axis === 'y' ? Math.abs(b.y - a.y) : Math.hypot(b.x - a.x, b.y - a.y);
-      } else if (c.kind === 'radius') {
-        const e = byId.get(c.circleId);
-        if (e && Number.isFinite(e.r)) v = e.r;
-      } else if (c.kind === 'pointLineDistance') {
-        const p = byId.get(c.pointId), a = byId.get(c.l.a), b = byId.get(c.l.b);
-        if (p && a && b) {
-          const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy);
-          if (len > 1e-12) v = Math.abs(dx * (p.y - a.y) - dy * (p.x - a.x)) / len;
-        }
-      } else if (c.kind === 'angle') {
-        const L = (id, k) => byId.get(id)?.[k] ?? NaN;
-        const a = AngleConstraint.measure(L, c.l1, c.l2);
-        if (Number.isFinite(a)) v = a;
-      } else if (c.kind === 'curveDistance') {
-        const a = byId.get(c.c1), b = byId.get(c.c2);
-        if (a && b) v = c.mode === 'gap' ? Math.hypot(b.x - a.x, b.y - a.y) - a.r - b.r : a.r - b.r;
-      } else if (c.kind === 'offsetDistance') {
-        const p = c.pairs[0];
-        if (p?.kind === 'line') {
-          const q = byId.get(p.pointId), a = byId.get(p.l.a), b = byId.get(p.l.b);
-          if (q && a && b) {
-            const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy);
-            if (len > 1e-12) v = Math.abs(dx * (q.y - a.y) - dy * (q.x - a.x)) / len;
-          }
-        } else if (p) {
-          const a = byId.get(p.c1), b = byId.get(p.c2);
-          if (a && b) v = Math.abs(a.r - b.r);
-        }
-      }
-      if (v != null && Number.isFinite(v) && Math.abs(v - c.value) > 1e-9) { c.value = v; changed = true; }
-    }
-    return changed;
+    return measureDrivenDimensions(sketch);
   }
 
   /** Whether this dimension can be switched between driving and driven. */

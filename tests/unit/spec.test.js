@@ -226,10 +226,11 @@ test('projectToSpec describes a drawn sketch and builds back the same', () => {
 test('projectToSpec flags what it cannot carry', () => {
   const p = new Project(); const s = p.addSketch();
   s.addEntity(new Line(new Point(0, 0), new Point(1, 0)));
-  s.strokes.push({ id: 'k1', layerId: p.layers[0].id, kind: 'image', image: 'im1', opacity: 1, points: [{ x: 0, y: 1 }, { x: 1, y: 1 }, { x: 0, y: 0 }] });
+  // a picture flipped left to right (its top edge runs right to left)
+  s.strokes.push({ id: 'k1', layerId: p.layers[0].id, kind: 'image', image: 'im1', opacity: 1, points: [{ x: 1, y: 1 }, { x: 0, y: 1 }, { x: 1, y: 0 }] });
   const r = projectToSpec(p);
   assert.equal(r.lossless, false);
-  assert.deepEqual(r.unsupported, ['pictures']);
+  assert.deepEqual(r.unsupported, ['stretched or flipped pictures']);
 });
 
 /* ---- The drawing side: text, arrows, ink, shapes, fills, layers ---- */

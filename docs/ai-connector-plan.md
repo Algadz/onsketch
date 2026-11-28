@@ -8,8 +8,8 @@ returns a link to edit it (`https://onsketch.io/app/?project=<id>`).
 
 | Piece | Where | What it does |
 |---|---|---|
-| Sketch format ("spec") | `app/src/core/spec.js` | The AI-facing format: named or `[x, y]` points, line / polyline / rectangle / circle / arc / point, 18 constraint types. `buildFromSpec()` checks it, builds a native `Project`, solves it and refuses contradictions or repeated constraints with messages that name the bad item. `projectToSpec()` turns a drawn sketch back into a spec (flags what it can't carry). |
-| MCP protocol + tools | `supabase/functions/mcp/server.js` | Stateless Streamable HTTP (JSON answers). Tools: `create_sketch`, `get_sketch`, `update_sketch`, `list_sketches`. The format guide the assistant reads is `FORMAT` in this file. |
+| Sketch format ("spec") | `app/src/core/spec.js`, `spec-drawing.js` | The AI-facing format, covering the editor's features: lines, polylines, rectangles, circles, arcs, Bézier curves and smooth paths, polygons, points; mirror and linear / circular / point patterns; every relation and dimension (signed angles, circle gaps, offsets, curve tangents, held values, reference dimensions); variables, formulas, named dimensions, sliders; the drawing side (text with live fields, arrows attached to geometry, pen, marker, shapes, pictures, traced paths), fills, layers, display. Shared with the editor: `core/trace.js` (traced paths), `measureDrivenDimensions` (reference dimensions). `buildFromSpec()` checks it, builds a native `Project`, solves it and refuses contradictions or repeated constraints with messages that name the bad item. `projectToSpec()` turns a drawn sketch back into a spec (flags what it can't carry). |
+| MCP protocol + tools | `supabase/functions/mcp/server.js` | Stateless Streamable HTTP (JSON answers). Tools: `create_sketch`, `get_sketch`, `update_sketch`, `export_sketch` (SVG / DXF), `list_sketches`. Downloads https pictures (public hosts only, 3 MB). The format guide the assistant reads is `FORMAT` in this file. |
 | Edge Function | `supabase/functions/mcp/index.ts` | Checks the OAuth token (`auth.getClaims`), answers 401 + `WWW-Authenticate` to start sign-in, serves `/.well-known/oauth-protected-resource`, runs every query as the user (RLS applies; no service key). |
 | App modules for the function | `scripts/build-mcp.mjs` → `supabase/functions/mcp/_app/` (git-ignored) | Supabase deploys only the function's folder, so the needed `app/src` modules are copied there. Edit `app/src`, never `_app`. |
 | Consent page | `oauth/consent/index.html`, `app/src/site/consent.js` | Where Supabase Auth sends the user: sign in (comes back), see who asks and where they go back to, Allow / Don't allow. |
@@ -36,11 +36,12 @@ Discovery chain an MCP client follows: POST without token → 401 with
 server's `/.well-known/oauth-authorization-server/auth/v1` metadata →
 dynamic registration → browser to `/oauth/consent/` → code → token.
 
-## Known limits (v1)
+## Known limits
 
-- No thumbnail is uploaded for sketches made by assistants (thumbnails are WebP made by the browser); My sketches shows a placeholder until the sketch is opened and saved in the editor. A server-side preview (SVG → PNG with resvg-wasm) would fix it and let the assistant see the result.
-- `update_sketch` replaces the whole drawing and refuses sketches with ink, text, fills, curves, patterns, layers or formulas (it would lose them).
-- Beziers, text, fills and layers can't be drawn by assistants yet.
+- No thumbnail is uploaded for sketches made by assistants (thumbnails are WebP made by the browser); My sketches shows a placeholder until the sketch is opened and saved in the editor.
+- `update_sketch` replaces the whole drawing; it refuses sketches holding what the format can't express (stretched or flipped shapes and pictures, relations on pattern copies or curve handles beyond symmetry / fix).
+- Text is placed with an average letter width (no canvas on the server): centred labels can sit a little off.
+- SVG export leaves pictures out (no image decoding on the server).
 - The free plan's sketches are public: `create_sketch` refuses until the assistant passes `"visibility": "public"`, which its instructions say to do only after asking the user.
 
 ## Next

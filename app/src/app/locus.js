@@ -2,6 +2,7 @@ import { Arc, Point, newId } from '../core/entities.js';
 import { markTangentContacts } from '../core/constraints.js';
 import { pointFreedom, traceLocus } from '../core/locus.js';
 import { simplifyPoints } from '../core/strokes.js';
+import { pathComponent, pathFingerprint, untraceableMessage } from '../core/trace.js';
 
 /* =============== TRACE PATH OF A POINT (as ink) ================
    Right-click a point → "Trace path": every position the point can take
@@ -38,33 +39,7 @@ export class LocusMixin {
    *  moves it), and the constraints among them. */
   _pathComponent(point) {
     const sketch = this.activeSketch(); if (!sketch) return null;
-    const byId = this._lookupMap(this.project.sketches);
-    const ownerOf = (id) => { const e = byId.get(id); return e ? (this.project.ownerOf(e) || e) : null; };
-    const ids = (e) => [e.id, ...(e.children ? e.children().map(c => c.id) : [])];
-    const start = this.project.ownerOf(point) || point;
-    const ents = new Set([start]), seen = new Set(), cons = new Set();
-    const byRef = new Map();
-    for (const c of sketch.constraints) {
-      if (c.driven) continue;
-      for (const id of c.refs()) { if (!byRef.has(id)) byRef.set(id, []); byRef.get(id).push(c); }
-    }
-    const queue = [start];
-    while (queue.length) {
-      const e = queue.pop();
-      for (const id of ids(e)) {
-        if (seen.has(id)) continue;
-        seen.add(id);
-        for (const c of byRef.get(id) || []) {
-          if (cons.has(c)) continue;
-          cons.add(c);
-          for (const r of c.refs()) {
-            const o = ownerOf(r);
-            if (o && !ents.has(o)) { ents.add(o); queue.push(o); }
-          }
-        }
-      }
-    }
-    return { entities: [...ents], constraints: [...cons] };
+    return pathComponent(this.project, sketch, point);
   }
 
   /** The constraint system that moves `point`, for core/locus.js. */
@@ -136,9 +111,7 @@ export class LocusMixin {
       this._restoreSketchParams(s.rows);
     }
     if (!result.ok) {
-      return { ok: false, message: result.dof === 0
-        ? 'This point can\'t move: the sketch holds it in place, so its path is just the point.'
-        : 'This point can move freely in two directions, so its positions cover an area, not a path. Add a constraint or fix a point of the mechanism, then trace again.' };
+      return { ok: false, message: untraceableMessage(result.dof) };
     }
     const pts = simplifyPoints(result.points, size * 2e-4);
     return { ok: true, result, points: pts.map(p => ({ x: p.x, y: p.y })), fp: this._pathFingerprint(point, s.comp), tol: size * 2e-3 };
@@ -199,26 +172,7 @@ export class LocusMixin {
    *  positions), and where held geometry sits. Positions the mechanism can
    *  move through are left out: dragging along the path doesn't change it. */
   _pathFingerprint(point, comp = this._pathComponent(point)) {
-    if (!comp) return '';
-    let h = 2166136261;
-    const mix = (s) => { for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619); };
-    const num = (v) => mix(Number.isFinite(v) ? String(Number(v.toPrecision(7))) : String(v));
-    const ents = [...comp.entities].sort((a, b) => (a.id < b.id ? -1 : 1));
-    for (const e of ents) for (const x of [e, ...e.children()]) {
-      mix(x.id);
-      if (x.locked) { mix('L'); for (const k of x.paramKeys()) num(x[k]); }   // held: its place matters
-    }
-    const cons = [...comp.constraints].sort((a, b) => (a.id < b.id ? -1 : 1));
-    for (const c of cons) {
-      const o = c.toJSON ? c.toJSON() : { kind: c.kind };
-      for (const k of Object.keys(o).sort()) {
-        if (/^label|^layerId$|^name$/.test(k)) continue;           // where a label sits, what it's called
-        const v = o[k];
-        mix(k);
-        if (typeof v === 'number') num(v); else mix(JSON.stringify(v));
-      }
-    }
-    return 'v2:' + (h >>> 0).toString(36) + ':' + cons.length;
+    return pathFingerprint(point, comp);
   }
 
   /** Distance from `p` to the drawn path (its points as a polyline). */

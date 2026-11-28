@@ -2,7 +2,8 @@
 // (npm test copies app/src into supabase/functions/mcp/_app first.)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { handleMessage, createTools, TOOLS, FORMAT } from '../../supabase/functions/mcp/server.js';
+import { handleMessage, createTools, TOOLS, FORMAT, inlineImages } from '../../supabase/functions/mcp/server.js';
+import { pngDataUrl } from './helpers.js';
 import { buildFromSpec } from '../../app/src/core/spec.js';
 
 const ID = '11111111-2222-4333-8444-555555555555';
@@ -38,7 +39,7 @@ test('initialize, tools/list, ping, notifications, unknown methods', async () =>
   const future = await handleMessage({ jsonrpc: '2.0', id: 0, method: 'initialize', params: { protocolVersion: '2099-01-01' } }, null);
   assert.equal(future.result.protocolVersion, '2025-11-25');
   const list = await handleMessage({ jsonrpc: '2.0', id: 2, method: 'tools/list' }, null);
-  assert.deepEqual(list.result.tools.map(t => t.name), ['create_sketch', 'update_sketch', 'get_sketch', 'list_sketches']);
+  assert.deepEqual(list.result.tools.map(t => t.name), ['create_sketch', 'update_sketch', 'get_sketch', 'export_sketch', 'list_sketches']);
   for (const t of TOOLS) assert.equal(t.inputSchema.type, 'object');
   assert.deepEqual((await handleMessage({ jsonrpc: '2.0', id: 3, method: 'ping' }, null)).result, {});
   assert.equal(await handleMessage({ jsonrpc: '2.0', method: 'notifications/initialized' }, null), null);
@@ -106,7 +107,7 @@ test('get_sketch then update_sketch, with the revision check', async () => {
 test('someone else\'s public sketch can be read, not changed; lossy sketches are not replaced', async () => {
   const { project } = buildFromSpec(SPEC);
   const json = project.toJSON();
-  const lossy = { ...json, sketches: [{ ...json.sketches[0], strokes: [{ id: 'k1', layerId: json.layers[0].id, kind: 'image', image: 'im1', opacity: 1, pts: [0, 1, 1, 1, 0, 0] }] }] };
+  const lossy = { ...json, sketches: [{ ...json.sketches[0], strokes: [{ id: 'k1', layerId: json.layers[0].id, kind: 'image', image: 'im1', opacity: 1, pts: [1, 1, 0, 1, 1, 0] }] }] };
   const store = fakeStore({ rows: [
     { id: OTHER, owner_id: 'them', name: 'Theirs', visibility: 'public', revision: 1, data: json },
     { id: ID, owner_id: 'me', name: 'Filled', visibility: 'private', revision: 1, data: lossy },
@@ -115,7 +116,7 @@ test('someone else\'s public sketch can be read, not changed; lossy sketches are
   const theirs = await call(tools, 'get_sketch', { id: OTHER });
   assert.equal(theirs.result.structuredContent.editable, false);
   assert.match(text(await call(tools, 'update_sketch', { id: OTHER, revision: 1, spec: SPEC })), /belongs to someone else/);
-  assert.match(text(await call(tools, 'update_sketch', { id: ID, revision: 1, spec: SPEC })), /can't carry \(pictures\)/);
+  assert.match(text(await call(tools, 'update_sketch', { id: ID, revision: 1, spec: SPEC })), /can't carry \(stretched or flipped pictures\)/);
 });
 
 test('list_sketches and unexpected failures', async () => {
@@ -134,4 +135,51 @@ test('the example in the format guide draws, fully defined', () => {
   const example = FORMAT.slice(FORMAT.indexOf('{', FORMAT.indexOf('Example (')));
   const { report } = buildFromSpec(JSON.parse(example));
   assert.equal(report.state, 'fully');
+});
+
+test('export_sketch: SVG to look at, DXF at real size', async () => {
+  const { project } = buildFromSpec(SPEC, { title: 'Plate' });
+  const store = fakeStore({ rows: [{ id: ID, owner_id: 'me', name: 'Plate', visibility: 'private', revision: 1, data: project.toJSON() }] });
+  const tools = createTools(store);
+  const svg = await call(tools, 'export_sketch', { id: ID });
+  assert.equal(svg.result.isError, false, text(svg));
+  assert.match(text(svg), /^<svg[^>]*xmlns="http:\/\/www.w3.org\/2000\/svg"/);
+  assert.match(text(svg), /<title>Plate<\/title>/);
+  const dxf = await call(tools, 'export_sketch', { id: ID, format: 'dxf' });
+  assert.match(text(dxf), /SECTION/);
+  assert.equal(dxf.result.structuredContent.shapes, 5);
+  assert.match(text(await call(tools, 'export_sketch', { id: ID, format: 'pdf' })), /"svg" or "dxf"/);
+});
+
+test('pictures from https links are downloaded; others refused; pictures survive an update', async () => {
+  const png = pngDataUrl(4, 2);
+  const bytes = Buffer.from(png.split(',')[1], 'base64');
+  const asked = [];
+  const fetchImage = async (url) => { asked.push(url); return { ok: true, status: 200, headers: new Map([['content-type', 'image/png']]), arrayBuffer: async () => bytes }; };
+  const spec = { shapes: [{ type: 'line', from: [0, 0], to: [10, 0] }], drawing: [{ type: 'image', src: 'https://example.com/logo.png', center: [5, 5], width: 4 }] };
+  const out = await inlineImages(spec, fetchImage);
+  assert.deepEqual(asked, ['https://example.com/logo.png']);
+  assert.equal(out.drawing[0].src, png);
+  for (const bad of ['http://example.com/a.png', 'https://localhost/a.png', 'https://10.0.0.1/a.png']) {
+    await assert.rejects(inlineImages({ ...spec, drawing: [{ ...spec.drawing[0], src: bad }] }, fetchImage), /public https links/);
+  }
+  const notImage = async () => ({ ok: true, status: 200, headers: new Map([['content-type', 'text/html']]), arrayBuffer: async () => Buffer.from('<html>') });
+  await assert.rejects(inlineImages(spec, notImage), /isn't a PNG/);
+
+  const store = fakeStore();
+  const tools = createTools(store, { fetchImage });
+  const made = await call(tools, 'create_sketch', { title: 'Logo', description: 'A line with a logo.', spec });
+  assert.equal(made.result.isError, false, text(made));
+  const got = await call(tools, 'get_sketch', { id: ID });
+  const back = got.result.structuredContent.spec;
+  assert.match(back.drawing[0].src, /^image:im/, 'read back as a reference, not data');
+  const broken = JSON.parse(JSON.stringify(back));
+  broken.shapes[0].to = 'e999';                  // an unknown point: refused, nothing saved
+  assert.equal((await call(tools, 'update_sketch', { id: ID, revision: 1, spec: broken })).result.isError, true);
+  const wider = JSON.parse(JSON.stringify(back));
+  wider.drawing[0].width = 8;
+  const up = await call(tools, 'update_sketch', { id: ID, revision: 1, spec: wider });
+  assert.equal(up.result.isError, false, text(up));
+  const saved = store.db.get(ID).data;
+  assert.equal(Object.values(saved.images)[0], png, 'the picture is still in the sketch');
 });

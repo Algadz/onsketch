@@ -51,3 +51,16 @@ test('self-referential constraints are dropped on load', () => {
   assert.ok(!q.sketches[0].constraints.some(c => c.id === 'c900' || c.id === 'c901'));
   assert.equal(q.sketches[0].constraints.length, 1);
 });
+
+test('held values (an offset arc\'s angles) survive save and load', async () => {
+  const { Arc, Point } = await import('../../app/src/core/entities.js');
+  const { ParamFixConstraint } = await import('../../app/src/core/constraints.js');
+  const { Project } = await import('../../app/src/core/model.js');
+  const p = new Project(); const s = p.addSketch();
+  const a = new Arc(new Point(0, 0), 10, 0, 2); s.addEntity(a);
+  s.constraints.push(new ParamFixConstraint(a.id, 'a0', 0), new ParamFixConstraint(a.id, 'a1', 2));
+  const back = Project.fromJSON(JSON.parse(JSON.stringify(p.toJSON())));
+  const kept = back.active().constraints.filter(c => c.kind === 'paramFix');
+  assert.equal(kept.length, 2);
+  assert.deepEqual(kept.map(c => [c.entityId, c.key, c.value]), [[a.id, 'a0', 0], [a.id, 'a1', 2]]);
+});

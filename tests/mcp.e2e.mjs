@@ -8,6 +8,7 @@ import { extname, join, resolve } from 'node:path';
 import { createRequire } from 'node:module';
 import { buildFromSpec } from '../app/src/core/spec.js';
 import { FORMAT } from '../supabase/functions/mcp/server.js';
+import { pngDataUrl } from './unit/helpers.js';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
@@ -26,6 +27,43 @@ let failed = 0;
 const check = (cond, msg) => { console.log((cond ? 'ok   ' : 'FAIL ') + msg); if (!cond) failed++; };
 
 const SPECS = {
+  'every feature': {
+    variables: { W: { value: 120, slider: { min: 80, max: 200, step: 5 } }, H: 'W / 2', N: 4 },
+    display: { names: true },
+    layers: ['Part', 'Motion', 'Notes'],
+    points: { o: [150, 10] },
+    shapes: [
+      { id: 'axis', type: 'line', from: [60, -10], to: [60, 70], construction: true, line_style: 'center', layer: 'Part' },
+      { id: 'half', type: 'polyline', points: [[60, 0], [120, 0], [120, 60], [60, 60]], layer: 'Part' },
+      { id: 'm', type: 'mirror', of: ['half'], axis: 'axis' },
+      { id: 'hole', type: 'circle', center: [15, 30], r: 4, layer: 'Part' },
+      { id: 'holes', type: 'pattern', kind: 'linear', of: ['hole'], count: 'N', spacing: 'W / 4' },
+      { id: 'nut', type: 'polygon', center: [60, 30], sides: 6, r: 8, layer: 'Part' },
+      { id: 'blob', type: 'curve', points: [[20, 45], [40, 52], [30, 56]], closed: true, layer: 'Part' },
+      { id: 'crank', type: 'line', from: 'o', to: [155, 18.660254], layer: 'Motion' },
+      { id: 'rod', type: 'line', from: 'crank.end', to: [178.452079, 10], layer: 'Motion' },
+      { id: 'rail', type: 'line', from: [130, 10], to: [200, 10], construction: true, layer: 'Motion' },
+    ],
+    constraints: [
+      { type: 'fix', point: 'half.p1' },
+      { type: 'length', line: 'half.s1', value: 'W / 2', name: 'halfW' },
+      { type: 'length', line: 'half.s2', value: 'H' },
+      { type: 'vertical', line: 'axis' },
+      { type: 'radius', shape: 'hole', value: 4 },
+      { type: 'radius', shape: 'nut.circle', value: 8 },
+      { type: 'distance', a: 'half.p1', b: 'hole.center', reference: true },
+      { type: 'fix', point: 'o' }, { type: 'length', line: 'crank', value: 10 }, { type: 'length', line: 'rod', value: 25 },
+      { type: 'on', point: 'rod.end', shape: 'rail' }, { type: 'fix', point: 'rail.start' }, { type: 'fix', point: 'rail.end' },
+    ],
+    fills: [{ at: [100, 50], color: '#cfe3ff', layer: 'Part' }],
+    drawing: [
+      { type: 'trace', point: 'crank.end', color: '#1f7ad6', layer: 'Motion' },
+      { type: 'trace', point: 'rod.end', color: '#d63a3a', layer: 'Motion' },
+      { type: 'text', text: 'Width {W} mm', at: [60, 75], size: 5, bold: true, box: true, layer: 'Notes', link: 'half.s3' },
+      { type: 'image', src: pngDataUrl(40, 20), center: [160, 50], width: 30, layer: 'Notes' },
+      { type: 'arrow', from: [150, 40], to: { on: 'crank', t: 1 }, layer: 'Notes' },
+    ],
+  },
   'annotated part': {
     layers: ['Part', 'Notes'], background: '#f7f3ea',
     shapes: [
@@ -103,13 +141,20 @@ for (const [name, spec] of Object.entries(SPECS)) {
     const walk = (e) => { if (e.constructor.kind === 'point' && !e.arcOwner) pts.push([e.id, e.x, e.y]); for (const c of e.children()) walk(c); };
     s.entities.forEach(walk);
     const arcs = s.entities.filter(e => e.constructor.kind === 'arc').map(a => [a.center.x, a.center.y, a.r, a.a0, a.a1]);
-    return { strokes: s.strokes.map(k => k.kind), fills: s.fills.length, arcs, name: app.project.name, entities: s.entities.length, constraints: s.constraints.length, state: app._lastSolve?.state, redundant: app._lastSolve?.redundantIds?.size ?? 0, pts };
+    const stale = s.strokes.filter(k => k.traces && (k._stale || app._pathIsStale?.(k))).length;
+    const eqErrors = (app.project.variables || []).filter(v => v.error).length + s.constraints.filter(c => c.exprError).length;
+    return { stale, eqErrors, sliders: (app.project.variables || []).filter(v => v.slider).length, strokes: s.strokes.map(k => k.kind), fills: s.fills.length, arcs, name: app.project.name, entities: s.entities.length, constraints: s.constraints.length, state: app._lastSolve?.state, redundant: app._lastSolve?.redundantIds?.size ?? 0, pts };
   });
   const want = project.active();
   check(got.name === name && got.entities === want.entities.length && got.constraints === want.constraints.length,
     `${name}: opens with its ${want.entities.length} shapes and ${want.constraints.length} relations`);
   check(JSON.stringify(got.strokes) === JSON.stringify(want.strokes.map(k => k.kind)) && got.fills === want.fills.length,
     `${name}: drawing side intact (${got.strokes.length} items, ${got.fills} fills)`);
+  if (name === 'every feature') {
+    check(got.stale === 0, 'every feature: traced paths up to date in the editor');
+    check(got.eqErrors === 0, 'every feature: no equation errors in the editor');
+    check(got.sliders === 1, 'every feature: the slider is there');
+  }
   check(got.state !== 'over' && got.redundant === 0, `${name}: nothing over-defined in the editor (state ${got.state}; spec said ${report.state})`);
   if (report.state === 'fully') check(got.state === 'fully', `${name}: fully defined in the editor too`);
   const before = new Map();
