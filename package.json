@@ -5,7 +5,9 @@
   "description": "Browser-based parametric 2D sketcher. No build step: app/ is served as static ES modules.",
   "scripts": {
     "serve": "python3 -m http.server 8080",
-    "test": "node scripts/stamp.mjs --check && node scripts/build-faq.mjs --check && node --test \"tests/unit/*.test.js\"",
+    "test": "node scripts/stamp.mjs --check && node scripts/build-faq.mjs --check && node scripts/build-mcp.mjs && node --test \"tests/unit/*.test.js\"",
+    "mcp:build": "node scripts/build-mcp.mjs",
+    "mcp:deploy": "node scripts/build-mcp.mjs && supabase functions deploy mcp --no-verify-jwt",
     "faq": "node scripts/build-faq.mjs && node scripts/stamp.mjs",
     "test:e2e": "node tests/smoke.e2e.mjs",
     "lint": "eslint app/src tests",
@@ -38,7 +40,9 @@
     "test:shapes": "node tests/shapes.e2e.mjs",
     "test:locus": "node tests/locus.e2e.mjs",
     "test:sliders": "node tests/sliders.e2e.mjs",
-    "test:dxf": "node tests/dxf.e2e.mjs"
+    "test:dxf": "node tests/dxf.e2e.mjs",
+    "test:mcp": "node scripts/build-mcp.mjs && node tests/mcp.e2e.mjs",
+    "test:consent": "node tests/consent.e2e.mjs"
   },
   "devDependencies": {
     "eslint": "^9.39.0",

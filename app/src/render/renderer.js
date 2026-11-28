@@ -24,7 +24,7 @@ export class Renderer {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
     this.view = view;
-    this.dpr = window.devicePixelRatio || 1;
+    this.dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
     this.lastDimRects = [];
     this.theme = getTheme('light');
   }

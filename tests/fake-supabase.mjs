@@ -47,6 +47,20 @@ export function installFake() {
         const s = { user: { id: email === 'me@example.com' ? 'u1' : 'u-' + email.split('@')[0], email } }; setSession(s); return { data: { user: s.user, session: s }, error: null };
       },
       signInWithOAuth: async () => ({ error: null }),
+      // OAuth 2.1 server (the consent page, /oauth/consent/). Authorization
+      // "seen" was approved before; anything else asks Claude-like consent.
+      oauth: {
+        getAuthorizationDetails: async (id) => {
+          window.__oauthCalls = [...(window.__oauthCalls || []), ['details', id]];
+          if (!session()) return { data: null, error: new Error('Unauthorized') };
+          if (id === 'seen') return { data: { redirect_url: 'https://assistant.test/cb?code=again' }, error: null };
+          if (id === 'gone') return { data: null, error: new Error('Authorization not found') };
+          return { data: { authorization_id: id, redirect_uri: 'https://assistant.test/cb', scope: 'openid email profile',
+            client: { id: 'c1', name: 'Claude <b>', uri: 'https://assistant.test', logo_uri: '' }, user: { id: session().user.id, email: session().user.email } }, error: null };
+        },
+        approveAuthorization: async (id, opts) => { window.__oauthCalls.push(['approve', id, opts]); return { data: { redirect_url: 'https://assistant.test/cb?code=xyz' }, error: null }; },
+        denyAuthorization: async (id, opts) => { window.__oauthCalls.push(['deny', id, opts]); return { data: { redirect_url: 'https://assistant.test/cb?error=access_denied' }, error: null }; },
+      },
       signOut: async () => { setSession(null); return { error: null }; },
     },
     functions: { invoke: async (name, { body }) => {
