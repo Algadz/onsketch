@@ -304,3 +304,104 @@ test('a traced path: computed, and up to date for the editor', () => {
   assert.deepEqual(back.drawing.map(d => d.type), ['trace', 'trace']);
   assert.match(problems({ ...spec, drawing: [{ type: 'trace', point: 'o' }] }), /can't move|is fixed/);
 });
+
+/* ---- concept sketches and mechanisms ---- */
+import { sweepVariable } from '../../app/src/core/sweep.js';
+import { textCenter } from '../../app/src/core/strokes.js';
+import { anchorLookup, syncLinks } from '../../app/src/core/ink-links.js';
+
+test('bar: two pivots and a width; only the pivots are free; holes optional', () => {
+  const { project, report } = buildFromSpec({ shapes: [{ id: 'link', type: 'bar', from: [0, 0], to: [40, 10], width: 8, hole: 3 }] });
+  assert.equal(report.dof, 4, 'the two pivots');
+  const s = project.active();
+  assert.equal(s.entities.filter(e => e instanceof Arc).length, 2);
+  assert.equal(s.entities.filter(e => e instanceof Circle).length, 2);
+  const sides = s.entities.filter(e => e instanceof Line && !e.construction);
+  for (const l of sides) assert.ok(near(Math.hypot(l.p2.x - l.p1.x, l.p2.y - l.p1.y), Math.hypot(40, 10), 1e-6));
+  assert.match(problems({ shapes: [{ type: 'bar', from: [0, 0], to: [0, 0], width: 3 }] }), /same point/);
+  assert.match(problems({ shapes: [{ type: 'bar', from: [0, 0], to: [9, 0], width: 3, hole: 4 }] }), /less than the width/);
+});
+
+test('swept trace: a slider-driven mechanism draws its path; failures are named', () => {
+  const crank = {
+    variables: { a: 60 }, points: { o: [0, 0] },
+    shapes: [
+      { id: 'ground', type: 'line', from: [-20, 0], to: [70, 0], construction: true },
+      { id: 'crank', type: 'bar', from: 'o', to: [5, 8.660254], width: 4 },
+      { id: 'rod', type: 'bar', from: 'crank.end', to: [28.452079, 0], width: 4 },
+    ],
+    constraints: [
+      { type: 'fix', point: 'o' }, { type: 'fix', point: 'ground.start' }, { type: 'fix', point: 'ground.end' },
+      { type: 'length', line: 'crank.axis', value: 10 }, { type: 'length', line: 'rod.axis', value: 25 },
+      { type: 'on', point: 'rod.end', shape: 'ground' }, { type: 'angle', a: 'ground', b: 'crank.axis', value: 'a', signed: true },
+    ],
+  };
+  const { project, report } = buildFromSpec({ ...crank, drawing: [{ type: 'trace', point: 'crank.end', sweep: { variable: 'a', from: 0, to: 360, steps: 36 } }] });
+  assert.equal(report.state, 'fully');
+  const path = project.active().strokes[0];
+  assert.equal(path.points.length, 37);
+  assert.ok(path.points.every(p => near(Math.hypot(p.x, p.y), 10, 1e-6)), 'a circle of radius 10');
+  assert.ok(near(project.active().entities.find(e => e instanceof Line && e.construction && e.p1.x === 0 && e.p1.y === 0)?.p2.x ?? 5, 5, 1e-6), 'the sketch is back where it was');
+  // an unswept trace of a driven point says how to do it
+  assert.match(problems({ ...crank, drawing: [{ type: 'trace', point: 'crank.end' }] }), /"sweep": \{ "variable": "a"/);
+  // the sweep stops where the mechanism can't follow
+  let last = null;
+  const r = sweepVariable(project, { variable: 'a', from: 0, to: 90, steps: 9 }, (v) => { last = v; });
+  assert.equal(r.ok, true); assert.equal(last, 90);
+});
+
+test('bent arrows, part links that turn, fill-only shapes, offsets drawn either way', () => {
+  const { project } = buildFromSpec({
+    variables: { a: 30 },
+    shapes: [
+      { id: 'arm', type: 'bar', from: [0, 0], to: [40, 0], width: 6 },
+      { id: 'x', type: 'line', from: [0, 0], to: [10, 0], construction: true },
+      { id: 'src', type: 'line', from: [0, -20], to: [40, -20] }, { id: 'copy', type: 'line', from: [40, -24], to: [0, -24] },
+    ],
+    constraints: [
+      { type: 'fix', point: 'arm.start' }, { type: 'fix', point: 'x.end' }, { type: 'length', line: 'arm.axis', value: 40 },
+      { type: 'angle', a: 'x', b: 'arm.axis', value: 'a', signed: true },
+      { type: 'offset', a: 'src', b: 'copy', value: 4 },
+    ],
+    drawing: [
+      { id: 'lift', type: 'arrow', from: [30, 30], to: [45, 10], bend: 0.3, tips: 'both' },
+      { id: 'tag', type: 'text', text: 'ARM', at: [25, 15], link: 'arm' },
+      { id: 'blob', type: 'shape', shape: 'ellipse', center: [20, 0], width: 10, height: 6, fill: 'solid', outline: 'none' },
+    ],
+  });
+  const s = project.active();
+  const [curve, head1, head2] = s.strokes;
+  assert.equal(curve.kind, 'pen'); assert.equal(head1.kind, 'arrow'); assert.equal(head2.kind, 'arrow');
+  assert.ok(curve.group && curve.group === head1.group && head1.group === head2.group, 'one group');
+  assert.ok(near(head1.points[1].x, 45) && near(head1.points[1].y, 10), 'a head on the tip');
+  const mid = curve.points[16];
+  assert.ok(Math.hypot(mid.x - 37.5, mid.y - 20) > 3, 'the curve bows out');
+  // the label follows the whole bar, turning with it
+  const tag = s.strokes.find(k => k.kind === 'text');
+  const before = textCenter(tag);
+  const angle = s.constraints.find(c => c.kind === 'directedAngle');
+  angle.value += Math.PI / 2;
+  assert.ok(new Solver().solve(s, [s], [], { diagnostics: true }).ok);
+  syncLinks(s.strokes, anchorLookup([s]));
+  const after = textCenter(tag);
+  assert.ok(near(Math.hypot(after.x, after.y), Math.hypot(before.x, before.y), 1e-6), 'same distance from the pivot');
+  assert.ok(Math.abs(Math.atan2(after.y, after.x) - Math.atan2(before.y, before.x) - Math.PI / 2) < 1e-6, 'turned by 90°');
+  assert.equal(s.strokes.find(k => k.kind === 'shape').width, 0);
+  const copy = s.entities.filter(e => e instanceof Line && !e.construction).at(-1);
+  assert.ok(near(copy.p1.y, -24, 1e-6), 'reversed copy at 4');
+});
+
+test('contradictions name the constraints whose removal fixes them', () => {
+  const msg = problems({
+    shapes: [{ id: 'l', type: 'line', from: [0, 0], to: [10, 0] }, { id: 'm', type: 'line', from: [0, 0], to: [0, 10] }],
+    constraints: [{ type: 'fix', point: 'l.start' }, { type: 'length', line: 'l', value: 10 }, { type: 'length', line: 'm', value: 10 },
+      { type: 'perpendicular', a: 'l', b: 'm' }, { type: 'distance', a: 'l.end', b: 'm.end', value: 30 }],
+  });
+  assert.match(msg, /Removing any one of these makes it solvable: .*constraints\[4\] \(distance\)/);
+  const over = problems({
+    shapes: [{ id: 'r', type: 'rectangle', corner: [0, 0], width: 40, height: 20 }, { id: 'o', type: 'rectangle', corner: [-3, -3], width: 46, height: 26 }],
+    constraints: [{ type: 'offset', pairs: [['r.bottom', 'o.bottom'], ['r.right', 'o.right']], value: 3 }],
+  });
+  assert.match(over, /Remove one of: constraints\[0\] \(offset\)/);
+  assert.match(over, /draw them as polylines/);
+});

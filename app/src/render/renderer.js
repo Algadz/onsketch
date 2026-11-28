@@ -292,12 +292,15 @@ export class Renderer {
       ctx.fill();
     }
     const w = Math.max(0.75, (st.width || 0) * v.zoom);
-    ctx.lineWidth = w;
-    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    ctx.strokeStyle = ink;
-    if (st.dash) ctx.setLineDash([w * 3.2, w * 2.4]);
-    trace();
-    ctx.stroke();
+    // A filled shape with outline width 0 has no outline.
+    if (!(st.width === 0 && shapeFilled(st))) {
+      ctx.lineWidth = w;
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.strokeStyle = ink;
+      if (st.dash) ctx.setLineDash([w * 3.2, w * 2.4]);
+      trace();
+      ctx.stroke();
+    }
     ctx.restore();
     if (st.selected) this._drawInkSelection(shapeCorners(st).map(p => v.worldToScreen(p)), w);
   }

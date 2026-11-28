@@ -22,6 +22,7 @@ import { anchorFrame, anchorLookup, linkItems } from './ink-links.js';
 import { findFaceAt } from './regions.js';
 import { IMAGES_TOTAL_MAX, imagePixelSize, imageSource, registerImage } from './images.js';
 import { tracePointPath } from './trace.js';
+import { sweepVariable } from './sweep.js';
 
 export const DRAWING_TYPES = ['text', 'arrow', 'pen', 'marker', 'shape', 'image', 'trace'];
 const IMAGE_DATA = /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/=\s]+$/i;
@@ -148,6 +149,13 @@ function linkRef(b, v, where) {
     return { shape: s, t };
   }
   if (b.names.has(to)) { const p = place(b, to, `${where}.link`); return p ? { node: p.node } : null; }
+  // A whole part (a bar, a rectangle, a polyline…): follows it, turning
+  // with it, through its first line (a bar's axis).
+  const g = b.groupIds?.get(to);
+  if (g) {
+    const line = g.members.find(m => m.type === 'line') || g.members.find(m => m.type === 'circle' || m.type === 'arc');
+    if (line) return { shape: line, t: line.type === 'line' ? t : undefined };
+  }
   b.shape(to, `${where}.link`);                          // its message names what is wrong
   return null;
 }
@@ -161,8 +169,10 @@ function readFill(b, f, where) {
 
 function readItem(b, it, where) {
   if (!it || typeof it !== 'object') { b.bad(`${where}: a drawing item.`); return null; }
+  if (it.id != null && (typeof it.id !== 'string' || !it.id || it.id.length > 64 || (b.itemIds ??= new Set()).has(it.id))) { b.bad(`${where}: "id" is a unique name for this item (for edits).`); return null; }
+  if (it.id != null) b.itemIds.add(it.id);
   const base = {
-    where, type: it.type, color: color(b, it.color, where), opacity: opacity(b, it.opacity, where),
+    where, type: it.type, name: it.id ?? null, color: color(b, it.color, where), opacity: opacity(b, it.opacity, where),
     layer: b.layerOf(it.layer, where), group: it.group == null ? null : String(it.group).slice(0, 40),
     link: linkRef(b, it.link, where),
   };
@@ -189,8 +199,9 @@ function readItem(b, it, where) {
       if (!from || !to) return null;
       if (it.head != null && !ARROW_HEADS.includes(it.head)) { b.bad(`${where}: "head" is ${ARROW_HEADS.join(', ')}.`); return null; }
       if (it.tips != null && !ARROW_TIPS.includes(it.tips)) { b.bad(`${where}: "tips" is ${ARROW_TIPS.join(', ')} (which ends get a head).`); return null; }
-      if (base.link) { b.bad(`${where}: arrows follow geometry through their ends ("from" / "to" on a point or { "on": … }), not "link".`); return null; }
-      return { ...base, from, to, width: positive(b, it.width, where, 'width'), head: it.head, tips: it.tips, dash: !!it.dash };
+      if (base.link && !it.bend) { b.bad(`${where}: straight arrows follow geometry through their ends ("from" / "to" on a point or { "on": … }), not "link".`); return null; }
+      if (it.bend != null && !(Number.isFinite(it.bend) && Math.abs(it.bend) <= 2)) { b.bad(`${where}: "bend" is how far the middle bows out, as a fraction of the arrow's length (-2 to 2; positive bows to the left going from "from" to "to").`); return null; }
+      return { ...base, from, to, width: positive(b, it.width, where, 'width'), head: it.head, tips: it.tips, dash: !!it.dash, bend: it.bend || 0 };
     }
     case 'pen': case 'marker': {
       const pts = it.points;
@@ -224,7 +235,17 @@ function readItem(b, it, where) {
       const p = place(b, it.point, `${where}.point`);
       if (!p) return null;
       if (base.link) { b.bad(`${where}: a traced path follows its point by itself; no "link".`); return null; }
-      return { ...base, at: p, width: positive(b, it.width, where, 'width'), dash: it.dash !== false };
+      let sweep = null;
+      if (it.sweep != null) {
+        const sw = it.sweep;
+        const v = sw && b.variables.find(x => x.name === sw.variable);
+        if (!v) { b.bad(`${where}: "sweep" is { "variable": a variable's name, "from", "to", "steps" }.`); return null; }
+        if (!Number.isFinite(sw.from) || !Number.isFinite(sw.to) || sw.from === sw.to) { b.bad(`${where}: the sweep's "from" and "to" are two different numbers.`); return null; }
+        if (sw.steps != null && !(Number.isInteger(sw.steps) && sw.steps >= 2 && sw.steps <= 400)) { b.bad(`${where}: "steps" is a whole number from 2 to 400 (default 60).`); return null; }
+        if (!/^\s*-?\d+(\.\d+)?\s*$/.test(v.expr)) { b.bad(`${where}: the swept variable must be a plain number, not a formula.`); return null; }
+        sweep = { variable: sw.variable, from: sw.from, to: sw.to, steps: sw.steps ?? 60 };
+      }
+      return { ...base, at: p, sweep, width: positive(b, it.width, where, 'width'), dash: it.dash !== false };
     }
     case 'shape': {
       if (!SHAPE_IDS.includes(it.shape)) { b.bad(`${where}: "shape" is one of ${SHAPE_IDS.join(', ')}.`); return null; }
@@ -234,7 +255,12 @@ function readItem(b, it, where) {
       if (!w || !h) { if (!w && !h) b.bad(`${where}: "width" and "height" (drawing units).`); return null; }
       if (it.fill != null && !SHAPE_FILLS.includes(it.fill)) { b.bad(`${where}: "fill" is ${SHAPE_FILLS.join(', ')}.`); return null; }
       if (it.angle != null && !Number.isFinite(it.angle)) { b.bad(`${where}: "angle" in degrees.`); return null; }
-      return { ...base, shape: it.shape, at, w, h, angle: (it.angle || 0) * DEG, fill: it.fill, outline: positive(b, it.outline, where, 'outline'), dash: !!it.dash };
+      let outline;
+      if (it.outline === 0 || it.outline === 'none') {
+        if (!it.fill || it.fill === 'none') { b.bad(`${where}: a shape with no outline needs a "fill".`); return null; }
+        outline = 0;
+      } else outline = positive(b, it.outline, where, 'outline');
+      return { ...base, shape: it.shape, at, w, h, angle: (it.angle || 0) * DEG, fill: it.fill, outline, dash: !!it.dash };
     }
     default:
       b.bad(`${where}: unknown type ${JSON.stringify(it.type)}. Use one of ${DRAWING_TYPES.join(', ')}.`);
@@ -274,11 +300,22 @@ export function applyDrawing(b, project) {
   const groups = new Map();
   const groupId = (g) => { if (!groups.has(g)) groups.set(g, newId('g')); return groups.get(g); };
 
+  // A fill colours an area of the CAD shapes on its own layer (as the
+  // editor's Fill tool does). Without a layer: the topmost layer whose
+  // shapes enclose the point.
+  const encloses = (layerId, seed) => findFaceAt(sketch.entities.filter(e => !e.construction && e.layerId === layerId
+    && (e instanceof Line || e instanceof Arc || e instanceof Circle || e instanceof Bezier)), seed);
   for (const f of b.fills || []) {
-    const layerId = b.layerId(f.layer);
-    const shapes = sketch.entities.filter(e => !e.construction && e.layerId === layerId && (e instanceof Line || e instanceof Arc || e instanceof Circle || e instanceof Bezier));
     const seed = { x: f.at[0], y: f.at[1] };
-    if (!findFaceAt(shapes, seed)) { b.bad(`${f.where}: [${f.at}] isn't inside a closed outline of CAD shapes${f.layer ? ` on layer "${f.layer}"` : ''} (after solving). Put "at" inside the area, and close the outline (shapes whose ends meet).`); continue; }
+    let layerId = f.layer ? b.layerId(f.layer) : null;
+    if (!layerId) layerId = [...project.layers].reverse().find(l => encloses(l.id, seed))?.id ?? null;
+    if (!layerId || !encloses(layerId, seed)) {
+      const other = project.layers.find(l => encloses(l.id, seed));
+      b.bad(`${f.where}: [${f.at}] isn't inside a closed outline of CAD shapes${f.layer ? ` on layer "${f.layer}"` : ''} (after solving).`
+        + (other ? ` It is inside shapes on layer "${other.name}": a fill goes on the layer of the outline it colours (leave "layer" out to get it).`
+          : ' Put "at" inside the area, and close the outline (shapes whose ends meet).'));
+      continue;
+    }
     sketch.fills.push({ id: newId('f'), layerId, color: f.color, opacity: f.opacity, seed });
   }
 
@@ -306,6 +343,33 @@ export function applyDrawing(b, project) {
       const ends = [end(it.from), end(it.to)];
       const pts = ends.map(e => (e.at ? attachPoint(e.at, lookup) : e.xy));
       if (Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y) < 1e-9) { b.bad(`${it.where}: both ends are at the same place.`); continue; }
+      if (it.bend) {
+        // A bent arrow: the curve as a stroke, and each head as a short
+        // arrow along its end, grouped so they move as one.
+        const [p0, p1] = pts, L = Math.hypot(p1.x - p0.x, p1.y - p0.y);
+        const c = { x: (p0.x + p1.x) / 2 - (p1.y - p0.y) * it.bend, y: (p0.y + p1.y) / 2 + (p1.x - p0.x) * it.bend };
+        const q = (t) => ({ x: (1 - t) * (1 - t) * p0.x + 2 * (1 - t) * t * c.x + t * t * p1.x, y: (1 - t) * (1 - t) * p0.y + 2 * (1 - t) * t * c.y + t * t * p1.y });
+        const width = it.width || DEF.arrow, group = base.group || newId('g');
+        const curve = { ...base, group, kind: 'pen', width, points: Array.from({ length: 33 }, (_, i) => q(i / 32)) };
+        if (it.dash) curve.dash = true;
+        const headLen = Math.min(L / 3, width * 9);
+        const tipAt = (tEnd) => {                         // a point headLen back along the curve
+          let t = tEnd;
+          for (let k = 0; k < 40; k++) { const p = q(t); if (Math.hypot(p.x - q(tEnd).x, p.y - q(tEnd).y) >= headLen) break; t += tEnd === 1 ? -0.01 : 0.01; }
+          return q(t);
+        };
+        const heads = [];
+        const tips = it.tips ?? 'end';
+        if (tips === 'end' || tips === 'both') heads.push({ from: tipAt(1), to: p1, at: ends[1].at });
+        if (tips === 'start' || tips === 'both') heads.push({ from: tipAt(0), to: p0, at: ends[0].at });
+        const made = [curve, ...heads.map(h => ({ ...base, id: newId('k'), group, kind: 'arrow', width, points: [h.from, h.to], ...(it.head && it.head !== 'filled' ? { head: it.head } : {}), ...(h.at ? { at: [null, h.at] } : {}) }))];
+        const anchor = it.link ? (it.link.shape ? it.link.shape.entity : ptOf(it.link.node))
+          : ends[1].at ? lookup.get(ends[1].at.to) : null;
+        if (anchor) linkItems(made.filter(x => x.kind === 'pen'), anchor);
+        for (const x of made) sketch.strokes.push(x);
+        if (it.name) (b.itemNames ??= []).push([curve.id, it.name]);
+        continue;
+      }
       item = { ...base, kind: 'arrow', width: it.width || DEF.arrow, points: pts };
       if (it.head && it.head !== 'filled') item.head = it.head;
       if (it.tips && it.tips !== 'end') item.tips = it.tips;
@@ -319,15 +383,31 @@ export function applyDrawing(b, project) {
       const c = xy(it.at), u = { x: Math.cos(it.angle), y: Math.sin(it.angle) }, v = { x: -u.y, y: u.x };
       const at = (sx, sy) => ({ x: c.x + u.x * sx * it.w / 2 + v.x * sy * it.h / 2, y: c.y + u.y * sx * it.w / 2 + v.y * sy * it.h / 2 });
       item = { id: base.id, layerId: base.layerId, opacity: base.opacity, ...(base.group ? { group: base.group } : {}), kind: 'image', image: id, points: [at(-1, 1), at(1, 1), at(-1, -1)] };
+    } else if (it.type === 'trace' && it.sweep) {
+      // the path the point takes while the variable runs over the range
+      const pt = ptOf(it.at.node), pts = [];
+      const r = sweepVariable(project, it.sweep, () => pts.push({ x: pt.x, y: pt.y }));
+      if (!r.ok) {
+        const at = r.failedAt != null ? `${it.sweep.variable} = ${Math.round(r.failedAt * 1000) / 1000}` : 'the start';
+        if (pts.length < 2) { b.bad(`${it.where}: the mechanism can't be solved at ${at}${r.problem ? ` (${r.problem})` : ''}: no path.`); continue; }
+        b.warnings.push(`${it.where}: the mechanism can't be solved at ${at}: the path stops there.`);
+      }
+      item = { ...base, kind: 'pen', width: it.width || DEF.pen, points: pts };
+      if (it.dash) item.dash = true;
     } else if (it.type === 'trace') {
       const t = tracePointPath(project, sketch, ptOf(it.at.node));
-      if (!t.ok) { b.bad(`${it.where}: ${t.message}`); continue; }
+      if (!t.ok) {
+        const hint = b.variables.length && /can't move|is fixed/.test(t.message)
+          ? ` If a variable drives the mechanism (a slider), trace it with "sweep": { "variable": "${b.variables[0].name}", "from": …, "to": … }.` : '';
+        b.bad(`${it.where}: ${t.message}${hint}`);
+        continue;
+      }
       item = { ...base, kind: 'pen', width: it.width || DEF.pen, points: t.points, traces: t.traces };
       if (it.dash) item.dash = true;
     } else if (it.type === 'shape') {
       const c = xy(it.at), u = { x: Math.cos(it.angle), y: Math.sin(it.angle) }, v = { x: -u.y, y: u.x };
       const at = (sx, sy) => ({ x: c.x + u.x * sx * it.w / 2 + v.x * sy * it.h / 2, y: c.y + u.y * sx * it.w / 2 + v.y * sy * it.h / 2 });
-      item = { ...base, kind: 'shape', shape: it.shape, width: it.outline || DEF.shape, points: [at(-1, 1), at(1, 1), at(-1, -1)] };
+      item = { ...base, kind: 'shape', shape: it.shape, width: it.outline === 0 ? 0 : (it.outline || DEF.shape), points: [at(-1, 1), at(1, 1), at(-1, -1)] };
       if (it.fill && it.fill !== 'none') item.fill = it.fill;
       if (it.dash) item.dash = true;
     }
@@ -337,6 +417,7 @@ export function applyDrawing(b, project) {
       if (it.link.t != null) item.link = { to: anchor.id, t: it.link.t, f: anchorFrame(anchor, it.link.t, item.kind === 'shape' || item.kind === 'image') };
     }
     sketch.strokes.push(item);
+    if (it.name) (b.itemNames ??= []).push([item.id, it.name]);
   }
   // The editor's tool sizes, so what the user adds by hand matches.
   project.sizes = { ...project.sizes, text: DEF.text, pen: DEF.pen, marker: DEF.marker, arrow: DEF.arrow, shape: DEF.shape };
@@ -361,12 +442,11 @@ function drawingSize(sketch) {
  */
 export function presentationToSpec(project, sketch, spec, unsupported, P, copies = new Set()) {
   const layerName = new Map(project.layers.map(l => [l.id, l.name]));
-  const first = project.layers[0]?.id;
   if (project.layers.length > 1 || (project.layers[0] && (project.layers[0].visible === false || project.layers[0].opacity !== 1))) {
     spec.layers = project.layers.map(l => (l.visible === false || l.opacity !== 1 ? { name: l.name, visible: l.visible !== false, opacity: l.opacity } : l.name));
     if (new Set(project.layers.map(l => l.name)).size !== project.layers.length) unsupported.add('two layers with the same name');
   }
-  const layer = (id) => (spec.layers && id && id !== first ? { layer: layerName.get(id) } : {});
+  const layer = (id) => (spec.layers && id && layerName.has(id) ? { layer: layerName.get(id) } : {});   // always, when there are layers
   if (project.background) spec.background = project.background;
   const byId = new Map(sketch.entities.map(e => [e.id, e]));
 
@@ -428,7 +508,7 @@ export function presentationToSpec(project, sketch, spec, unsupported, P, copies
       if (Math.abs(ux * vx + uy * vy) > 1e-6 * w * h || ux * vy - uy * vx < 0) unsupported.add('stretched or flipped shapes');
       items.push({ type: 'shape', shape: it.shape, center: [r6((b2.x + c.x) / 2), r6((b2.y + c.y) / 2)], width: r6(w), height: r6(h),
         ...(Math.abs(Math.atan2(uy, ux)) > 1e-9 ? { angle: r6(Math.atan2(uy, ux) / DEG) } : {}),
-        outline: r6(it.width), ...(it.fill ? { fill: it.fill } : {}), ...(it.dash ? { dash: true } : {}), ...common(it) });
+        outline: it.width === 0 ? 'none' : r6(it.width), ...(it.fill ? { fill: it.fill } : {}), ...(it.dash ? { dash: true } : {}), ...common(it) });
     } else if (it.kind === 'image') {
       const [a, b2, c] = it.points;
       const ux = b2.x - a.x, uy = b2.y - a.y, vx = a.x - c.x, vy = a.y - c.y;

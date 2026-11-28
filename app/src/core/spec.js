@@ -30,10 +30,11 @@ import {
   CurveTangentConstraint,
 } from './constraints.js';
 import { PatternConstraint, cleanPatternParams, syncPattern, PATTERN_MAX_COPIES } from './patterns.js';
+import { imageId } from './images.js';
 
 export const SPEC_VERSION = 1;
 export const SPEC_LIMITS = { points: 2000, shapes: 1000, constraints: 2000, coordinate: 1e7 };
-export const SHAPE_TYPES = ['line', 'polyline', 'rectangle', 'circle', 'arc', 'curve', 'polygon', 'point', 'mirror', 'pattern'];
+export const SHAPE_TYPES = ['line', 'polyline', 'rectangle', 'circle', 'arc', 'curve', 'polygon', 'bar', 'point', 'mirror', 'pattern'];
 export const CONSTRAINT_TYPES = ['horizontal', 'vertical', 'parallel', 'perpendicular', 'collinear', 'equal',
   'concentric', 'tangent', 'coincident', 'midpoint', 'on', 'symmetric', 'fix', 'distance', 'length',
   'radius', 'diameter', 'angle', 'smooth', 'offset'];
@@ -42,7 +43,9 @@ const DRIVABLE = new Set(['distance', 'pointLine', 'length', 'radius', 'diameter
 
 /** Points closer than this are the same point. */
 const JOIN_TOL = 1e-6;
-const NAME_RE = /^[A-Za-z_][A-Za-z0-9_-]{0,63}$/;
+/** Shape and point names (dots allowed: "plate.bottom" reads back as is). */
+const NAME_RE = /^[A-Za-z_][A-Za-z0-9_-]*(\.[A-Za-z0-9_-]+)*$/;
+const isName = (s) => typeof s === 'string' && s.length <= 64 && NAME_RE.test(s);
 const DEG = Math.PI / 180;
 
 /** The spec can't be built; `problems` lists every reason, one per line. */
@@ -73,9 +76,15 @@ export function buildFromSpec(spec, { title, images } = {}) {
   b.placeSliders(project);
   applyDrawing(b, project);                 // text, arrows, ink, fills: on the solved geometry
   if (b.problems.length) throw new SpecError(b.problems);
+  b.recordNames(project);
   report.drawing = project.active().strokes.length;
   report.fills = project.active().fills.length;
-  return { project, report };
+  // name → the point it stands for (names, aliases like "crank.end"), live
+  const point = (name) => {
+    if (!b.names.has(name)) return null;
+    return b.pointOfRoot(b.find(b.names.get(name)));       // null for an end only arcs meet at
+  };
+  return { project, report, point, pointNames: () => [...b.names.keys()] };
 }
 
 class Builder {
@@ -139,7 +148,7 @@ class Builder {
   alias(name, node) { if (!this.names.has(name)) this.names.set(name, node); }
   shapeName(id, where) {
     if (id == null) return null;
-    if (typeof id !== 'string' || !NAME_RE.test(id)) { this.bad(`${where}: id must be a name like "outline" or "hole_1" (letters, digits, _ and -).`); return null; }
+    if (!isName(id)) { this.bad(`${where}: id must be a name like "outline" or "hole_1" (letters, digits, _, - and .).`); return null; }
     if (this.shapeById.has(id) || this.names.has(id)) { this.bad(`${where}: id "${id}" is used twice.`); return null; }
     return id;
   }
@@ -170,7 +179,7 @@ class Builder {
       const entries = Object.entries(points);
       if (entries.length > SPEC_LIMITS.points) this.bad(`points: at most ${SPEC_LIMITS.points}.`);
       for (const [name, v] of entries.slice(0, SPEC_LIMITS.points)) {
-        if (!NAME_RE.test(name)) { this.bad(`points.${name}: point names use letters, digits, _ and - (and start with a letter).`); continue; }
+        if (!isName(name)) { this.bad(`points.${name}: point names use letters, digits, _, - and . (and start with a letter).`); continue; }
         const c = this.coord(v, `points.${name}`);
         if (!c) continue;
         // Each name is its own point (two names at one place are two
@@ -287,6 +296,7 @@ class Builder {
       }
       case 'curve': this.readCurve(s, id, construction, where); break;
       case 'polygon': this.readPolygon(s, id, construction, where); break;
+      case 'bar': this.readBar(s, id, construction, where); break;
       case 'mirror': this.readMirror(s, id, where); break;
       case 'pattern': this.readPattern(s, id, where); break;
       default:
@@ -447,6 +457,60 @@ class Builder {
     if (id) { this.alias(`${id}.center`, c); verts.forEach((v, k) => this.alias(`${id}.p${k + 1}`, v)); this.groups(id, { type: 'polygon', segments: n }, members); }
   }
 
+  /** A number, or a formula of the variables given as plain numbers
+   *  (for sizes needed to draw a shape before the equations run). */
+  numberOrFormula(v, where, key) {
+    if (Number.isFinite(v)) return { value: v };
+    if (typeof v === 'string' && v.trim()) {
+      const plain = new Map(this.variables.filter(x => /^\s*-?\d+(\.\d+)?\s*$/.test(x.expr)).map(x => [x.name, Number(x.expr)]));
+      try {
+        const val = evaluate(v, (n) => plain.get(n));
+        if (Number.isFinite(val)) return { value: val, expr: v.trim() };
+      } catch { /* below */ }
+      this.bad(`${where}: "${key}": the formula "${v}" must use variables that are plain numbers.`);
+      return null;
+    }
+    this.bad(`${where}: "${key}" is a number or a formula.`);
+    return null;
+  }
+
+  /** A bar (link, slot): two pivots, a width, round ends. */
+  readBar(s, id, construction, where) {
+    const A = this.point(s.from, `${where}.from`), B = this.point(s.to, `${where}.to`);
+    const w = this.numberOrFormula(s.width, where, 'width');
+    if (A == null || B == null || !w) return;
+    if (!(w.value > 0)) { this.bad(`${where}: "width" must be more than 0.`); return; }
+    const a = this.nodes[this.find(A)], b = this.nodes[this.find(B)];
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    if (len < 1e-9) { this.bad(`${where}: "from" and "to" are the same point.`); return; }
+    const r = w.value / 2, ux = (b.x - a.x) / len, uy = (b.y - a.y) / len, nx = -uy * r, ny = ux * r;
+    const p1 = this.newNode(a.x + nx, a.y + ny), p2 = this.newNode(b.x + nx, b.y + ny);
+    const p3 = this.newNode(b.x - nx, b.y - ny), p4 = this.newNode(a.x - nx, a.y - ny);
+    const sub = (k) => (id ? `${id}.${k}` : null);
+    const add = (rec) => { this.addShape(rec); if (rec.id) this.shapeById.set(rec.id, rec); return rec; };
+    const axis = add({ id: sub('axis'), type: 'line', a: A, b: B, construction: true, where: `${where} axis` });
+    const side1 = add({ id: sub('side1'), type: 'line', a: p1, b: p2, construction, where: `${where} side 1` });
+    const cap2 = add({ id: sub('cap2'), type: 'arc', center: B, a: p3, b: p2, clockwise: false, construction, where: `${where} end cap at "to"` });
+    const side2 = add({ id: sub('side2'), type: 'line', a: p3, b: p4, construction, where: `${where} side 2` });
+    const cap1 = add({ id: sub('cap1'), type: 'arc', center: A, a: p1, b: p4, clockwise: false, construction, where: `${where} end cap at "from"` });
+    const auto = (rec) => this.cons.push({ ...rec, where: `${where} (${rec.type})`, auto: true });
+    for (const [l, c] of [[side1, cap1], [side1, cap2], [side2, cap1], [side2, cap2]]) auto({ type: 'tangent', s1: l, s2: c });
+    auto({ type: 'equal', s1: cap1, s2: cap2 });
+    auto({ type: 'diameter', s: cap1, value: w.value, ...(w.expr ? { expr: w.expr } : {}) });
+    const members = [axis, side1, cap2, side2, cap1];
+    if (s.hole != null) {
+      const h = this.numberOrFormula(s.hole, where, 'hole');
+      if (!h) return;
+      if (!(h.value > 0 && h.value < w.value)) { this.bad(`${where}: "hole" (pivot hole diameter) must be more than 0 and less than the width.`); return; }
+      const h1 = add({ id: sub('hole1'), type: 'circle', center: A, r: h.value / 2, construction, where: `${where} hole at "from"` });
+      const h2 = add({ id: sub('hole2'), type: 'circle', center: B, r: h.value / 2, construction, where: `${where} hole at "to"` });
+      auto({ type: 'equal', s1: h1, s2: h2 });
+      auto({ type: 'diameter', s: h1, value: h.value, ...(h.expr ? { expr: h.expr } : {}) });
+      members.push(h1, h2);
+    }
+    if (id) { this.alias(`${id}.start`, A); this.alias(`${id}.end`, B); this.groups(id, { type: 'bar' }, members); }
+  }
+
   /** Mirror copies of shapes about a line, tied to them by symmetry. */
   readMirror(s, id, where) {
     if (!Array.isArray(s.of) || !s.of.length) { this.bad(`${where}: "of" lists the shapes to mirror (ids).`); return; }
@@ -578,6 +642,7 @@ class Builder {
       const g = this.groupIds?.get(ref);
       if (g?.type === 'rectangle') this.bad(`${where}: "${ref}" is a rectangle; name one side: "${ref}.bottom", "${ref}.right", "${ref}.top" or "${ref}.left".`);
       else if (g?.type === 'polyline') this.bad(`${where}: "${ref}" is a polyline; name one segment: "${ref}.s1" … "${ref}.s${g.segments}".`);
+      else if (g?.type === 'bar') this.bad(`${where}: "${ref}" is a bar; name one of its shapes: "${ref}.axis" (pivot to pivot), "${ref}.side1", "${ref}.side2", "${ref}.cap1", "${ref}.cap2"${g.members.length > 5 ? `, "${ref}.hole1", "${ref}.hole2"` : ''}.`);
       else if (this.names.has(ref)) this.bad(`${where}: "${ref}" is a point, not a shape.`);
       else this.bad(`${where}: unknown shape "${ref}".`);
       return null;
@@ -597,6 +662,11 @@ class Builder {
     const where = `constraints[${i}]` + (c && typeof c.type === 'string' ? ` (${c.type})` : '');
     if (!c || typeof c !== 'object') { this.bad(`${where}: a constraint object.`); return; }
     const rec = { type: c.type, where, index: i };
+    if (c.id != null) {
+      if (!isName(c.id) || (this.constraintIds ??= new Set()).has(c.id)) { this.bad(`${where}: "id" is a unique name for this constraint (for edits).`); return; }
+      this.constraintIds.add(c.id);
+      rec.cid = c.id;
+    }
     const P = (k) => this.point(c[k], `${where}.${k}`, { create: false });
     // A curve's handle ("curve.c1" / "curve.c2"): for "symmetric" and "fix".
     const H = (k) => {
@@ -842,6 +912,7 @@ class Builder {
     }
     this.byConstraintId = new Map();
     this.ptOf = ptOf;
+    this.pointOfRoot = (r) => pts.get(r) || null;
     for (const c of this.cons) {
       const made = this.native(c, ptOf);
       for (const n of made) {
@@ -966,7 +1037,9 @@ class Builder {
         for (const [src, tgt] of c.pairs) {
           const a = src.entity, b = tgt.entity;
           if (kindOf(src) === 'line') {
-            out.push(new OffsetConstraint(a.id, b.id, 'line', { l1: { a: a.p1.id, b: a.p2.id }, l2: { a: b.p1.id, b: b.p2.id } }));
+            // the copy may be drawn either way round: compare it in the source's direction
+            const same = (a.p2.x - a.p1.x) * (b.p2.x - b.p1.x) + (a.p2.y - a.p1.y) * (b.p2.y - b.p1.y) >= 0;
+            out.push(new OffsetConstraint(a.id, b.id, 'line', { l1: { a: a.p1.id, b: a.p2.id }, l2: same ? { a: b.p1.id, b: b.p2.id } : { a: b.p2.id, b: b.p1.id } }));
             const dx = a.p2.x - a.p1.x, dy = a.p2.y - a.p1.y, len = Math.hypot(dx, dy) || 1;
             const side = (dx * (b.p1.y - a.p1.y) - dy * (b.p1.x - a.p1.x)) / len < 0 ? -1 : 1;
             pairs.push({ kind: 'line', pointId: b.p1.id, l: { a: a.p1.id, b: a.p2.id }, sourceEntityId: a.id, targetEntityId: b.id, value: side * (c.value ?? 0) });
@@ -1012,29 +1085,80 @@ class Builder {
     });
   }
 
+  /** The names given, by id, for readback (project.names). */
+  recordNames(project) {
+    const names = {};
+    const taken = new Set();
+    const give = (id, name) => { if (id && name && !names[id] && !taken.has(name)) { names[id] = name; taken.add(name); } };
+    for (const s of this.shapes) if (s.id && s.entity && !(s.type === 'point')) give(s.entity.id, s.id);
+    // points: a plain name before an alias ("A" before "crank.end")
+    const byRoot = new Map();
+    for (const [name, n] of this.names) {
+      const r = this.find(n);
+      if (!byRoot.has(r)) byRoot.set(r, []);
+      byRoot.get(r).push(name);
+    }
+    for (const [r, list] of byRoot) {
+      const p = this.pointOfRoot?.(r);
+      if (!p) continue;
+      list.sort((a, b) => (a.includes('.') - b.includes('.')));
+      give(p.id, list[0]);
+    }
+    for (const c of project.active().constraints) { const rec = this.byConstraintId?.get(c.id); if (rec?.cid) give(c.id, rec.cid); }
+    for (const [k, v] of this.itemNames || []) give(k, v);
+    project.names = names;
+  }
+
+  /** Which constraints, taken out one at a time, make the sketch solve
+   *  (mode 'fail') or stop being over-defined (mode 'over'). Yours are
+   *  listed; relations a shape made for you are only mentioned. */
+  diagnose(sketch, params, mode, redundantIds) {
+    const all = sketch.constraints.slice();
+    const recs = [];
+    for (const c of all) { const rec = this.byConstraintId.get(c.id); if (rec && !recs.includes(rec)) recs.push(rec); }
+    // the solver's suspects first, then the rest; at most 80 tries
+    const suspect = new Set([...(redundantIds || [])].map(id => this.byConstraintId.get(id)).filter(Boolean));
+    const order = [...recs.filter(r => suspect.has(r)), ...recs.filter(r => !suspect.has(r))].slice(0, 80);
+    const fixes = [];
+    for (const rec of order) {
+      sketch.constraints = all.filter(c => this.byConstraintId.get(c.id) !== rec);
+      restoreParams(params);
+      let r;
+      try { r = new Solver().solve(sketch, [sketch], [], { diagnostics: true }); } catch { continue; }
+      const ok = r.ok && r.residual <= 1e-6 && (mode === 'fail' || !(r.state === 'over' || r.redundantIds?.size > 0));
+      if (ok) fixes.push(rec);
+    }
+    sketch.constraints = all;
+    const mine = fixes.filter(r => !r.auto), auto = fixes.filter(r => r.auto);
+    if (!mine.length) return { culprits: auto.slice(0, 12), alsoAuto: [] };
+    return { culprits: mine.slice(0, 12), alsoAuto: auto };
+  }
+
   /* ---- solving ---- */
   solve(project) {
     const sketch = project.active();
     const before = snapshot(sketch);
+    const params = paramSnapshot(sketch);
     const r = new Solver().solve(sketch, [sketch], [], { diagnostics: true });
     for (const e of sketch.entities) if (e instanceof Arc) e.syncEnds();
-    const blame = (ids) => {
-      const out = new Set();
-      for (const id of ids || []) { const rec = this.byConstraintId.get(id); if (rec) out.add(rec.where); }
-      return [...out];
-    };
-    if (!r.ok || r.residual > 1e-6) {
-      const who = blame(r.redundantIds);
-      this.bad('The constraints cannot all be met at once (they contradict each other, or the sizes are impossible).'
-        + (who.length ? ` Check: ${who.join('; ')}.` : ''));
-      return null;
-    }
+    const failed = !r.ok || r.residual > 1e-6;
     // What the editor would show in red (it shows redundant rows nobody is
     // blamed for, like an offset's "same direction" row, as fine).
-    if (r.state === 'over' || r.redundantIds?.size > 0) {
-      const who = blame(r.redundantIds);
-      this.bad('Some constraints repeat what others already fix (over-defined; OnSketch shows these in red).'
-        + (who.length ? ` Remove one of: ${who.join('; ')}.` : ''));
+    const over = !failed && (r.state === 'over' || r.redundantIds?.size > 0);
+    if (failed || over) {
+      const after = paramSnapshot(sketch);
+      const { culprits, alsoAuto } = this.diagnose(sketch, params, failed ? 'fail' : 'over', r.redundantIds);
+      restoreParams(after);
+      const list = culprits.map(c => c.where).join('; ');
+      const hint = culprits.some(c => c.type === 'offset') ? ' An offset already keeps its lines parallel: if the copies are rectangles or have horizontal / vertical relations of their own, draw them as polylines (no relations of their own), or use "distance" instead of "offset".' : '';
+      const auto = alsoAuto.length ? ` (They clash with relations made for you by ${[...new Set(alsoAuto.map(c => c.where.replace(/ \(.*$/, '')))].join(', ')}.)` : '';
+      if (failed) {
+        this.bad('The constraints cannot all be met at once (they contradict each other, or a size is impossible).'
+          + (list ? ` Removing any one of these makes it solvable: ${list}.${auto}${hint}` : ' No single constraint is to blame: check the sizes (a triangle whose sides can\'t meet, a radius too big for its place).'));
+      } else {
+        this.bad('Some constraints repeat what others already fix (over-defined; OnSketch shows these in red).'
+          + (list ? ` Remove one of: ${list}.${auto}${hint}` : ''));
+      }
       return null;
     }
     if (r.collapsed?.size) {
@@ -1096,6 +1220,17 @@ function lookup(sketch) {
   for (const e of sketch.entities) walk(e);
   return (id, k) => byId.get(id)?.[k] ?? 0;
 }
+/** Every solver parameter's value, to try things and put them back. */
+function paramSnapshot(sketch) {
+  const out = [], seen = new Set();
+  const walk = (e) => { if (seen.has(e)) return; seen.add(e); for (const k of e.paramKeys()) out.push([e, k, e[k]]); for (const c of e.children()) walk(c); };
+  for (const e of sketch.entities) walk(e);
+  return out;
+}
+function restoreParams(snap) {
+  for (const [e, k, v] of snap) e[k] = v;
+  for (const [e] of snap) if (e instanceof Arc) e.syncEnds();
+}
 function snapshot(sketch) {
   const out = new Map();
   const walk = (e) => { if (e instanceof Point) out.set(e.id, { x: e.x, y: e.y }); for (const c of e.children()) walk(c); };
@@ -1142,6 +1277,14 @@ export function projectToSpec(project) {
   const patterns = sketch.constraints.filter(c => c.kind === 'pattern');
   for (const c of patterns) for (const inst of c.instances || []) for (const pr of inst.pairs) copies.add(pr[1]);
 
+  // Names given by an assistant (project.names): shapes first, then points.
+  const given = project.names || {};
+  const used = new Set();
+  const entName = new Map();
+  for (const e of sketch.entities) {
+    const n = given[e.id];
+    if (!(e instanceof Point) && isName(n) && !used.has(n)) { entName.set(e.id, n); used.add(n); }
+  }
   const pointName = new Map();     // Point id → spec name
   const nameOf = (p) => {
     if (p.bezierOwner) {
@@ -1151,8 +1294,11 @@ export function projectToSpec(project) {
     }
     if (copies.has(p.id)) { unsupported.add('relations or links on pattern copies'); return null; }
     if (!pointName.has(p.id)) {
-      pointName.set(p.id, p.id);
-      spec.points[p.id] = [r6(p.x), r6(p.y)];
+      let n = given[p.id];
+      if (!isName(n) || used.has(n) || all.has(n)) n = p.id;
+      used.add(n);
+      pointName.set(p.id, n);
+      spec.points[n] = [r6(p.x), r6(p.y)];
     }
     return pointName.get(p.id);
   };
@@ -1202,10 +1348,13 @@ export function projectToSpec(project) {
   const val = (c, v) => (c.expr ? c.expr : r6(v));
   const handleRe = /^(.+)\.(c1|c2)$/;
   const isHandle = (v) => typeof v === 'string' && handleRe.test(v) && all.get(handleRe.exec(v)[1]) instanceof Bezier;
-  const out = (o, c) => {
+  let current = null;                        // the constraint being written out
+  const out = (o, c = current) => {
     if (!Object.values(o).every(v => v != null && !(Array.isArray(v) && v.some(x => x == null)))) { unsupported.add(`a ${o.type} constraint`); return; }
     if (o.type !== 'symmetric' && o.type !== 'fix' && Object.values(o).flat().some(isHandle)) { unsupported.add('relations on curve handles'); return; }
-    if (c?.driven) o.reference = true;
+    if (c?.driven && 'value' in o) o.reference = true;
+    else if (c?.driven && o.type === 'equal') o.reference = true;
+    if (c && isName(given[c.id])) o.id = given[c.id];
     if (c?.name && 'value' in o && !/^D\d+$/.test(c.name)) o.name = c.name;
     else if (c?.name && 'value' in o && usedNames.has(c.name)) o.name = c.name;
     spec.constraints.push(o);
@@ -1219,6 +1368,7 @@ export function projectToSpec(project) {
 
   const offsetsCovered = new Set();
   for (const c of sketch.constraints) {
+    current = c;
     if (c.kind !== 'pattern' && copies.size && c.refs().some(id => copies.has(id))) { unsupported.add('relations or links on pattern copies'); continue; }
     switch (c.kind) {
       case 'arcEndpointCoincident': break;                // expressed through the arc's from / to
@@ -1300,6 +1450,7 @@ export function projectToSpec(project) {
   }
   // Offset relations without a distance.
   for (const c of sketch.constraints) {
+    current = c;
     if (c.kind !== 'offset') continue;
     const key = `${c.sourceEntityId}>${c.targetEntityId}`;
     if (!offsetsCovered.has(key)) out({ type: 'offset', pairs: [[c.sourceEntityId, c.targetEntityId]] });
@@ -1314,5 +1465,102 @@ export function projectToSpec(project) {
   presentationToSpec(project, sketch, spec, unsupported, P, copies);
   // Patterns go after the shapes they repeat (they are listed with them).
   spec.shapes.sort((a, b) => (a.type === 'pattern') - (b.type === 'pattern'));
+  // Constraint and drawing item ids that were given.
+  const strokeIds = new Map((sketch.strokes || []).map((st, i) => [i, st.id]));
+  spec.drawing?.forEach((it, i) => { const n = given[strokeIds.get(i)]; if (n && !it.id) it.id = n; });
+  // Shapes by the names they were given: every reference to them too.
+  if (entName.size) {
+    const rename = (v) => {
+      if (typeof v !== 'string') return v;
+      if (entName.has(v)) return entName.get(v);
+      const m = /^(.+)\.(start|end|center|c1|c2)$/.exec(v);
+      return m && entName.has(m[1]) ? `${entName.get(m[1])}.${m[2]}` : v;
+    };
+    // fields that hold words, not references ("shape" is a reference in a
+    // constraint, a kind of drawing shape in the drawing)
+    const SKIP = new Set(['text', 'src', 'color', 'type', 'layer', 'group', 'name', 'mode', 'kind', 'head', 'tips', 'fill', 'line_style', 'align', 'param']);
+    const walk = (o, skip) => {
+      if (Array.isArray(o)) { for (let i = 0; i < o.length; i++) { if (typeof o[i] === 'string') o[i] = rename(o[i]); else walk(o[i], skip); } return; }
+      if (!o || typeof o !== 'object') return;
+      for (const [k, v] of Object.entries(o)) {
+        if (skip.has(k)) continue;
+        if (typeof v === 'string') o[k] = rename(v); else walk(v, skip);
+      }
+    };
+    walk(spec.shapes, SKIP); walk(spec.constraints, SKIP); walk(spec.fills, SKIP);
+    walk(spec.drawing, new Set([...SKIP, 'shape']));
+  }
   return { spec, lossless: unsupported.size === 0, unsupported: [...unsupported] };
+}
+
+/* =============== THE SPEC AS SENT ============================== */
+
+/** A short hash of what a spec decides (geometry, relations, drawing,
+ *  layers, variables, display), rounded so a re-solve's noise doesn't
+ *  count. Not the title, tool sizes, label positions or the stored names. */
+export function specFingerprint(project) {
+  const o = project.toJSON({ images: false });
+  for (const k of ['name', 'sizes', 'activeLayerId', 'activeSketchId', 'remixedFrom', 'names', 'aiSpec', 'version']) delete o[k];
+  const text = JSON.stringify(o, (k, v) => {
+    if (/^label/.test(k)) return undefined;
+    if (k === 'traces' && v && typeof v === 'object') return v.point;      // a re-trace doesn't change the drawing's meaning
+    if (typeof v === 'number') return Math.round(v * 1e6) / 1e6;
+    return v;
+  });
+  let h1 = 0x811c9dc5, h2 = 0x01000193;
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 16777619);
+    h2 = Math.imul(h2 + c, 2246822519) ^ (h2 >>> 13);
+  }
+  return (h1 >>> 0).toString(36) + (h2 >>> 0).toString(36) + text.length.toString(36);
+}
+
+/** Keeps `spec` with the project (pictures as "image:<id>"), with the
+ *  fingerprint of what it builds once saved and loaded. */
+export function attachSpec(project, spec) {
+  const kept = JSON.parse(JSON.stringify(spec));
+  delete kept.title;
+  for (const it of kept.drawing || []) {
+    if (it?.type === 'image' && typeof it.src === 'string' && it.src.startsWith('data:')) it.src = `image:${imageId(it.src.replace(/\s+/g, ''))}`;
+  }
+  project.aiSpec = null;
+  const loaded = Project.fromJSON(JSON.parse(JSON.stringify(project.toJSON())));
+  project.aiSpec = { spec: kept, fp: specFingerprint(loaded) };
+  return project;
+}
+
+/**
+ * The spec of a project: exactly as an assistant last sent it when the
+ * drawing hasn't changed since (ids, groups, alignment, formulas…), else
+ * worked out from the drawing (projectToSpec) with the names it was given.
+ */
+export function readSpec(project) {
+  if (project.aiSpec && project.aiSpec.fp === specFingerprint(project)) {
+    return { spec: JSON.parse(JSON.stringify(project.aiSpec.spec)), lossless: true, unsupported: [], exact: true };
+  }
+  return { ...projectToSpec(project), exact: false };
+}
+
+/**
+ * Where a sketch stands: solved values of variables and named dimensions
+ * (user units: lengths in the sketch's unit, angles in degrees), degrees
+ * of freedom, and the shapes still free to move (by name).
+ */
+export function sketchState(project) {
+  const sketch = project.active();
+  if (!sketch) return { state: 'empty', dof: 0, values: {}, free: [] };
+  const values = {};
+  solveEquations(project, () => {});
+  for (const v of project.variables || []) { if (Number.isFinite(v.value)) values[v.name] = r6(v.value); delete v.value; delete v.error; }
+  for (const c of allDimensions(project)) if (c.name && c.value != null) values[c.name] = r6(userValue(c));
+  const r = new Solver().solve(sketch, [sketch], [], { diagnostics: true, revertOnFailure: true });
+  for (const e of sketch.entities) if (e instanceof Arc) e.syncEnds();
+  const names = project.names || {};
+  const free = [];
+  for (const e of sketch.entities) {
+    const st = r.entityStatus?.get(e.id);
+    if (st === 'under' && !e.construction) free.push(names[e.id] || e.id);
+  }
+  return { state: r.state === 'fully' ? 'fully' : r.state === 'over' ? 'over' : 'under', dof: r.dof ?? null, values, free: free.slice(0, 40), ...(free.length > 40 ? { more_free: free.length - 40 } : {}) };
 }

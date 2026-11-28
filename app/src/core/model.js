@@ -178,6 +178,12 @@ export class Project {
     this.display = null;          // grid / snap / dimensions / relations shown (cleanDisplay), or null when never set
     this.variables = [];          // global variables: { name, expr } (value/error are computed)
     this.remixedFrom = null;      // { id, name, author }: the library sketch this one was remixed from
+    // Names an AI assistant gave shapes and points ({ id: name }), kept so
+    // the sketch reads back with them (core/spec.js projectToSpec), and the
+    // spec it last sent with a fingerprint of what it built (returned as
+    // sent while the drawing is unchanged). The editor only carries them.
+    this.names = {};
+    this.aiSpec = null;
     this.drawStyle = null;        // style given to new entities (set by the editor; not saved)
     this.units = 'mm';
     // Line weight, pen, marker, arrow and text sizes, in drawing units
@@ -298,6 +304,8 @@ export class Project {
       sketches:this.sketches.map(s => s.toJSON()),
       ...(Object.keys(pics).length ? { images: pics } : {}),
       ...(this.remixedFrom ? { remixedFrom: { ...this.remixedFrom } } : {}),
+      ...(Object.keys(this.names || {}).length ? { names: { ...this.names } } : {}),
+      ...(this.aiSpec ? { aiSpec: this.aiSpec } : {}),
     };
   }
   static fromJSON(o) {
@@ -308,6 +316,10 @@ export class Project {
     p.background = /^#[0-9a-f]{6}$/i.test(o.background || '') ? o.background : null;
     p.display = cleanDisplay(o.display);
     p.remixedFrom = cleanRemix(o.remixedFrom);
+    if (o.names && typeof o.names === 'object' && !Array.isArray(o.names)) {
+      for (const [id, n] of Object.entries(o.names)) if (typeof n === 'string' && n.length <= 80) p.names[id] = n;
+    }
+    if (o.aiSpec && typeof o.aiSpec === 'object' && typeof o.aiSpec.fp === 'string' && o.aiSpec.spec && typeof o.aiSpec.spec === 'object') p.aiSpec = { fp: o.aiSpec.fp, spec: o.aiSpec.spec };
     p.variables = Array.isArray(o.variables)
       ? o.variables.filter(v => v && typeof v.name === 'string' && typeof v.expr === 'string').map(v => {
         const out = { name: v.name, expr: v.expr };

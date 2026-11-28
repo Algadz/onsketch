@@ -35,7 +35,7 @@
 
 import { ARROW_HEADS, ARROW_TIPS, cleanAttach } from './arrows.js';
 import { imageCorners, imageHit, isImage } from './images.js';
-import { SHAPE_FILLS, SHAPE_IDS, isShape, shapeCorners, shapeHit } from './shapes.js';
+import { OPEN_SHAPES, SHAPE_FILLS, SHAPE_IDS, isShape, shapeCorners, shapeHit } from './shapes.js';
 
 export const STROKE_KINDS = ['pen', 'marker'];
 export const INK_KINDS = ['pen', 'marker', 'arrow', 'text', 'image', 'shape'];
@@ -174,6 +174,7 @@ export function reviveStroke(o) {
       width: Number.isFinite(width) && width > 0 ? width : 1, points: points.slice(0, 3),
     };
     if (SHAPE_FILLS.includes(o.fill) && o.fill !== 'none') sh.fill = o.fill;
+    if (width === 0 && sh.fill && !OPEN_SHAPES.has(sh.shape)) sh.width = 0;     // filled, no outline
     if (o.dash) sh.dash = true;
     return sh;
   }

@@ -17,6 +17,7 @@
 // (verify_jwt is off in config.toml too: unauthenticated requests must get
 // a 401 with the WWW-Authenticate header below, which starts sign-in.)
 import { createClient } from 'npm:@supabase/supabase-js@2.119.2';
+import { initWasm, Resvg } from 'npm:@resvg/resvg-wasm@2.6.2';
 import { handleMessage, createTools } from './server.js';
 import { Cloud } from './_app/cloud/cloud.js';
 
@@ -52,6 +53,30 @@ class ServerCloud extends Cloud {
     if (error) throw error;
     return data;
   }
+}
+
+// Pictures of sketches (tool results): SVG → PNG with resvg, and a font
+// for the text (the server has none). Loaded once, on first use.
+const RESVG_WASM = 'https://cdn.jsdelivr.net/npm/@resvg/resvg-wasm@2.6.2/index_bg.wasm';
+const FONTS = ['https://cdn.jsdelivr.net/npm/dejavu-fonts-ttf@2.37.3/ttf/DejaVuSans.ttf', 'https://cdn.jsdelivr.net/npm/dejavu-fonts-ttf@2.37.3/ttf/DejaVuSans-Bold.ttf'];
+let renderer: Promise<Uint8Array[]> | null = null;
+function loadRenderer() {
+  renderer ??= (async () => {
+    await initWasm(fetch(RESVG_WASM));
+    return Promise.all(FONTS.map(async (u) => new Uint8Array(await (await fetch(u)).arrayBuffer())));
+  })().catch((e) => { renderer = null; throw e; });
+  return renderer;
+}
+async function renderPng(svg: string, width: number) {
+  const fontBuffers = await loadRenderer();
+  const r = new Resvg(svg, {
+    fitTo: { mode: 'width', value: width },
+    background: 'white',
+    font: { fontBuffers, loadSystemFonts: false, defaultFontFamily: 'DejaVu Sans', sansSerifFamily: 'DejaVu Sans' },
+  });
+  const png = r.render().asPng();
+  r.free?.();
+  return png;
 }
 
 function unauthorized(message = 'Sign in to OnSketch to use this server.') {
@@ -107,7 +132,7 @@ Deno.serve(async (req) => {
   try { body = await req.json(); }
   catch { return json({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } }, 400); }
 
-  const tools = createTools(store, { appUrl: APP_URL });
+  const tools = createTools(store, { appUrl: APP_URL, renderPng });
   const log = (...args: unknown[]) => console.error('[mcp]', ...args);
   if (Array.isArray(body)) {                 // batches (older clients)
     const answers = (await Promise.all(body.map(m => handleMessage(m, tools, { log })))).filter(Boolean);

@@ -6,7 +6,7 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, resolve } from 'node:path';
 import { createRequire } from 'node:module';
-import { buildFromSpec } from '../app/src/core/spec.js';
+import { buildFromSpec, attachSpec } from '../app/src/core/spec.js';
 import { FORMAT } from '../supabase/functions/mcp/server.js';
 import { pngDataUrl } from './unit/helpers.js';
 
@@ -27,6 +27,30 @@ let failed = 0;
 const check = (cond, msg) => { console.log((cond ? 'ok   ' : 'FAIL ') + msg); if (!cond) failed++; };
 
 const SPECS = {
+  'bar mechanism': {
+    variables: { a: { value: 60, slider: { min: 0, max: 360, step: 5 } } },
+    layers: ['Frame', 'Links', 'Motion', 'Notes'],
+    points: { o: [0, 0] },
+    shapes: [
+      { id: 'ground', type: 'line', from: [-20, 0], to: [70, 0], construction: true, layer: 'Frame' },
+      { id: 'crank', type: 'bar', from: 'o', to: [5, 8.660254], width: 6, hole: 2, layer: 'Links' },
+      { id: 'rod', type: 'bar', from: 'crank.end', to: [28.452079, 0], width: 5, hole: 2, layer: 'Links' },
+    ],
+    constraints: [
+      { type: 'fix', point: 'o' }, { type: 'fix', point: 'ground.start' }, { type: 'fix', point: 'ground.end' },
+      { id: 'r', type: 'length', line: 'crank.axis', value: 10 }, { type: 'length', line: 'rod.axis', value: 25 },
+      { type: 'on', point: 'rod.end', shape: 'ground' },
+      { type: 'angle', a: 'ground', b: 'crank.axis', value: 'a', signed: true },
+    ],
+    fills: [{ at: [-2, 0], color: '#9bc3ff' }],
+    drawing: [
+      { id: 'circle', type: 'trace', point: 'crank.end', sweep: { variable: 'a', from: 0, to: 360, steps: 72 }, color: '#1f7ad6', layer: 'Motion' },
+      { id: 'slide', type: 'trace', point: 'rod.end', sweep: { variable: 'a', from: 0, to: 180 }, color: '#d63a3a', layer: 'Motion' },
+      { id: 'turn', type: 'arrow', from: [-14, 2], to: [-2, 14], bend: 0.35, color: '#14946b', layer: 'Notes' },
+      { id: 'tag', type: 'text', text: 'crank', at: [2.5, 14], size: 2.5, link: 'crank', layer: 'Notes' },
+      { id: 'glow', type: 'shape', shape: 'ellipse', center: [28.452079, 0], width: 12, height: 12, fill: 'tint', outline: 'none', color: '#c9a400', link: 'rod', layer: 'Notes' },
+    ],
+  },
   'every feature': {
     variables: { W: { value: 120, slider: { min: 80, max: 200, step: 5 } }, H: 'W / 2', N: 4 },
     display: { names: true },
@@ -124,6 +148,7 @@ const SPECS = {
 const browser = await chromium.launch();
 for (const [name, spec] of Object.entries(SPECS)) {
   const { project, report } = buildFromSpec(spec, { title: name });
+  attachSpec(project, spec);                       // as the MCP server saves it
   const json = project.toJSON();
   const ctx = await browser.newContext({ viewport: { width: 1300, height: 850 } });
   await ctx.route(/umami|jsdelivr|supabase\.co/, r => r.abort());
@@ -133,7 +158,7 @@ for (const [name, spec] of Object.entries(SPECS)) {
   page.on('pageerror', e => errors.push(String(e)));
   await page.goto(base);
   await page.waitForFunction(() => window._app?.project);
-  const got = await page.evaluate(() => {
+  const got = await page.evaluate(async () => {
     const app = window._app;
     app.solveAndRender?.();
     const s = app.project.active();
@@ -142,14 +167,17 @@ for (const [name, spec] of Object.entries(SPECS)) {
     s.entities.forEach(walk);
     const arcs = s.entities.filter(e => e.constructor.kind === 'arc').map(a => [a.center.x, a.center.y, a.r, a.a0, a.a1]);
     const stale = s.strokes.filter(k => k.traces && (k._stale || app._pathIsStale?.(k))).length;
+    const { specFingerprint } = await import('./src/core/spec.js');
+    const exact = !!app.project.aiSpec && specFingerprint(app.project) === app.project.aiSpec.fp;
     const eqErrors = (app.project.variables || []).filter(v => v.error).length + s.constraints.filter(c => c.exprError).length;
-    return { stale, eqErrors, sliders: (app.project.variables || []).filter(v => v.slider).length, strokes: s.strokes.map(k => k.kind), fills: s.fills.length, arcs, name: app.project.name, entities: s.entities.length, constraints: s.constraints.length, state: app._lastSolve?.state, redundant: app._lastSolve?.redundantIds?.size ?? 0, pts };
+    return { exact, stale, eqErrors, sliders: (app.project.variables || []).filter(v => v.slider).length, strokes: s.strokes.map(k => k.kind), fills: s.fills.length, arcs, name: app.project.name, entities: s.entities.length, constraints: s.constraints.length, state: app._lastSolve?.state, redundant: app._lastSolve?.redundantIds?.size ?? 0, pts };
   });
   const want = project.active();
   check(got.name === name && got.entities === want.entities.length && got.constraints === want.constraints.length,
     `${name}: opens with its ${want.entities.length} shapes and ${want.constraints.length} relations`);
   check(JSON.stringify(got.strokes) === JSON.stringify(want.strokes.map(k => k.kind)) && got.fills === want.fills.length,
     `${name}: drawing side intact (${got.strokes.length} items, ${got.fills} fills)`);
+  check(got.exact, `${name}: still reads back exactly as sent after the editor opened it`);
   if (name === 'every feature') {
     check(got.stale === 0, 'every feature: traced paths up to date in the editor');
     check(got.eqErrors === 0, 'every feature: no equation errors in the editor');

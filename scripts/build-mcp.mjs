@@ -11,7 +11,7 @@ import { dirname, join, relative, resolve } from 'node:path';
 
 const SRC = new URL('../app/src/', import.meta.url).pathname;
 const OUT = new URL('../supabase/functions/mcp/_app/', import.meta.url).pathname;
-const ENTRIES = ['core/spec.js', 'core/model.js', 'cloud/cloud.js', 'render/export.js', 'core/dxf.js'];
+const ENTRIES = ['core/spec.js', 'core/model.js', 'cloud/cloud.js', 'core/sweep.js', 'render/sketch-svg.js', 'core/dxf.js'];
 
 const IMPORT_RE = /(?:^|[\s;])(?:import|export)\s[^'"]*?from\s*['"](\.{1,2}\/[^'"]+)['"]|(?:^|[\s;])import\s*['"](\.{1,2}\/[^'"]+)['"]/g;
 

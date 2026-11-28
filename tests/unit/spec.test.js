@@ -319,7 +319,10 @@ test('drawing problems are named', () => {
   assert.match(p({ drawing: [{ type: 'shape', shape: 'blob', center: [0, 0], width: 1, height: 1 }] }), /"shape" is one of rect/);
   assert.match(p({ drawing: [{ type: 'arrow', from: [0, 0], to: [1, 1], link: 'hole' }] }), /through their ends/);
   assert.match(p({ drawing: [{ type: 'text', text: 'x', at: 'nowhere' }] }), /unknown point "nowhere"/);
-  assert.match(p({ drawing: [{ type: 'text', text: 'x', at: [0, 0], link: 'plate' }] }), /"plate" is a rectangle; name one side/);
+  // a whole part: follows it (through its first side), turning with it
+  const part = buildFromSpec({ ...PART, drawing: [{ type: 'text', text: 'x', at: [0, 0], link: 'plate' }] }).project.active();
+  const bottom = part.entities.find(e => e instanceof Line);
+  assert.equal(part.strokes[0].link.to, bottom.id);
   assert.match(p({ drawing: [{ type: 'arrow', from: [0, 0], to: { on: 'plate.top', t: 2 } }] }), /fraction along the line/);
   assert.match(p({ shapes: [{ type: 'line', from: [0, 0], to: [1, 0], line_style: 'wavy' }], constraints: [], fills: [], drawing: [] }), /"line_style" is one of/);
 });

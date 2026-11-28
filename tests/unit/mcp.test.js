@@ -39,7 +39,7 @@ test('initialize, tools/list, ping, notifications, unknown methods', async () =>
   const future = await handleMessage({ jsonrpc: '2.0', id: 0, method: 'initialize', params: { protocolVersion: '2099-01-01' } }, null);
   assert.equal(future.result.protocolVersion, '2025-11-25');
   const list = await handleMessage({ jsonrpc: '2.0', id: 2, method: 'tools/list' }, null);
-  assert.deepEqual(list.result.tools.map(t => t.name), ['create_sketch', 'update_sketch', 'get_sketch', 'export_sketch', 'list_sketches']);
+  assert.deepEqual(list.result.tools.map(t => t.name), ['create_sketch', 'edit_sketch', 'update_sketch', 'check_sketch', 'get_sketch', 'export_sketch', 'list_sketches']);
   for (const t of TOOLS) assert.equal(t.inputSchema.type, 'object');
   assert.deepEqual((await handleMessage({ jsonrpc: '2.0', id: 3, method: 'ping' }, null)).result, {});
   assert.equal(await handleMessage({ jsonrpc: '2.0', method: 'notifications/initialized' }, null), null);
@@ -101,7 +101,7 @@ test('get_sketch then update_sketch, with the revision check', async () => {
   const xs = store.db.get(ID).data.sketches[0].entities.flatMap(e => e.p1 ? [e.p1.x, e.p2.x] : []);
   assert.equal(Math.max(...xs), 60);
   const stale = await call(tools, 'update_sketch', { id: ID, revision: 4, spec: wider });
-  assert.match(text(stale), /changed since it was read/);
+  assert.match(text(stale), /no longer at revision 4\. It is now at revision 5/);
 });
 
 test('someone else\'s public sketch can be read, not changed; lossy sketches are not replaced', async () => {
@@ -140,15 +140,19 @@ test('the example in the format guide draws, fully defined', () => {
 test('export_sketch: SVG to look at, DXF at real size', async () => {
   const { project } = buildFromSpec(SPEC, { title: 'Plate' });
   const store = fakeStore({ rows: [{ id: ID, owner_id: 'me', name: 'Plate', visibility: 'private', revision: 1, data: project.toJSON() }] });
-  const tools = createTools(store);
-  const svg = await call(tools, 'export_sketch', { id: ID });
+  const tools = createTools(store, { renderPng: async (svgText, w) => new Uint8Array([137, 80, 78, 71, w & 255]) });
+  const png = await call(tools, 'export_sketch', { id: ID });
+  assert.equal(png.result.content[1].type, 'image', 'a picture by default');
+  assert.equal(png.result.content[1].mimeType, 'image/png');
+  const svg = await call(tools, 'export_sketch', { id: ID, format: 'svg' });
   assert.equal(svg.result.isError, false, text(svg));
+  assert.match(svg.result.structuredContent.svg, /^<svg/, 'the SVG is in the structured result too');
   assert.match(text(svg), /^<svg[^>]*xmlns="http:\/\/www.w3.org\/2000\/svg"/);
   assert.match(text(svg), /<title>Plate<\/title>/);
   const dxf = await call(tools, 'export_sketch', { id: ID, format: 'dxf' });
   assert.match(text(dxf), /SECTION/);
   assert.equal(dxf.result.structuredContent.shapes, 5);
-  assert.match(text(await call(tools, 'export_sketch', { id: ID, format: 'pdf' })), /"svg" or "dxf"/);
+  assert.match(text(await call(tools, 'export_sketch', { id: ID, format: 'pdf' })), /"png", "svg" or "dxf"/);
 });
 
 test('pictures from https links are downloaded; others refused; pictures survive an update', async () => {
