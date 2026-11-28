@@ -26,6 +26,26 @@ let failed = 0;
 const check = (cond, msg) => { console.log((cond ? 'ok   ' : 'FAIL ') + msg); if (!cond) failed++; };
 
 const SPECS = {
+  'annotated part': {
+    layers: ['Part', 'Notes'], background: '#f7f3ea',
+    shapes: [
+      { id: 'plate', type: 'rectangle', corner: [0, 0], width: 80, height: 40, layer: 'Part' },
+      { id: 'hole', type: 'circle', center: [20, 20], d: 10, layer: 'Part' },
+      { id: 'slot', type: 'rectangle', corner: [50, 15], width: 20, height: 10, layer: 'Part' },
+      { id: 'axis', type: 'line', from: [40, -5], to: [40, 45], construction: true, line_style: 'center', layer: 'Part' },
+    ],
+    fills: [{ at: [40, 35], color: '#cfe3ff', layer: 'Part' }, { at: [60, 20], color: '#ffe08a', opacity: 0.6, layer: 'Part' }],
+    drawing: [
+      { type: 'text', text: 'Ø10 through', at: [20, 52], size: 4, box: true, link: 'hole', layer: 'Notes' },
+      { type: 'arrow', from: [20, 49], to: { on: 'hole', angle: 90 }, color: '#d63a3a', layer: 'Notes' },
+      { type: 'shape', shape: 'ellipse', center: 'hole.center', width: 16, height: 16, color: '#d63a3a', dash: true, link: 'hole', layer: 'Notes' },
+      { type: 'shape', shape: 'callout', center: [92, 40], width: 26, height: 14, fill: 'paper', layer: 'Notes', group: 'note' },
+      { type: 'text', text: 'Deburr\nall edges', at: [92, 41], size: 3, layer: 'Notes', group: 'note' },
+      { type: 'arrow', from: [80, 33], to: { on: 'slot.right', t: 0.5 }, layer: 'Notes' },
+      { type: 'marker', points: [[0, -4], [80, -4]], color: '#c9a400', opacity: 0.5, link: 'plate.bottom', layer: 'Notes' },
+      { type: 'text', text: 'BRACKET  80 × 40', at: [0, -10], align: 'left', size: 4, bold: true, link: { to: 'plate.bottom', t: 0 }, layer: 'Notes' },
+    ],
+  },
   'format guide example': JSON.parse(FORMAT.slice(FORMAT.indexOf('{', FORMAT.indexOf('Example (')))),
   'bracket with holes': {
     shapes: [
@@ -83,11 +103,13 @@ for (const [name, spec] of Object.entries(SPECS)) {
     const walk = (e) => { if (e.constructor.kind === 'point' && !e.arcOwner) pts.push([e.id, e.x, e.y]); for (const c of e.children()) walk(c); };
     s.entities.forEach(walk);
     const arcs = s.entities.filter(e => e.constructor.kind === 'arc').map(a => [a.center.x, a.center.y, a.r, a.a0, a.a1]);
-    return { arcs, name: app.project.name, entities: s.entities.length, constraints: s.constraints.length, state: app._lastSolve?.state, redundant: app._lastSolve?.redundantIds?.size ?? 0, pts };
+    return { strokes: s.strokes.map(k => k.kind), fills: s.fills.length, arcs, name: app.project.name, entities: s.entities.length, constraints: s.constraints.length, state: app._lastSolve?.state, redundant: app._lastSolve?.redundantIds?.size ?? 0, pts };
   });
   const want = project.active();
   check(got.name === name && got.entities === want.entities.length && got.constraints === want.constraints.length,
     `${name}: opens with its ${want.entities.length} shapes and ${want.constraints.length} relations`);
+  check(JSON.stringify(got.strokes) === JSON.stringify(want.strokes.map(k => k.kind)) && got.fills === want.fills.length,
+    `${name}: drawing side intact (${got.strokes.length} items, ${got.fills} fills)`);
   check(got.state !== 'over' && got.redundant === 0, `${name}: nothing over-defined in the editor (state ${got.state}; spec said ${report.state})`);
   if (report.state === 'fully') check(got.state === 'fully', `${name}: fully defined in the editor too`);
   const before = new Map();
@@ -101,6 +123,26 @@ for (const [name, spec] of Object.entries(SPECS)) {
   if (arcsBefore.length) check(arcDiff < 1e-6, `${name}: arcs unchanged too (max ${arcDiff.toExponential(1)})`);
   check(errors.length === 0, `${name}: no page errors` + (errors.length ? `: ${errors.join(' | ')}` : ''));
   if (process.env.SHOT_DIR) await page.screenshot({ path: join(process.env.SHOT_DIR, name.replace(/\W+/g, '-') + '.png') });
+  if (name === 'format guide example') {
+    // Change the hole's position in the editor, as a person would: the
+    // linked label and the attached arrow follow, the fill stays.
+    const after = await page.evaluate(async () => {
+      const app = window._app, s = app.project.active();
+      const c = s.constraints.find(k => k.kind === 'distance' && k.axis === 'x' && k.value === 15);
+      const label = s.strokes[0], arrow = s.strokes[1];
+      const mid = (t) => { const b = t.points[0]; return b.x; };
+      const before = { labelX: mid(label), tipX: arrow.points[1].x };
+      app.setDimensionFromText(c, '35');
+      await new Promise(r => setTimeout(r, 300));
+      const hole = s.entities.find(e => e.constructor.kind === 'circle');
+      return { before, labelX: mid(label), tip: arrow.points[1], hole: [hole.center.x, hole.center.y, hole.r], fills: s.fills.length, regions: s.fills.filter(f => f.region).length };
+    });
+    check(Math.abs(after.hole[0] - 35) < 1e-6, 'editor: the hole moved to x = 35');
+    check(Math.abs(after.labelX - after.before.labelX - 20) < 1e-6, 'editor: the label linked to the hole moved with it');
+    check(Math.abs(after.tip.x - 35) < 1e-6 && Math.abs(after.tip.y - (after.hole[1] + after.hole[2])) < 1e-6, 'editor: the arrow tip stays on top of the hole');
+    check(after.fills === 1 && after.regions === 1, 'editor: the fill still colours the plate');
+    if (process.env.SHOT_DIR) await page.screenshot({ path: join(process.env.SHOT_DIR, 'format-example-after-edit.png') });
+  }
   await ctx.close();
 }
 await browser.close();

@@ -12,6 +12,9 @@
 // scripts/build-mcp.mjs (the Edge Function can only ship files in its own
 // folder). Edit app/src/, never ./_app/.
 import { buildFromSpec, projectToSpec, SpecError, cleanTitle, SHAPE_TYPES, CONSTRAINT_TYPES } from './_app/core/spec.js';
+import { DRAWING_TYPES, LINE_STYLE_IDS } from './_app/core/spec-drawing.js';
+import { SHAPE_IDS, SHAPE_FILLS } from './_app/core/shapes.js';
+import { ARROW_HEADS, ARROW_TIPS } from './_app/core/arrows.js';
 import { Project } from './_app/core/model.js';
 
 export const SERVER_INFO = { name: 'onsketch', title: 'OnSketch', version: '1.0.0' };
@@ -20,11 +23,20 @@ export const PROTOCOL_VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26', '202
 export const FORMAT = `OnSketch sketch format (the "spec").
 Coordinates are numbers in the sketch's units (default mm), x to the right, y UP (math axes, not screen axes). Angles in degrees.
 
+An OnSketch sketch has two sides, and a good sketch uses both, tied together:
+- CAD ("shapes" + "constraints"): the exact geometry, in black lines, with dimensions the user can edit (parts, outlines, holes, mechanisms, plans).
+- Drawing ("drawing", "fills", "layers"): what makes it read like a drawing: colour fills, labels, callouts, arrows, highlights, hand-drawn strokes, icons. Attach it to the CAD ("link", arrow ends on shapes, fills inside outlines) so it moves when a dimension changes.
+Don't fake drawing with CAD lines (no lettering or arrowheads built from lines, no hatching to show colour) and don't put real geometry in the drawing side.
+
 {
   "units": "mm",                                  // optional: mm, cm, m, km, in, ft, mi
   "points": { "A": [0, 0], "B": [40, 0] },        // optional named points, shared by every shape that uses the name
-  "shapes": [ ... ],                              // required
-  "constraints": [ ... ]                          // optional: relations and dimensions the solver keeps true
+  "shapes": [ ... ],                              // required: CAD geometry
+  "constraints": [ ... ],                         // optional: relations and dimensions the solver keeps true
+  "layers": ["Part", "Notes"],                    // optional: layer names, bottom to top (or { "name", "visible", "opacity" })
+  "fills": [ ... ],                               // optional: colour inside closed CAD outlines
+  "drawing": [ ... ],                             // optional: text, arrows, pen / marker strokes, shapes; drawn in this order
+  "background": "#f7f3ea"                         // optional: canvas colour
 }
 
 Wherever a point is expected you can give a name ("A"), a point of a shape ("plate.tl", "hole.center", "l1.end") or plain coordinates [x, y]. Ends at the same coordinates join automatically, so a closed outline is just shapes that meet.
@@ -37,6 +49,7 @@ Shapes (each may have "id": a name like "plate" or "hole_1", and "construction":
 - arc:       { "type": "arc", "center": P, "from": P, "to": P }   counter-clockwise from "from" to "to" (add "clockwise": true for the other way); both ends must be at the same distance from the centre.
              or { "type": "arc", "center": P, "r": 5, "start_angle": 0, "end_angle": 90 }     points: id.center, id.start, id.end
 - point:     { "type": "point", "at": P }                                            the id names the point
+Any CAD shape may also have "layer" (a name from "layers"), "line_style" (${LINE_STYLE_IDS.join(', ')}) and "weight" (line width in screen px, default 1.4). CAD lines are always drawn in black (their colour shows constraint state in the editor): colour comes from fills and the drawing side.
 
 Constraints (a, b are shape ids unless said; P is a point):
 - horizontal / vertical:        { "line": id }  or  { "a": P, "b": P } (two points level / aligned)
@@ -54,14 +67,29 @@ Constraints (a, b are shape ids unless said; P is a point):
 - radius / diameter: { "shape": circle or arc, "value": 5 }
 - angle:        { "a": line, "b": line, "value": 30 }   degrees between the lines as drawn (0–180)
 
+Fills: { "at": [x, y], "color": "#cfe3ff", "opacity": 0.35, "layer": "Part" }
+  Colours the closed area of CAD shapes (on that layer, construction excluded) around the point "at"; areas with holes inside keep the holes. The colour follows the area when dimensions change. "at" must be inside a closed outline.
+
+Drawing items (all take "color" "#rrggbb" (default black), "opacity" 0–1, "layer", "group" (a name: items with the same group move together), and except arrows "link"):
+- text:   { "type": "text", "text": "Ø10 through", "at": P, "size": 4, "align": "center" | "left" | "right", "bold": true, "angle": 0, "box": true | "#fff3b0", "border": true }
+          "at" is the middle of the text (or its left / right end with "align"); "size" is the letter height in drawing units; "box" puts the text on an opaque label (true: canvas colour) so it stays readable over lines and fills. Multi-line text: "\n".
+- arrow:  { "type": "arrow", "from": END, "to": END, "width": 0.5, "head": ${ARROW_HEADS.map(h => `"${h}"`).join(' | ')}, "tips": ${ARROW_TIPS.map(h => `"${h}"`).join(' | ')} (which ends get a head; default "end"), "dash": true }
+          END is [x, y] (free), a point name (attached to that point), { "on": line, "t": 0..1 } (attached at that fraction along the line) or { "on": circle or arc, "angle": degrees } (attached at that angle on it). Attached ends follow the geometry.
+- pen / marker: { "type": "pen", "points": [[x, y], ...], "width": 0.4, "dash": true }   freehand ink; marker is a wide translucent highlighter.
+- shape:  { "type": "shape", "shape": ${SHAPE_IDS.map(h => `"${h}"`).join(' | ')}, "center": P, "width": 20, "height": 12, "angle": 0, "fill": ${SHAPE_FILLS.map(h => `"${h}"`).join(' | ')}, "outline": 0.4, "dash": true }
+          ready-made drawing shapes (callout is a speech bubble): for highlights, icons, frames, title blocks. Not CAD: no dimensions.
+"link": a CAD shape id (line, circle, arc) or a point name: the item follows it. On a point it moves with the point; on a line it keeps its spot along the line and turns with it ({ "to": line, "t": 0..1 } picks the spot); on a circle or arc it moves with the centre and scales with the radius (a ring drawn around a hole grows with it).
+Sizes and widths are in drawing units; leave them out for sizes matched to the drawing.
+
 How to draw well:
 1. Draw at the real size with correct coordinates: the solver only fine-tunes. Constraints are optional; add the dimensions that matter (overall size, hole sizes and positions) so the user can edit them later.
 2. Don't repeat a constraint another already implies (a rectangle's sides are already horizontal / vertical; "equal" plus two equal "length"s is one too many): repeated constraints are refused.
 3. A closed outline (so it can be filled) is shapes whose ends meet: reuse points or the exact same coordinates.
 4. "fix" one point (for example the bottom-left corner) and dimension the rest for a fully defined sketch. Not required.
-5. If a call is refused, read the problems: each names the shape or constraint (by position) to fix.
+5. Label and explain with the drawing side: name parts with text linked to them, point at features with arrows attached to them, colour areas with fills, put notes on their own layer.
+6. If a call is refused, read the problems: each names the shape, constraint or drawing item (by position) to fix.
 
-Example (a 60 × 30 mm plate with rounded right end and a 6 mm hole):
+Example (a 60 × 30 mm plate with rounded right end and a 6 mm hole, filled, with a linked label and an arrow on the hole):
 { "points": { "a": [0,0], "b": [45,0], "c": [45,30], "d": [0,30] },
   "shapes": [
     { "id": "bottom", "type": "line", "from": "a", "to": "b" },
@@ -75,13 +103,22 @@ Example (a 60 × 30 mm plate with rounded right end and a 6 mm hole):
     { "type": "length", "line": "bottom", "value": 45 }, { "type": "length", "line": "left", "value": 30 },
     { "type": "diameter", "shape": "hole", "value": 6 }, { "type": "fix", "point": "a" },
     { "type": "distance", "a": "a", "b": "hole.center", "axis": "x", "value": 15 },
-    { "type": "distance", "a": "a", "b": "hole.center", "axis": "y", "value": 15 } ] }`;
+    { "type": "distance", "a": "a", "b": "hole.center", "axis": "y", "value": 15 } ],
+  "layers": ["Part", "Notes"],
+  "fills": [ { "at": [35, 15], "color": "#cfe3ff" } ],
+  "drawing": [
+    { "type": "text", "text": "Ø6 through", "at": [15, 40], "size": 3, "box": true, "link": "hole", "layer": "Notes" },
+    { "type": "arrow", "from": [15, 37], "to": { "on": "hole", "angle": 90 }, "color": "#d63a3a", "layer": "Notes" },
+    { "type": "text", "text": "MOUNTING PLATE", "at": [30, -6], "size": 3.5, "bold": true, "link": "bottom", "layer": "Notes" } ] }`;
 
 export const INSTRUCTIONS = `OnSketch is a parametric 2D sketcher (onsketch.io). These tools draw sketches in the user's OnSketch account and give back a link where they can open and edit them (drag, change dimensions, export to SVG, PNG, PDF or DXF).
 Use create_sketch for a new drawing, update_sketch to change one (read it first with get_sketch), list_sketches to find one. Always give the user the link from the result.
 ${FORMAT}`;
 
 const pointSchema = { description: 'A point: a name, a shape point like "plate.tl", or [x, y].', anyOf: [{ type: 'string' }, { type: 'array', items: { type: 'number' }, minItems: 2, maxItems: 2 }] };
+const arrowEndSchema = { description: 'An arrow end: [x, y], a point name, { "on": line, "t" } or { "on": circle/arc, "angle" }.', anyOf: [
+  { type: 'string' }, { type: 'array', items: { type: 'number' }, minItems: 2, maxItems: 2 },
+  { type: 'object', properties: { on: { type: 'string' }, t: { type: 'number' }, angle: { type: 'number' } }, required: ['on'] }] };
 const SPEC_SCHEMA = {
   type: 'object',
   description: 'The drawing, in the OnSketch sketch format described in the tool description.',
@@ -98,6 +135,7 @@ const SPEC_SCHEMA = {
           points: { type: 'array', items: pointSchema }, closed: { type: 'boolean' },
           corner: { type: 'array', items: { type: 'number' }, minItems: 2, maxItems: 2 }, width: { type: 'number' }, height: { type: 'number' },
           r: { type: 'number' }, d: { type: 'number' }, start_angle: { type: 'number' }, end_angle: { type: 'number' }, clockwise: { type: 'boolean' },
+          layer: { type: 'string' }, line_style: { type: 'string', enum: LINE_STYLE_IDS }, weight: { type: 'number' },
         },
       },
     },
@@ -110,6 +148,30 @@ const SPEC_SCHEMA = {
           a: pointSchema, b: pointSchema, point: pointSchema,
           line: { type: 'string' }, shape: { type: 'string' }, axis: { type: 'string', description: 'For symmetric: the axis line id. For distance: "x" or "y".' },
           value: { type: 'number' }, internal: { type: 'boolean' },
+        },
+      },
+    },
+    layers: { type: 'array', items: { anyOf: [{ type: 'string' }, { type: 'object', properties: { name: { type: 'string' }, visible: { type: 'boolean' }, opacity: { type: 'number' } }, required: ['name'] }] } },
+    background: { type: 'string', description: 'Canvas colour, "#rrggbb".' },
+    fills: {
+      type: 'array',
+      items: { type: 'object', required: ['at'], properties: { at: { type: 'array', items: { type: 'number' }, minItems: 2, maxItems: 2 }, color: { type: 'string' }, opacity: { type: 'number' }, layer: { type: 'string' } } },
+    },
+    drawing: {
+      type: 'array',
+      items: {
+        type: 'object', required: ['type'],
+        properties: {
+          type: { type: 'string', enum: DRAWING_TYPES },
+          text: { type: 'string' }, at: pointSchema, center: pointSchema, size: { type: 'number' },
+          align: { type: 'string', enum: ['center', 'left', 'right'] }, bold: { type: 'boolean' }, angle: { type: 'number' },
+          box: { anyOf: [{ type: 'boolean' }, { type: 'string' }] }, border: { type: 'boolean' },
+          from: arrowEndSchema, to: arrowEndSchema, head: { type: 'string', enum: ARROW_HEADS }, tips: { type: 'string', enum: ARROW_TIPS },
+          points: { type: 'array', items: { type: 'array', items: { type: 'number' }, minItems: 2, maxItems: 2 } },
+          shape: { type: 'string', enum: SHAPE_IDS }, width: { type: 'number' }, height: { type: 'number' },
+          fill: { type: 'string', enum: SHAPE_FILLS }, outline: { type: 'number' }, dash: { type: 'boolean' },
+          color: { type: 'string' }, opacity: { type: 'number' }, layer: { type: 'string' }, group: { type: 'string' },
+          link: { anyOf: [{ type: 'string' }, { type: 'object', properties: { to: { type: 'string' }, t: { type: 'number' } }, required: ['to'] }] },
         },
       },
     },
@@ -194,7 +256,8 @@ export function createTools(store, { appUrl = 'https://onsketch.io' } = {}) {
     }
   };
   const summary = (report) => {
-    const lines = [`${report.shapes} shape${report.shapes === 1 ? '' : 's'}, ${report.constraints} constraint${report.constraints === 1 ? '' : 's'}; ${report.state === 'fully' ? 'fully defined' : `${report.dof} degree${report.dof === 1 ? '' : 's'} of freedom left`}.`];
+    const extra = [report.drawing ? `${report.drawing} drawing item${report.drawing === 1 ? '' : 's'}` : '', report.fills ? `${report.fills} fill${report.fills === 1 ? '' : 's'}` : ''].filter(Boolean).join(', ');
+    const lines = [`${report.shapes} shape${report.shapes === 1 ? '' : 's'}, ${report.constraints} constraint${report.constraints === 1 ? '' : 's'}${extra ? `, ${extra}` : ''}; ${report.state === 'fully' ? 'fully defined' : `${report.dof} degree${report.dof === 1 ? '' : 's'} of freedom left`}.`];
     for (const w of report.warnings) if (!/degrees? of freedom left/.test(w)) lines.push(`Note: ${w}`);
     return lines.join('\n');
   };

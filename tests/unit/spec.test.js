@@ -226,8 +226,119 @@ test('projectToSpec describes a drawn sketch and builds back the same', () => {
 test('projectToSpec flags what it cannot carry', () => {
   const p = new Project(); const s = p.addSketch();
   s.addEntity(new Line(new Point(0, 0), new Point(1, 0)));
-  s.fills.push({ id: 'f1', layerId: p.layers[0].id, color: '#ff0000', opacity: 1, seed: { x: 0, y: 0 } });
+  s.strokes.push({ id: 'k1', layerId: p.layers[0].id, kind: 'image', image: 'im1', opacity: 1, points: [{ x: 0, y: 1 }, { x: 1, y: 1 }, { x: 0, y: 0 }] });
   const r = projectToSpec(p);
   assert.equal(r.lossless, false);
-  assert.deepEqual(r.unsupported, ['fills']);
+  assert.deepEqual(r.unsupported, ['pictures']);
+});
+
+/* ---- The drawing side: text, arrows, ink, shapes, fills, layers ---- */
+import { Solver } from '../../app/src/core/solver.js';
+import { anchorLookup, syncLinks } from '../../app/src/core/ink-links.js';
+import { syncArrowEnds } from '../../app/src/core/arrows.js';
+import { textCenter } from '../../app/src/core/strokes.js';
+
+const PART = {
+  layers: ['Part', 'Notes'],
+  background: '#f7f3ea',
+  shapes: [
+    { id: 'plate', type: 'rectangle', corner: [0, 0], width: 80, height: 40, layer: 'Part' },
+    { id: 'hole', type: 'circle', center: [20, 20], d: 10, layer: 'Part' },
+    { id: 'axis', type: 'line', from: [40, -5], to: [40, 45], construction: true, line_style: 'center', layer: 'Part' },
+  ],
+  constraints: [
+    { type: 'fix', point: 'plate.bl' },
+    { type: 'length', line: 'plate.bottom', value: 80 }, { type: 'length', line: 'plate.left', value: 40 },
+    { type: 'diameter', shape: 'hole', value: 10 },
+    { type: 'distance', a: 'plate.bl', b: 'hole.center', axis: 'x', value: 20 },
+    { type: 'distance', a: 'plate.bl', b: 'hole.center', axis: 'y', value: 20 },
+  ],
+  fills: [{ at: [60, 20], color: '#cfe3ff', layer: 'Part' }],
+  drawing: [
+    { type: 'text', text: 'Ø10 through', at: [20, 50], size: 4, layer: 'Notes', link: 'hole', box: true },
+    { type: 'arrow', from: [20, 47], to: { on: 'hole', angle: 90 }, layer: 'Notes', color: '#d63a3a' },
+    { type: 'text', text: 'PLATE 80 × 40', at: 'plate.tl', align: 'left', size: 3, link: { to: 'plate.top', t: 0 }, layer: 'Notes' },
+    { type: 'shape', shape: 'ellipse', center: 'hole.center', width: 16, height: 16, fill: 'tint', link: 'hole', layer: 'Notes', group: 'callout' },
+    { type: 'marker', points: [[0, -3], [80, -3]], color: '#c9a400', opacity: 0.5, link: 'plate.bottom' },
+  ],
+};
+
+test('drawing items, fills and layers are built on the solved CAD', () => {
+  const { project, report } = buildFromSpec(PART);
+  const s = project.active();
+  assert.equal(report.drawing, 5);
+  assert.equal(report.fills, 1);
+  assert.deepEqual(project.layers.map(l => l.name), ['Part', 'Notes']);
+  assert.equal(project.background, '#f7f3ea');
+  const notes = project.layers[1].id;
+  assert.deepEqual(s.strokes.map(k => k.kind), ['text', 'arrow', 'text', 'shape', 'marker']);
+  assert.ok(s.strokes.slice(0, 4).every(k => k.layerId === notes));
+  const hole = s.entities.find(e => e instanceof Circle);
+  // the label follows the hole, the arrow tip sits on its top
+  assert.equal(s.strokes[0].link.to, hole.id);
+  assert.deepEqual(s.strokes[1].at[1], { to: hole.id, a: Math.PI / 2 });
+  assert.ok(near(s.strokes[1].points[1].x, 20) && near(s.strokes[1].points[1].y, 25));
+  assert.ok(near(textCenter(s.strokes[0]).x, 20) && near(textCenter(s.strokes[0]).y, 50));
+  assert.equal(s.strokes[0].box.color, 'paper');
+  assert.equal(s.fills[0].color, '#cfe3ff');
+  assert.equal(s.entities.find(e => e.construction).style.lineStyle, 'center');
+  // tool sizes for what the user adds by hand
+  assert.ok(project.sizes.text > 0 && project.sizes.pen > 0);
+  // survives save / load
+  const back = roundTrip(project);
+  assert.equal(back.active().strokes.length, 5);
+  assert.equal(back.active().fills.length, 1);
+  assert.equal(back.active().strokes[0].link.to, hole.id);
+});
+
+test('linked drawing follows the CAD when a dimension changes', () => {
+  const { project } = buildFromSpec(PART);
+  const s = project.active();
+  const label = s.strokes[0], arrow = s.strokes[1], ring = s.strokes[3];
+  // move the hole 30 mm to the right and make it 20 mm
+  for (const c of s.constraints) {
+    if (c.kind === 'distance' && c.axis === 'x') c.value = 50;
+    if (c.kind === 'radius') c.value = 10;
+  }
+  const r = new Solver().solve(s, [s], [], { diagnostics: true });
+  assert.ok(r.ok);
+  const lookup = anchorLookup([s]);
+  syncLinks(s.strokes, lookup);
+  syncArrowEnds(s.strokes, lookup);
+  assert.ok(near(textCenter(label).x, 50, 1e-6), 'label moved with the hole');
+  assert.ok(near(arrow.points[1].x, 50) && near(arrow.points[1].y, 30), 'arrow tip stays on top of the hole');
+  const w = Math.hypot(ring.points[1].x - ring.points[0].x, ring.points[1].y - ring.points[0].y);
+  assert.ok(near(w, 32, 1e-6), 'the ring around the hole grew with it');
+});
+
+test('drawing problems are named', () => {
+  const p = (extra) => problems({ ...PART, ...extra });
+  assert.match(p({ fills: [{ at: [200, 200], color: '#ff0000' }] }), /isn't inside a closed outline/);
+  assert.match(p({ drawing: [{ type: 'text', text: 'x', at: [0, 0], layer: 'Nope' }] }), /unknown layer "Nope"/);
+  assert.match(p({ drawing: [{ type: 'shape', shape: 'blob', center: [0, 0], width: 1, height: 1 }] }), /"shape" is one of rect/);
+  assert.match(p({ drawing: [{ type: 'arrow', from: [0, 0], to: [1, 1], link: 'hole' }] }), /through their ends/);
+  assert.match(p({ drawing: [{ type: 'text', text: 'x', at: 'nowhere' }] }), /unknown point "nowhere"/);
+  assert.match(p({ drawing: [{ type: 'text', text: 'x', at: [0, 0], link: 'plate' }] }), /"plate" is a rectangle; name one side/);
+  assert.match(p({ drawing: [{ type: 'arrow', from: [0, 0], to: { on: 'plate.top', t: 2 } }] }), /fraction along the line/);
+  assert.match(p({ shapes: [{ type: 'line', from: [0, 0], to: [1, 0], line_style: 'wavy' }], constraints: [], fills: [], drawing: [] }), /"line_style" is one of/);
+});
+
+test('projectToSpec carries the drawing side and builds back the same', () => {
+  const { project } = buildFromSpec(PART);
+  const { spec, lossless, unsupported } = projectToSpec(roundTrip(project));
+  assert.equal(lossless, true, unsupported.join(', '));
+  assert.deepEqual(spec.layers, ['Part', 'Notes']);
+  assert.equal(spec.drawing.length, 5);
+  assert.equal(spec.fills.length, 1);
+  const again = buildFromSpec(spec).project.active();
+  const orig = project.active();
+  assert.deepEqual(again.strokes.map(k => k.kind), orig.strokes.map(k => k.kind));
+  for (let i = 0; i < orig.strokes.length; i++) {
+    const a = orig.strokes[i].points, b = again.strokes[i].points;
+    assert.ok(a.every((p, k) => near(p.x, b[k].x, 1e-5) && near(p.y, b[k].y, 1e-5)), `item ${i} in the same place`);
+    assert.equal(!!again.strokes[i].link, !!orig.strokes[i].link, `item ${i} still linked`);
+  }
+  const hole = again.entities.find(e => e instanceof Circle);
+  assert.deepEqual(again.strokes[1].at, [null, { to: hole.id, a: Math.PI / 2 }], 'arrow tip still on the hole');
+  assert.equal(again.strokes[0].link.to, hole.id, 'label still follows the hole');
 });

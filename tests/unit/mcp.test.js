@@ -106,7 +106,7 @@ test('get_sketch then update_sketch, with the revision check', async () => {
 test('someone else\'s public sketch can be read, not changed; lossy sketches are not replaced', async () => {
   const { project } = buildFromSpec(SPEC);
   const json = project.toJSON();
-  const lossy = { ...json, sketches: [{ ...json.sketches[0], fills: [{ id: 'f1', layerId: json.layers[0].id, color: '#ff0000', opacity: 1, seed: { x: 5, y: 5 } }] }] };
+  const lossy = { ...json, sketches: [{ ...json.sketches[0], strokes: [{ id: 'k1', layerId: json.layers[0].id, kind: 'image', image: 'im1', opacity: 1, pts: [0, 1, 1, 1, 0, 0] }] }] };
   const store = fakeStore({ rows: [
     { id: OTHER, owner_id: 'them', name: 'Theirs', visibility: 'public', revision: 1, data: json },
     { id: ID, owner_id: 'me', name: 'Filled', visibility: 'private', revision: 1, data: lossy },
@@ -115,7 +115,7 @@ test('someone else\'s public sketch can be read, not changed; lossy sketches are
   const theirs = await call(tools, 'get_sketch', { id: OTHER });
   assert.equal(theirs.result.structuredContent.editable, false);
   assert.match(text(await call(tools, 'update_sketch', { id: OTHER, revision: 1, spec: SPEC })), /belongs to someone else/);
-  assert.match(text(await call(tools, 'update_sketch', { id: ID, revision: 1, spec: SPEC })), /can't carry \(fills\)/);
+  assert.match(text(await call(tools, 'update_sketch', { id: ID, revision: 1, spec: SPEC })), /can't carry \(pictures\)/);
 });
 
 test('list_sketches and unexpected failures', async () => {

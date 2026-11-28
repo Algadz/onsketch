@@ -17,6 +17,7 @@ import { Arc, Circle, Line, Point } from './entities.js';
 import { Project } from './model.js';
 import { Solver } from './solver.js';
 import { DOC_UNITS } from './expr.js';
+import { readPresentation, applyLayers, applyDrawing, presentationToSpec } from './spec-drawing.js';
 import {
   AngleConstraint, ArcEndpointArcEndpointCoincidentConstraint, ArcEndpointCoincidentConstraint,
   CollinearConstraint, ConcentricConstraint, DistanceConstraint, EqualLengthConstraint, EqualRadiusConstraint,
@@ -61,6 +62,10 @@ export function buildFromSpec(spec, { title } = {}) {
   if (b.problems.length) throw new SpecError(b.problems);
   const report = b.solve(project);
   if (b.problems.length) throw new SpecError(b.problems);
+  applyDrawing(b, project);                 // text, arrows, ink, fills: on the solved geometry
+  if (b.problems.length) throw new SpecError(b.problems);
+  report.drawing = project.active().strokes.length;
+  report.fills = project.active().fills.length;
   return { project, report };
 }
 
@@ -130,6 +135,7 @@ class Builder {
     return id;
   }
   addShape(rec) {
+    rec.look = this.look;
     this.shapes.push(rec);
     if (rec.id) this.shapeById.set(rec.id, rec);
     return rec;
@@ -164,6 +170,7 @@ class Builder {
     if (!Array.isArray(cons)) { this.bad('constraints: a list.'); return; }
     if (cons.length > SPEC_LIMITS.constraints) { this.bad(`constraints: at most ${SPEC_LIMITS.constraints}.`); return; }
     cons.forEach((c, i) => this.readConstraint(c, i));
+    readPresentation(this, spec);
   }
 
   readShape(s, i) {
@@ -172,6 +179,7 @@ class Builder {
     const id = this.shapeName(s.id, where);
     if (s.id != null && !id) return;
     const construction = !!s.construction;
+    this.look = { layer: s.layer, line_style: s.line_style, weight: s.weight };
     const line = (from, to, lid, w) => {
       const a = this.point(from, `${w}.from`), b = this.point(to, `${w}.to`);
       if (a == null || b == null) return null;
@@ -451,6 +459,8 @@ class Builder {
       const made = this.native(c, ptOf);
       for (const n of made) { sketch.constraints.push(n); this.byConstraintId.set(n.id, c); }
     }
+    this.ptOf = ptOf;
+    applyLayers(this, project);
     return project;
   }
 
@@ -608,10 +618,7 @@ export function projectToSpec(project) {
   const unsupported = new Set();
   const spec = { units: project.units || 'mm', points: {}, shapes: [], constraints: [] };
   if (!sketch) return { spec, lossless: true, unsupported: [] };
-  if (sketch.strokes?.length) unsupported.add('ink, text, arrows or pictures');
-  if (sketch.fills?.length) unsupported.add('fills');
   if (project.variables?.length) unsupported.add('variables');
-  if (project.layers.length > 1) unsupported.add('layers');
 
   const pointName = new Map();     // Point id → spec name
   const nameOf = (p) => {
@@ -701,5 +708,6 @@ export function projectToSpec(project) {
       if (l && shapeIds.has(l.id)) { k.type = 'length'; k.line = l.id; delete k.a; delete k.b; }
     }
   }
+  presentationToSpec(project, sketch, spec, unsupported, P);
   return { spec, lossless: unsupported.size === 0, unsupported: [...unsupported] };
 }
