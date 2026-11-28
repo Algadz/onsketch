@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<meta name="robots" content="noindex" />
+<title>Connect an assistant - OnSketch</title>
+<!-- Supabase Auth builds the consent URL from the Site URL (onsketch.io/app/)
+     + the OAuth server's authorization path (/oauth/consent), so assistants
+     land here. The page itself is /oauth/consent/: go there, keeping
+     ?authorization_id=… -->
+<script>location.replace('/oauth/consent/' + location.search + location.hash);</script>
+</head>
+<body>
+<p><a href="/oauth/consent/" id="go">Continue to OnSketch</a></p>
+<script>document.getElementById('go').href = '/oauth/consent/' + location.search;</script>
+</body>
+</html>
